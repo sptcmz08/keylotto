@@ -22,8 +22,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $_SESSION['role'] = $user['role'];
         $_SESSION['logged_in'] = true;
         
-        // Admins can be redirected to admin panel or stay on front? Let's keep them on public index for consistency.
-        header('Location: index.php');
+        if ($user['role'] === 'admin') {
+            header('Location: admin/index.php');
+        } else {
+            header('Location: index.php');
+        }
         exit;
     } else {
         $error = 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง';

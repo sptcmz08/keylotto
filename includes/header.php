@@ -51,6 +51,7 @@ $currentPage = $currentPage ?? '';
                 ['href' => '#', 'icon' => 'fa-dollar-sign', 'label' => 'การเงิน', 'key' => 'finance'],
                 ['href' => 'results.php', 'icon' => 'fa-star', 'label' => 'ตรวจผล', 'key' => 'results'],
                 ['href' => 'result_links.php', 'icon' => 'fa-link', 'label' => 'ลิงค์ดูผล', 'key' => 'links'],
+                ['href' => 'logout.php', 'icon' => 'fa-sign-out-alt', 'label' => 'ออกระบบ', 'key' => 'logout'],
             ];
             foreach ($navItems as $item):
                 $isActive = $currentPage === $item['key'];
@@ -66,7 +67,10 @@ $currentPage = $currentPage ?? '';
     <!-- Mobile Header -->
     <div class="md:hidden bg-[#1aa34a] text-white p-3 flex items-center justify-between shadow-md">
         <div class="font-bold text-lg"><i class="fas fa-clover mr-2"></i>คีย์หวย</div>
-        <div><?= htmlspecialchars($_SESSION['username'] ?? 'User') ?> <i class="fas fa-user-circle ml-1"></i></div>
+        <div class="flex items-center space-x-3 text-sm">
+            <span><?= htmlspecialchars($_SESSION['username'] ?? 'User') ?> <i class="fas fa-user-circle"></i></span>
+            <a href="logout.php" title="ออกจากระบบ" class="bg-red-500 bg-opacity-80 px-2 py-1 rounded hover:bg-red-600 transition"><i class="fas fa-sign-out-alt"></i></a>
+        </div>
     </div>
 
     <!-- Mobile Bottom Nav -->
