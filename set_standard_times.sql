@@ -74,10 +74,10 @@ UPDATE lottery_types SET open_time='06:00:00', close_time='15:00:00', result_tim
 UPDATE lottery_types SET open_time='06:00:00', close_time='16:15:00', result_time='16:35:00' WHERE name='หุ้นสิงคโปร์';
 UPDATE lottery_types SET open_time='06:00:00', close_time='16:15:00', result_time='16:35:00' WHERE name='หุ้นไทย';
 UPDATE lottery_types SET open_time='06:00:00', close_time='16:45:00', result_time='17:05:00' WHERE name='หุ้นอินเดีย';
-UPDATE lottery_types SET open_time='06:00:00', close_time='21:30:00', result_time='21:50:00' WHERE name='หุ้นอียิปต์';
-UPDATE lottery_types SET open_time='06:00:00', close_time='21:30:00', result_time='21:50:00' WHERE name='หุ้นอังกฤษ';
-UPDATE lottery_types SET open_time='06:00:00', close_time='21:30:00', result_time='21:50:00' WHERE name='หุ้นเยอรมัน';
-UPDATE lottery_types SET open_time='06:00:00', close_time='21:30:00', result_time='21:50:00' WHERE name='หุ้นรัสเซีย';
+UPDATE lottery_types SET open_time='06:00:00', close_time='19:45:00', result_time='20:00:00' WHERE name='หุ้นอียิปต์';
+UPDATE lottery_types SET open_time='06:00:00', close_time='22:45:00', result_time='23:00:00' WHERE name='หุ้นอังกฤษ';
+UPDATE lottery_types SET open_time='06:00:00', close_time='22:45:00', result_time='23:00:00' WHERE name='หุ้นเยอรมัน';
+UPDATE lottery_types SET open_time='06:00:00', close_time='22:45:00', result_time='23:00:00' WHERE name='หุ้นรัสเซีย';
 UPDATE lottery_types SET open_time='06:00:00', close_time='23:45:00', result_time='00:10:00' WHERE name='ดาวโจนส์อเมริกา';
 UPDATE lottery_types SET open_time='06:00:00', close_time='01:00:00', result_time='01:30:00' WHERE name='ดาวโจนส์ STAR';
 UPDATE lottery_types SET open_time='06:00:00', close_time='03:30:00', result_time='04:00:00' WHERE name='หุ้นดาวโจนส์';
