@@ -111,6 +111,8 @@ $lotteryMap = [];
 $recentlyResulted = [];
 foreach ($allLotteries as &$l) {
     // กำหนด "งวดปัจจุบัน" โดยดูจาก open_time
+    // ถ้าตอนนี้ผ่าน open_time ของวันนี้ → งวดวันนี้
+    // ถ้ายังไม่ถึง open_time → ยังอยู่ในงวดเมื่อวาน (สำหรับหวยดึก เช่น ดาวโจนส์)
     $openTime = !empty($l['open_time']) ? strtotime(date('Y-m-d') . ' ' . $l['open_time']) : strtotime(date('Y-m-d') . ' 06:00:00');
     $isPastOpenTime = $now >= $openTime;
     
@@ -121,30 +123,28 @@ foreach ($allLotteries as &$l) {
     $resultDate = $l['result_date'] ?? null;
     $hasAnyResult = !empty($l['three_top']);
     
-    // อายุผลล่าสุด (วัน)
-    $lastResultAgeDays = $resultDate ? (strtotime($today) - strtotime($resultDate)) / 86400 : 999;
+    // เช็คว่าผลล่าสุดเป็นของงวดปัจจุบันหรือไม่
+    $hasResultForCurrentRound = $hasAnyResult && $resultDate === $currentRoundDate;
     
-    // === Smart Round Matching ===
-    // ถ้าผลล่าสุดตรงกับ currentRoundDate → match ตรง
-    // ถ้าไม่ตรง แต่ผลล่าสุดภายใน 3 วัน → ถือว่ายังเป็นงวดปัจจุบัน
-    // (สำหรับหวยที่ไม่ออกทุกวัน เช่น หุ้นวันหยุด/สุดสัปดาห์/หวยดึก)
-    $hasResultForCurrentRound = false;
-    if ($hasAnyResult && $resultDate === $currentRoundDate) {
-        // ตรงเป๊ะ
+    // === Grace Period 1 ชม. ===
+    // ถ้าผลล่าสุดออกไม่เกิน 1 ชม. แม้จะเป็นงวดเก่า → ยังแสดงผลเก่าอยู่
+    // หลัง 1 ชม. → reset เป็นงวดใหม่
+    $resultCreatedAt = !empty($l['result_created_at']) ? strtotime($l['result_created_at']) : 0;
+    $timeSinceResult = $resultCreatedAt ? ($now - $resultCreatedAt) : PHP_INT_MAX;
+    
+    if (!$hasResultForCurrentRound && $hasAnyResult && $timeSinceResult < 3600) {
+        // ผลเพิ่งออกไม่เกิน 1 ชม. → ยังแสดงผลงวดเก่า (grace period)
         $hasResultForCurrentRound = true;
-    } elseif ($hasAnyResult && $lastResultAgeDays <= 3 && $lastResultAgeDays >= 0) {
-        // ผลล่าสุดภายใน 3 วัน → ถือเป็นงวดปัจจุบัน (วันหยุด/สุดสัปดาห์)
-        $hasResultForCurrentRound = true;
-        $currentRoundDate = $resultDate; // ใช้วันที่ผลจริง
+        $currentRoundDate = $resultDate;
     }
     
     // คำนวณอายุผล (สำหรับ recently resulted section)
-    $resultAge = $hasResultForCurrentRound && !empty($l['result_created_at']) 
-        ? ($now - strtotime($l['result_created_at'])) 
+    $resultAge = $hasResultForCurrentRound && $resultCreatedAt
+        ? $timeSinceResult 
         : PHP_INT_MAX;
     
     if ($hasResultForCurrentRound && $resultAge < 3600) {
-        // ออกผลงวดนี้ไม่เกิน 1 ชม. → ย้ายไปด้านล่าง
+        // ออกผลงวดนี้ไม่เกิน 1 ชม. → แสดง "เพิ่งออกผล"
         $recentlyResulted[] = $l['name'];
         $l['smart_status'] = 'resulted';
     } elseif ($hasResultForCurrentRound && $resultAge >= 3600) {
