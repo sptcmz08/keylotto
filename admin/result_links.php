@@ -21,16 +21,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $resultTime = $_POST['result_time'] ?? null;
         $resultUrl = trim($_POST['result_url'] ?? '');
         $resultLabel = trim($_POST['result_label'] ?? '');
+        $scraperUrl = trim($_POST['scraper_url'] ?? '');
         $sortOrder = intval($_POST['sort_order'] ?? 0);
         $isActive = isset($_POST['is_active']) ? 1 : 0;
 
         if ($action === 'add') {
-            $stmt = $pdo->prepare("INSERT INTO result_links (category_id, name, flag_emoji, close_time, result_time, result_url, result_label, sort_order, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
-            $stmt->execute([$categoryId, $name, $flagEmoji, $closeTime, $resultTime, $resultUrl, $resultLabel, $sortOrder, $isActive]);
+            $stmt = $pdo->prepare("INSERT INTO result_links (category_id, name, flag_emoji, close_time, result_time, result_url, result_label, scraper_url, sort_order, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt->execute([$categoryId, $name, $flagEmoji, $closeTime, $resultTime, $resultUrl, $resultLabel, $scraperUrl, $sortOrder, $isActive]);
             $msg = 'เพิ่มลิงค์สำเร็จ';
         } else {
-            $stmt = $pdo->prepare("UPDATE result_links SET category_id=?, name=?, flag_emoji=?, close_time=?, result_time=?, result_url=?, result_label=?, sort_order=?, is_active=? WHERE id=?");
-            $stmt->execute([$categoryId, $name, $flagEmoji, $closeTime, $resultTime, $resultUrl, $resultLabel, $sortOrder, $isActive, $id]);
+            $stmt = $pdo->prepare("UPDATE result_links SET category_id=?, name=?, flag_emoji=?, close_time=?, result_time=?, result_url=?, result_label=?, scraper_url=?, sort_order=?, is_active=? WHERE id=?");
+            $stmt->execute([$categoryId, $name, $flagEmoji, $closeTime, $resultTime, $resultUrl, $resultLabel, $scraperUrl, $sortOrder, $isActive, $id]);
             $msg = 'แก้ไขสำเร็จ';
         }
         $msgType = 'success';
@@ -97,6 +98,10 @@ require_once 'includes/header.php';
                 <input type="text" name="result_label" id="resultLabel" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
             </div>
             <div>
+                <label class="text-xs text-gray-500 block mb-1">URL Scraper <span class="text-green-500">แหล่งที่มา</span></label>
+                <input type="text" name="scraper_url" id="scraperUrl" class="w-full border rounded-lg px-3 py-2 text-sm outline-none border-green-300" placeholder="https://...">
+            </div>
+            <div>
                 <label class="text-xs text-gray-500 block mb-1">ลำดับ</label>
                 <input type="number" name="sort_order" id="sortOrder" value="0" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
             </div>
@@ -128,14 +133,15 @@ require_once 'includes/header.php';
                     <th class="px-3 py-2 text-left text-xs text-gray-500">หมวด</th>
                     <th class="px-3 py-2 text-center text-xs text-gray-500">ปิดรับ</th>
                     <th class="px-3 py-2 text-center text-xs text-gray-500">ผลออก</th>
-                    <th class="px-3 py-2 text-left text-xs text-gray-500">ลิงค์</th>
+                    <th class="px-3 py-2 text-left text-xs text-gray-500">ลิงค์ดูผล</th>
+                    <th class="px-3 py-2 text-left text-xs text-green-600">แหล่ง Scraper</th>
                     <th class="px-3 py-2 text-center text-xs text-gray-500">สถานะ</th>
                     <th class="px-3 py-2 text-center text-xs text-gray-500">จัดการ</th>
                 </tr>
             </thead>
             <tbody>
                 <?php foreach ($links as $l):
-                    $flagUrl = getFlagForCountry($l['flag_emoji']);
+                    $flagUrl = getFlagForCountry($l['flag_emoji'], $l['name']);
                 ?>
                 <tr class="border-b hover:bg-gray-50">
                     <td class="px-3 py-2"><img src="<?= $flagUrl ?>" class="w-8 h-5 object-cover rounded border"></td>
@@ -143,7 +149,8 @@ require_once 'includes/header.php';
                     <td class="px-3 py-2 text-xs text-gray-500"><?= htmlspecialchars($l['category_name']) ?></td>
                     <td class="px-3 py-2 text-center text-xs"><?= $l['close_time'] ? date('H:i', strtotime($l['close_time'])) : '-' ?></td>
                     <td class="px-3 py-2 text-center text-xs"><?= $l['result_time'] ? date('H:i', strtotime($l['result_time'])) : '-' ?></td>
-                    <td class="px-3 py-2 text-xs text-blue-500 truncate max-w-[200px]"><?= htmlspecialchars($l['result_label'] ?? $l['result_url']) ?></td>
+                    <td class="px-3 py-2 text-xs text-blue-500 truncate max-w-[150px]"><?php if ($l['result_url']): ?><a href="<?= htmlspecialchars($l['result_url']) ?>" target="_blank" class="hover:underline"><?= htmlspecialchars($l['result_label'] ?: $l['result_url']) ?></a><?php else: ?>-<?php endif; ?></td>
+                    <td class="px-3 py-2 text-xs truncate max-w-[150px]"><?php if ($l['scraper_url']): ?><a href="<?= htmlspecialchars($l['scraper_url']) ?>" target="_blank" class="text-green-600 hover:underline"><?= htmlspecialchars(parse_url($l['scraper_url'], PHP_URL_HOST) ?: $l['scraper_url']) ?></a><?php else: ?><span class="text-gray-300">-</span><?php endif; ?></td>
                     <td class="px-3 py-2 text-center">
                         <span class="px-2 py-0.5 rounded-full text-[10px] font-medium <?= $l['is_active'] ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700' ?>"><?= $l['is_active'] ? 'เปิด' : 'ปิด' ?></span>
                     </td>
@@ -173,6 +180,7 @@ function editLink(d) {
     document.getElementById('resultTime').value = d.result_time || '';
     document.getElementById('resultUrl').value = d.result_url || '';
     document.getElementById('resultLabel').value = d.result_label || '';
+    document.getElementById('scraperUrl').value = d.scraper_url || '';
     document.getElementById('sortOrder').value = d.sort_order || 0;
     document.getElementById('isActive').checked = d.is_active == 1;
     document.getElementById('submitLabel').textContent = 'แก้ไข';
@@ -186,6 +194,7 @@ function resetForm() {
     document.getElementById('resultTime').value = '';
     document.getElementById('resultUrl').value = '';
     document.getElementById('resultLabel').value = '';
+    document.getElementById('scraperUrl').value = '';
     document.getElementById('sortOrder').value = '0';
     document.getElementById('isActive').checked = true;
     document.getElementById('submitLabel').textContent = 'เพิ่ม';

@@ -11,6 +11,7 @@ $currentPage = $currentPage ?? '';
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
         * { font-family: 'Prompt', sans-serif; }
         body { background-color: #f1f8f3; }
@@ -48,7 +49,7 @@ $currentPage = $currentPage ?? '';
                 ['href' => 'index.php', 'icon' => 'fa-home', 'label' => 'หน้าหลัก', 'key' => 'home'],
                 ['href' => 'bet.php', 'icon' => 'fa-trophy', 'label' => 'แทงหวย', 'key' => 'bet'],
                 ['href' => 'bills.php', 'icon' => 'fa-list', 'label' => 'รายการโพย', 'key' => 'bills'],
-                ['href' => '#', 'icon' => 'fa-dollar-sign', 'label' => 'การเงิน', 'key' => 'finance'],
+
                 ['href' => 'results.php', 'icon' => 'fa-star', 'label' => 'ตรวจผล', 'key' => 'results'],
                 ['href' => 'result_links.php', 'icon' => 'fa-link', 'label' => 'ลิงค์ดูผล', 'key' => 'links'],
                 ['href' => 'logout.php', 'icon' => 'fa-sign-out-alt', 'label' => 'ออกระบบ', 'key' => 'logout'],
@@ -81,7 +82,7 @@ $currentPage = $currentPage ?? '';
             ['href' => 'bet.php', 'icon' => 'fa-trophy', 'label' => 'แทงหวย', 'key' => 'bet'],
             ['href' => 'bills.php', 'icon' => 'fa-list', 'label' => 'โพยหวย', 'key' => 'bills'],
             ['href' => 'results.php', 'icon' => 'fa-star', 'label' => 'ตรวจผล', 'key' => 'results'],
-            ['href' => '#', 'icon' => 'fa-user', 'label' => 'ติดต่อ', 'key' => 'contact'],
+            ['href' => 'result_links.php', 'icon' => 'fa-link', 'label' => 'ลิงค์ดูผล', 'key' => 'links'],
         ];
         foreach ($mobileNav as $item):
             $isActive = $currentPage === $item['key'];

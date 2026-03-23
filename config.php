@@ -3,9 +3,9 @@
 // Database Configuration
 // =============================================
 define('DB_HOST', 'localhost');
-define('DB_NAME', 'key_lotto');
-define('DB_USER', 'root');
-define('DB_PASS', '');
+define('DB_NAME', 'lotto');
+define('DB_USER', 'lotto');
+define('DB_PASS', '43q5r*j8U');
 define('DB_CHARSET', 'utf8mb4');
 
 // Site config
@@ -34,23 +34,30 @@ try {
 }
 
 // Helper functions
-function formatThaiDate($date) {
-    if (!$date) return '';
+function formatThaiDate($date)
+{
+    if (!$date)
+        return '';
     $d = new DateTime($date);
     return $d->format('d-m-') . ($d->format('Y'));
 }
 
-function formatDateDisplay($date) {
-    if (!$date) return '';
+function formatDateDisplay($date)
+{
+    if (!$date)
+        return '';
     $d = new DateTime($date);
     return $d->format('d-m-Y');
 }
 
-function formatMoney($amount) {
-    return number_format((float)$amount, 2);
+function formatMoney($amount)
+{
+    return number_format((float) $amount, 2);
 }
 
-function getFlagForCountry($emoji) {
+function getFlagForCountry($emoji, $lotteryName = '')
+{
+    // Flag emoji → URL mapping
     $flags = [
         '🇹🇭' => 'https://flagcdn.com/w40/th.png',
         '🇻🇳' => 'https://flagcdn.com/w40/vn.png',
@@ -65,12 +72,55 @@ function getFlagForCountry($emoji) {
         '🇨🇳' => 'https://flagcdn.com/w40/cn.png',
         '🇲🇾' => 'https://flagcdn.com/w40/my.png',
         '🇸🇬' => 'https://flagcdn.com/w40/sg.png',
-        '🏳️' => 'https://flagcdn.com/w40/xx.png',
+        '🇹🇼' => 'https://flagcdn.com/w40/tw.png',
+        '🇮🇳' => 'https://flagcdn.com/w40/in.png',
+        '🇪🇬' => 'https://flagcdn.com/w40/eg.png',
     ];
-    return $flags[$emoji] ?? 'https://flagcdn.com/w40/xx.png';
+
+    // 1) Try direct emoji match
+    if ($emoji && isset($flags[$emoji])) {
+        return $flags[$emoji];
+    }
+
+    // 2) Fallback: detect country from lottery name
+    $name = $lotteryName ?: $emoji;
+    $nameMap = [
+        'ลาว'       => 'la',
+        'ฮานอย'     => 'vn',
+        'เวียดนาม'  => 'vn',
+        'ดาวโจนส์'  => 'us',
+        'นิเคอิ'    => 'jp',
+        'จีน'       => 'cn',
+        'ฮั่งเส็ง'  => 'hk',
+        'ไต้หวัน'   => 'tw',
+        'เกาหลี'    => 'kr',
+        'สิงคโปร์'  => 'sg',
+        'อินเดีย'   => 'in',
+        'อียิปต์'   => 'eg',
+        'อังกฤษ'    => 'gb',
+        'เยอรมัน'   => 'de',
+        'รัสเซีย'   => 'ru',
+        'มาเลย์'    => 'my',
+        'ไทย'       => 'th',
+        'รัฐบาล'    => 'th',
+        'ออมสิน'    => 'th',
+        'ธกส'       => 'th',
+        'ราศี'      => 'th',
+        'หุ้นไทย'   => 'th',
+    ];
+
+    foreach ($nameMap as $keyword => $code) {
+        if (mb_strpos($name, $keyword) !== false) {
+            return "https://flagcdn.com/w40/{$code}.png";
+        }
+    }
+
+    // 3) Default
+    return 'https://flagcdn.com/w40/xx.png';
 }
 
-function getBetTypeLabel($type) {
+function getBetTypeLabel($type)
+{
     $labels = [
         '3top' => '3 ตัวบน',
         '3tod' => '3 ตัวโต๊ด',

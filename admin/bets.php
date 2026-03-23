@@ -14,10 +14,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'update_status') {
         $id = intval($_POST['id']);
         $status = $_POST['status'];
-        $pdo->prepare("UPDATE bets SET status = ? WHERE id = ?")->execute([$status, $id]);
+        if ($status === 'cancelled') {
+            // ยกเลิกโพย: reset win_amount เพื่อไม่ให้นับในรายงาน
+            try {
+                $pdo->prepare("UPDATE bets SET status = 'cancelled', win_amount = 0 WHERE id = ?")->execute([$id]);
+            } catch (Exception $e) {
+                $pdo->prepare("UPDATE bets SET status = 'cancelled' WHERE id = ?")->execute([$id]);
+            }
+        } else {
+            $pdo->prepare("UPDATE bets SET status = ? WHERE id = ?")->execute([$status, $id]);
+        }
         $msg = 'อัพเดทสถานะสำเร็จ';
+    } elseif ($action === 'cancel_bet') {
+        $id = intval($_POST['id']);
+        try {
+            $pdo->prepare("UPDATE bets SET status = 'cancelled', win_amount = 0, cancel_approved_by = 'admin', cancel_approved_at = NOW() WHERE id = ?")->execute([$id]);
+        } catch (Exception $e) {
+            $pdo->prepare("UPDATE bets SET status = 'cancelled' WHERE id = ?")->execute([$id]);
+        }
+        $msg = 'ยกเลิกโพยสำเร็จ - ยอดจะถูกหักออกจากรายการรวม';
     } elseif ($action === 'delete_bet') {
         $id = intval($_POST['id']);
+        $pdo->prepare("DELETE FROM bet_items WHERE bet_id = ?")->execute([$id]);
         $pdo->prepare("DELETE FROM bets WHERE id = ?")->execute([$id]);
         $msg = 'ลบบิลสำเร็จ';
     }
@@ -95,7 +113,7 @@ require_once 'includes/header.php';
                     <td class="px-3 py-2 text-xs">[<?= htmlspecialchars($b['category_name']) ?>] <?= htmlspecialchars($b['lottery_name']) ?></td>
                     <td class="px-3 py-2 text-center text-xs"><?= $b['total_items'] ?></td>
                     <td class="px-3 py-2 text-right text-xs text-green-600"><?= formatMoney($b['total_amount']) ?></td>
-                    <td class="px-3 py-2 text-right text-xs"><?= $b['discount_amount'] > 0 ? formatMoney($b['discount_amount']) : '-' ?></td>
+
                     <td class="px-3 py-2 text-right text-xs font-bold text-green-700"><?= formatMoney($b['net_amount']) ?></td>
                     <td class="px-3 py-2 text-center">
                         <form method="POST" class="inline">
@@ -109,12 +127,20 @@ require_once 'includes/header.php';
                             </select>
                         </form>
                     </td>
-                    <td class="px-3 py-2 text-center">
-                        <button onclick="viewBetDetail(<?= $b['id'] ?>)" class="text-blue-500 hover:text-blue-700 mr-1"><i class="fas fa-eye"></i></button>
-                        <form method="POST" class="inline" onsubmit="return confirm('ลบบิลนี้?')">
+                    <td class="px-3 py-2 text-center whitespace-nowrap">
+                        <button onclick="viewBetDetail(<?= $b['id'] ?>)" class="text-blue-500 hover:text-blue-700 mr-1" title="ดูรายละเอียด"><i class="fas fa-eye"></i></button>
+                        <?php if ($b['status'] !== 'cancelled'): ?>
+                        <button onclick="confirmCancel(<?= $b['id'] ?>, '<?= htmlspecialchars($b['bet_number']) ?>')" class="text-orange-500 hover:text-orange-700 mr-1" title="ยกเลิกโพย"><i class="fas fa-ban"></i></button>
+                        <?php endif; ?>
+                        <button onclick="confirmDelete(<?= $b['id'] ?>, '<?= htmlspecialchars($b['bet_number']) ?>')" class="text-red-400 hover:text-red-600" title="ลบบิล"><i class="fas fa-trash-alt"></i></button>
+                        <!-- Hidden forms for submission -->
+                        <form id="cancelForm_<?= $b['id'] ?>" method="POST" class="hidden">
+                            <input type="hidden" name="form_action" value="cancel_bet">
+                            <input type="hidden" name="id" value="<?= $b['id'] ?>">
+                        </form>
+                        <form id="deleteForm_<?= $b['id'] ?>" method="POST" class="hidden">
                             <input type="hidden" name="form_action" value="delete_bet">
                             <input type="hidden" name="id" value="<?= $b['id'] ?>">
-                            <button type="submit" class="text-red-400 hover:text-red-600"><i class="fas fa-trash-alt"></i></button>
                         </form>
                     </td>
                 </tr>
@@ -165,6 +191,42 @@ async function viewBetDetail(id) {
     } catch (e) {
         document.getElementById('betDetailContent').innerHTML = '<div class="text-center py-8 text-red-400"><i class="fas fa-exclamation-circle"></i> ' + e.message + '</div>';
     }
+}
+
+function confirmCancel(id, betNumber) {
+    Swal.fire({
+        title: 'ยืนยันยกเลิกโพย?',
+        html: `<p class="text-gray-600">โพยเลขที่ <strong>#${betNumber}</strong></p><p class="text-sm text-red-500 mt-2">⚠️ ยอดเดิมพันทั้งหมดจะถูกหักออก</p>`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#f97316',
+        cancelButtonColor: '#6b7280',
+        confirmButtonText: '<i class="fas fa-ban mr-1"></i>ยืนยันยกเลิก',
+        cancelButtonText: 'ไม่ใช่',
+        reverseButtons: true,
+    }).then((result) => {
+        if (result.isConfirmed) {
+            document.getElementById('cancelForm_' + id).submit();
+        }
+    });
+}
+
+function confirmDelete(id, betNumber) {
+    Swal.fire({
+        title: 'ลบบิลถาวร?',
+        html: `<p class="text-gray-600">โพยเลขที่ <strong>#${betNumber}</strong></p><p class="text-sm text-red-500 mt-2">⚠️ ลบแล้วจะไม่สามารถกู้คืนได้</p>`,
+        icon: 'error',
+        showCancelButton: true,
+        confirmButtonColor: '#ef4444',
+        cancelButtonColor: '#6b7280',
+        confirmButtonText: '<i class="fas fa-trash-alt mr-1"></i>ลบถาวร',
+        cancelButtonText: 'ยกเลิก',
+        reverseButtons: true,
+    }).then((result) => {
+        if (result.isConfirmed) {
+            document.getElementById('deleteForm_' + id).submit();
+        }
+    });
 }
 </script>
 

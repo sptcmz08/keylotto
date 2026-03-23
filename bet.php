@@ -6,11 +6,365 @@ requireLogin();
 
 $lotteryId = intval($_GET['id'] ?? 0);
 
-// If no lottery selected, show selection page
+// If no lottery selected, show card listing page
 if (!$lotteryId) {
-    header('Location: index.php');
-    exit;
-}
+    // Same group definitions as index.php
+    $LOTTERY_GROUPS = [
+        [
+            'label' => 'หวยต่างประเทศ',
+            'color' => '#2e7d32',
+            'bg'    => '#e8f5e9',
+            'names' => [
+                'ลาวประตูชัย', 'ลาวสันติภาพ', 'ประชาชนลาว', 'ลาว EXTRA',
+                'ลาว TV', 'ลาว HD', 'ลาวสตาร์', 'ลาวใต้',
+                'ลาวสามัคคี', 'ลาวอาเซียน', 'ลาว VIP', 'ลาวสามัคคี VIP',
+                'ลาวสตาร์ VIP', 'ลาวกาชาด', 'ลาวพัฒนา',
+                'ฮานอยอาเซียน', 'ฮานอย HD', 'ฮานอยสตาร์', 'ฮานอย TV',
+                'ฮานอยกาชาด', 'ฮานอยพิเศษ', 'ฮานอยสามัคคี', 'ฮานอยปกติ',
+                'ฮานอยตรุษจีน', 'ฮานอย VIP', 'ฮานอยพัฒนา', 'ฮานอย EXTRA',
+            ],
+        ],
+        [
+            'label' => 'หวยรายวัน',
+            'color' => '#1565c0',
+            'bg'    => '#e3f2fd',
+            'names' => [
+                'นิเคอิเช้า VIP', 'นิเคอิบ่าย VIP',
+                'จีนเช้า VIP', 'จีนบ่าย VIP',
+                'ฮั่งเส็งเช้า VIP', 'ฮั่งเส็งบ่าย VIP',
+                'ไต้หวัน VIP', 'เกาหลี VIP', 'สิงคโปร์ VIP',
+                'อังกฤษ VIP', 'เยอรมัน VIP', 'รัสเซีย VIP', 'ดาวโจนส์ VIP',
+            ],
+        ],
+        [
+            'label' => 'หวยหุ้น',
+            'color' => '#f57f17',
+            'bg'    => '#fffde7',
+            'names' => [
+                'หุ้นนิเคอิเช้า', 'หุ้นนิเคอิบ่าย',
+                'หุ้นจีนเช้า', 'หุ้นจีนบ่าย',
+                'หุ้นฮั่งเส็งเช้า', 'หุ้นฮั่งเส็งบ่าย',
+                'หุ้นไต้หวัน', 'หุ้นเกาหลี', 'หุ้นสิงคโปร์',
+                'หุ้นไทย', 'หุ้นอินเดีย', 'หุ้นอียิปต์', 'หวย 12 ราศี',
+                'หุ้นอังกฤษ', 'หุ้นเยอรมัน', 'หุ้นรัสเซีย',
+                'ดาวโจนส์อเมริกา', 'ดาวโจนส์ STAR', 'หุ้นดาวโจนส์',
+            ],
+        ],
+        [
+            'label' => 'หวยไทย',
+            'color' => '#c62828',
+            'bg'    => '#ffebee',
+            'names' => [
+                'รัฐบาลไทย', 'ออมสิน', 'ธกส',
+            ],
+        ],
+    ];
+
+    // Fetch all active lottery types with open/close times
+    $stmt = $pdo->query("
+        SELECT lt.id, lt.name, lt.flag_emoji, lt.open_time, lt.close_time, lt.draw_date, lt.bet_closed
+        FROM lottery_types lt
+        WHERE lt.is_active = 1
+    ");
+    $allLotteries = $stmt->fetchAll();
+    $lotteryMap = [];
+    foreach ($allLotteries as $l) {
+        $lotteryMap[$l['name']] = $l;
+    }
+
+    require_once 'includes/header.php';
+    ?>
+
+    <style>
+        .lottery-card {
+            border: 2px solid #1aa34a;
+            border-radius: 8px;
+            padding: 12px;
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            transition: all 0.3s;
+            cursor: pointer;
+            text-decoration: none;
+            color: inherit;
+            min-height: 90px;
+        }
+        .lottery-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+        }
+        /* สีเขียว = เปิดรับแทง */
+        .lottery-card.card-open {
+            background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
+            border-color: #43a047;
+        }
+        /* สีเหลือง = ยังไม่ถึงเวลา */
+        .lottery-card.card-waiting {
+            background: linear-gradient(135deg, #fffde7 0%, #fff9c4 100%);
+            border-color: #f9a825;
+        }
+        /* สีเทา = ปิดรับแทง */
+        .lottery-card.card-closed {
+            background: linear-gradient(135deg, #f5f5f5 0%, #e0e0e0 100%);
+            border-color: #bdbdbd;
+            opacity: 0.75;
+        }
+        .lottery-card.card-closed .lottery-title {
+            color: #757575 !important;
+        }
+        .lottery-card .flag {
+            width: 50px;
+            height: 34px;
+            object-fit: cover;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+            flex-shrink: 0;
+            margin-top: 2px;
+        }
+        .lottery-card .info {
+            flex: 1;
+            min-width: 0;
+        }
+        .lottery-card .lottery-title {
+            font-weight: 700;
+            color: #1a5c2e;
+            font-size: 14px;
+            line-height: 1.3;
+        }
+        .lottery-card .draw-date {
+            color: #1aa34a;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .lottery-card .time-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 4px;
+        }
+        .lottery-card .time-label {
+            font-size: 11px;
+            color: #d97706;
+        }
+        .lottery-card .time-value {
+            font-size: 11px;
+            color: #666;
+        }
+        .lottery-card .status-text {
+            font-size: 11px;
+            font-weight: 600;
+        }
+        .lottery-card .status-open { color: #16a34a; }
+        .lottery-card .status-countdown { color: #d97706; }
+        .lottery-card .status-closed { color: #dc2626; }
+        .cat-section-title {
+            font-weight: 700;
+            font-size: 15px;
+            padding: 8px 14px;
+            border-left: 4px solid;
+            margin-bottom: 12px;
+        }
+    </style>
+
+    <?php foreach ($LOTTERY_GROUPS as $group): ?>
+    <div class="mb-6">
+        <div class="cat-section-title" style="color: <?= $group['color'] ?>; border-color: <?= $group['color'] ?>; background: <?= $group['bg'] ?>;">
+            <?= $group['label'] ?>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <?php foreach ($group['names'] as $lotteryName):
+                $lt = $lotteryMap[$lotteryName] ?? null;
+                if (!$lt) continue;
+                
+                $flagUrl = getFlagForCountry($lt['flag_emoji'], $lotteryName);
+                $betClosed = intval($lt['bet_closed'] ?? 0);
+                
+                $openTime = $lt['open_time'] ?? null;
+                $closeTime = $lt['close_time'] ?? null;
+                
+                // ====================================
+                // คำนวณงวดอัตโนมัติจากเวลาเปิด/ปิด
+                // ====================================
+                $today = date('Y-m-d');
+                $tomorrow = date('Y-m-d', strtotime('+1 day'));
+                $now = new DateTime();
+                
+                if ($openTime && $closeTime) {
+                    // สร้าง DateTime สำหรับเวลาเปิด/ปิดวันนี้
+                    $openDT = new DateTime($today . ' ' . $openTime);
+                    $closeDT = new DateTime($today . ' ' . $closeTime);
+                    
+                    // ถ้า close < open แสดงว่าข้ามวัน (เช่น เปิด 06:00 ปิด 00:15)
+                    if ($closeDT <= $openDT) {
+                        // ตรวจสอบว่าอยู่ช่วงไหน
+                        if ($now < $closeDT) {
+                            // ตอนนี้ก่อนเที่ยงคืน → กำลังเปิดอยู่ (เปิดเมื่อวาน)
+                            $drawDate = $today;
+                            $openDT->modify('-1 day'); // เปิดเมื่อวาน
+                        } else if ($now >= $openDT) {
+                            // เปิดแล้ว → ปิดพรุ่งนี้
+                            $drawDate = $tomorrow;
+                            $closeDT->modify('+1 day');
+                        } else {
+                            // อยู่ระหว่าง close กับ open → รอบถัดไป
+                            $drawDate = $tomorrow;
+                            $closeDT->modify('+1 day');
+                        }
+                    } else {
+                        // ปกติ (เปิด/ปิดวันเดียวกัน)
+                        if ($now > $closeDT) {
+                            // เลยเวลาปิดแล้ว → งวดพรุ่งนี้
+                            $drawDate = $tomorrow;
+                            $openDT->modify('+1 day');
+                            $closeDT->modify('+1 day');
+                        } else {
+                            $drawDate = $today;
+                        }
+                    }
+                    
+                    $openISO = $openDT->format('Y-m-d\TH:i:s');
+                    $closeISO = $closeDT->format('Y-m-d\TH:i:s');
+                    $openDisplay = $openDT->format('d/m/y H:i:s');
+                } else {
+                    $drawDate = $today;
+                    $openISO = '';
+                    $closeISO = '';
+                    $openDisplay = '';
+                }
+                
+                $drawDateDisplay = date('d-m-Y', strtotime($drawDate));
+            ?>
+            <div class="lottery-card card-waiting" onclick="handleCardClick(this)"
+               data-id="<?= $lt['id'] ?>" data-open="<?= $openISO ?>" data-close="<?= $closeISO ?>" data-forced-closed="<?= $betClosed ?>"
+               data-name="<?= htmlspecialchars($lotteryName) ?>">
+                <img src="<?= $flagUrl ?>" alt="flag" class="flag">
+                <div class="info">
+                    <div class="lottery-title"><?= htmlspecialchars($lotteryName) ?></div>
+                    <div class="draw-date"><?= $drawDateDisplay ?></div>
+                    <div class="time-row">
+                        <span class="time-label">เวลาเปิด</span>
+                        <span class="time-value"><?= $openDisplay ?: '-' ?></span>
+                    </div>
+                    <div class="time-row">
+                        <span class="status-text countdown-status">สถานะ</span>
+                        <span class="status-text countdown-text status-countdown">กำลังโหลด...</span>
+                    </div>
+                </div>
+            </div>
+            <?php endforeach; ?>
+        </div>
+    </div>
+    <?php endforeach; ?>
+
+    <script>
+    function getCardStatus(card) {
+        const openStr = card.dataset.open;
+        const closeStr = card.dataset.close;
+        const forcedClosed = card.dataset.forcedClosed === '1';
+        if (forcedClosed) return 'closed';
+        if (!closeStr) return 'waiting';
+        const now = new Date();
+        const openTime = openStr ? new Date(openStr) : null;
+        const closeTime = new Date(closeStr);
+        if (openTime && now < openTime) return 'waiting';
+        if (now < closeTime) return 'open';
+        return 'waiting'; // เลยเวลาปิด = รอเปิดรอบใหม่ (ไม่ใช่ปิดรับ)
+    }
+
+    function handleCardClick(card) {
+        const status = getCardStatus(card);
+        const name = card.dataset.name;
+        if (status === 'closed') {
+            Swal.fire({
+                icon: 'error',
+                title: 'ปิดรับแทง',
+                text: name + ' ถูกปิดรับแทงโดยแอดมิน',
+                confirmButtonColor: '#dc2626',
+                confirmButtonText: 'ตกลง'
+            });
+            return;
+        }
+        if (status === 'waiting') {
+            Swal.fire({
+                icon: 'warning',
+                title: 'ยังไม่เปิดรับแทง',
+                text: name + ' ยังไม่ถึงเวลาเปิดรับแทง',
+                confirmButtonColor: '#f59e0b',
+                confirmButtonText: 'ตกลง'
+            });
+            return;
+        }
+        // status === 'open' → ไปหน้าแทง
+        window.location.href = 'bet.php?id=' + card.dataset.id;
+    }
+
+    function updateCountdowns() {
+        const now = new Date();
+        document.querySelectorAll('.lottery-card').forEach(card => {
+            const openStr = card.dataset.open;
+            const closeStr = card.dataset.close;
+            const forcedClosed = card.dataset.forcedClosed === '1';
+            const statusEl = card.querySelector('.countdown-status');
+            const textEl = card.querySelector('.countdown-text');
+
+            // Admin ปิดรับด้วยมือ → สีเทา (เฉพาะกรณีนี้เท่านั้น)
+            if (forcedClosed) {
+                card.className = 'lottery-card card-closed';
+                statusEl.textContent = 'สถานะ';
+                textEl.textContent = 'ปิดรับ (แอดมิน)';
+                textEl.className = 'status-text countdown-text status-closed';
+                return;
+            }
+            
+            if (!closeStr) {
+                card.className = 'lottery-card card-waiting';
+                statusEl.textContent = 'สถานะ';
+                textEl.textContent = 'รอกำหนดเวลา';
+                textEl.className = 'status-text countdown-text status-countdown';
+                return;
+            }
+
+            const openTime = openStr ? new Date(openStr) : null;
+            const closeTime = new Date(closeStr);
+
+            if (openTime && now < openTime) {
+                // 🟡 ยังไม่ถึงเวลาเปิด → รอเปิด
+                card.className = 'lottery-card card-waiting';
+                const diff = openTime - now;
+                statusEl.textContent = 'สถานะ';
+                textEl.textContent = 'เปิดในอีก ' + formatDiff(diff);
+                textEl.className = 'status-text countdown-text status-countdown';
+            } else if (now < closeTime) {
+                // 🟢 เปิดรับแทง
+                card.className = 'lottery-card card-open';
+                const diff = closeTime - now;
+                statusEl.textContent = 'สถานะ';
+                textEl.textContent = 'ปิดรับใน ' + formatDiff(diff);
+                textEl.className = 'status-text countdown-text status-open';
+            } else {
+                // 🟡 เลยเวลาปิดแล้ว → รอเปิดรอบใหม่ (ไม่ใช่ปิดรับ!)
+                card.className = 'lottery-card card-waiting';
+                statusEl.textContent = 'สถานะ';
+                textEl.textContent = 'รอเปิดรอบใหม่';
+                textEl.className = 'status-text countdown-text status-countdown';
+            }
+        });
+    }
+
+    function formatDiff(ms) {
+        const h = Math.floor(ms / 3600000);
+        const m = Math.floor((ms % 3600000) / 60000);
+        const s = Math.floor((ms % 60000) / 1000);
+        return String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+    }
+
+    setInterval(updateCountdowns, 1000);
+    updateCountdowns();
+    </script>
+
+    <?php require_once 'includes/footer.php'; ?>
+    <?php exit; ?>
+<?php } // end !$lotteryId
 
 // Fetch lottery info
 $stmt = $pdo->prepare("
@@ -37,16 +391,57 @@ $stmt = $pdo->prepare("SELECT r.*, lt.name as lottery_name FROM results r JOIN l
 $stmt->execute([$lotteryId]);
 $pastResults = $stmt->fetchAll();
 
-$flagUrl = getFlagForCountry($lottery['flag_emoji']);
+// Fetch blocked numbers for this lottery
+$stmtBlocked = $pdo->prepare("SELECT * FROM blocked_numbers WHERE lottery_type_id = ? ORDER BY bet_type, number");
+$stmtBlocked->execute([$lotteryId]);
+$blockedNumbers = $stmtBlocked->fetchAll();
+
+// Load over-limit settings
+$overLimitSettings = ['threshold' => 50, '2top' => 95, '2bot' => 95, '3top' => 800, '3tod' => 125, 'run_top' => 3, 'run_bot' => 4];
+try {
+    $stmtOL = $pdo->query("SELECT setting_key, setting_value FROM site_settings WHERE setting_key LIKE 'over_limit%'");
+    foreach ($stmtOL->fetchAll() as $s) {
+        $k = str_replace('over_limit_', '', $s['setting_key']);
+        $k = str_replace('_rate', '', $k);
+        $overLimitSettings[$k] = floatval($s['setting_value']);
+    }
+} catch (Exception $e) {}
+// Group by type: 3d, 2d, run
+$blocked3d = array_filter($blockedNumbers, fn($b) => in_array($b['bet_type'], ['3top','3tod']));
+$blocked2d = array_filter($blockedNumbers, fn($b) => in_array($b['bet_type'], ['2top','2bot']));
+$blockedRun = array_filter($blockedNumbers, fn($b) => in_array($b['bet_type'], ['run_top','run_bot']));
+
+$flagUrl = getFlagForCountry($lottery['flag_emoji'], $lottery['name']);
 $drawDate = $lottery['draw_date'] ? formatDateDisplay($lottery['draw_date']) : date('d-m-Y');
 $closeDateTime = $lottery['draw_date'] . ' ' . $lottery['close_time'];
+
+// Fetch recent 15 bills
+$stmtBills = $pdo->query("
+    SELECT b.id, b.bet_number, b.created_at, b.total_items, b.net_amount, b.status, b.note,
+           lt.name as lottery_name, lc.name as category_name
+    FROM bets b
+    JOIN lottery_types lt ON b.lottery_type_id = lt.id
+    JOIN lottery_categories lc ON lt.category_id = lc.id
+    ORDER BY b.id DESC LIMIT 15
+");
+$recentBills = $stmtBills->fetchAll();
 
 require_once 'includes/header.php';
 ?>
 
-<div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+<style>
+    /* Override container width for bet page */
+    main { max-width: 1400px !important; }
+    @media (min-width: 1024px) {
+        .bet-layout { display: flex !important; flex-direction: row !important; gap: 16px; }
+        .bet-left { flex: 1; min-width: 0; }
+        .bet-right { width: 380px; flex-shrink: 0; }
+    }
+</style>
+
+<div class="bet-layout flex flex-col">
     <!-- Left: Betting Form -->
-    <div class="lg:col-span-2 space-y-4">
+    <div class="bet-left space-y-4">
         
         <!-- Header -->
         <div class="bg-white px-2 py-2">
@@ -59,33 +454,22 @@ require_once 'includes/header.php';
         </div>
 
         <!-- Lottery Info Box -->
-        <div class="bg-[#fafafa] border border-[#c62828] p-3 relative">
-            <div class="flex justify-between items-start mb-2">
+        <div class="bg-[#fafafa] border border-[#c62828] p-3">
+            <div class="flex justify-between items-center">
                 <div class="font-bold text-[#c62828] text-[15px]">
                     [<?= htmlspecialchars($lottery['category_name']) ?>] <?= htmlspecialchars($lottery['name']) ?>
                 </div>
-                <div class="font-bold text-[#c62828] text-[15px]">
-                    <?= $drawDate ?>
+                <div class="flex items-center gap-2">
+                    <span class="font-bold text-[#c62828] text-[15px]"><?= $drawDate ?></span>
+                    <img src="<?= $flagUrl ?>" alt="flag" class="w-10 h-7 object-cover border border-gray-300 rounded">
                 </div>
             </div>
-            
-            <div class="flex items-center text-sm mt-3">
-                <span class="text-gray-600 mr-2">อัตราจ่าย:</span>
-                <select class="border border-gray-300 rounded px-2 py-0.5 text-xs bg-white text-gray-700 outline-none mr-2">
-                    <option>หวย100</option>
-                </select>
-                <a href="#rates-section" class="text-[#1976d2] text-xs hover:underline">ดูรายละเอียด</a>
-            </div>
-            
-            <img src="<?= $flagUrl ?>" alt="flag" class="absolute bottom-3 right-3 w-8 h-5 object-cover border border-gray-300">
         </div>
 
         <!-- Bet Type Tabs -->
         <div class="bg-white border border-[#c62828]">
-            <div class="flex bg-[#f5f5f5] border-b border-[#e0e0e0]">
-                <button onclick="switchBetTab('quick')" id="tab-quick" class="bet-tab px-6 py-3 text-sm font-bold bg-white border-t-[3px] border-[#e53935] text-gray-800">แทงเร็ว</button>
-                <button onclick="switchBetTab('classic')" id="tab-classic" class="bet-tab px-6 py-3 text-sm font-medium text-gray-500 hover:text-gray-800 border-t-[3px] border-transparent">แทงแบบคลาสสิค</button>
-                <button onclick="switchBetTab('paste')" id="tab-paste" class="bet-tab px-6 py-3 text-sm font-medium text-gray-500 hover:text-gray-800 border-t-[3px] border-transparent">วางโพย</button>
+            <div class="flex bg-[#4caf50] border-b border-[#388e3c]">
+                <div class="px-6 py-3 text-sm font-bold bg-white text-gray-800 border-t-[3px] border-[#e53935]">แทงเร็ว</div>
             </div>
 
             <!-- Quick Mode -->
@@ -124,16 +508,49 @@ require_once 'includes/header.php';
                     </div>
                 </div>
 
+                <!-- Selected Numbers Display -->
+                <div id="selectedNumbers" class="flex flex-wrap gap-2 mb-4 min-h-[36px]"></div>
+
+                <!-- Win Number Panel (วินเลข) -->
+                <div id="winPanel" class="mb-4 p-3 bg-[#fffde7] border border-[#ffca28] rounded-lg" style="display:none;">
+                    <div class="flex gap-4 mb-3 text-sm">
+                        <label class="flex items-center gap-1"><input type="radio" name="winDigit" value="2" checked> <span>จับวิน 2 ตัว</span></label>
+                        <label class="flex items-center gap-1"><input type="radio" name="winDigit" value="3"> <span>จับวิน 3 ตัว</span></label>
+                    </div>
+                    <div class="flex gap-4 mb-3 text-sm">
+                        <label class="flex items-center gap-1"><input type="radio" name="winDouble" value="no" checked> <span>จับวินไม่รวมเลขเบิ้ล</span></label>
+                        <label class="flex items-center gap-1"><input type="radio" name="winDouble" value="yes"> <span>จับวินรวมเลขเบิ้ล</span></label>
+                    </div>
+                    <p class="text-[12px] text-gray-500 mb-2">กรุณาเลือกตัวเลขที่ต้องการจับวิน 2 - 7 ตัวเลข</p>
+                    <div class="grid grid-cols-5 gap-2 max-w-[280px] mb-3" id="winGrid">
+                        <button type="button" onclick="toggleWinDigit(1)" id="wdig-1" class="win-digit py-2 text-center text-lg font-bold border-2 border-gray-300 rounded bg-white hover:bg-yellow-100 transition">1</button>
+                        <button type="button" onclick="toggleWinDigit(2)" id="wdig-2" class="win-digit py-2 text-center text-lg font-bold border-2 border-gray-300 rounded bg-white hover:bg-yellow-100 transition">2</button>
+                        <button type="button" onclick="toggleWinDigit(3)" id="wdig-3" class="win-digit py-2 text-center text-lg font-bold border-2 border-gray-300 rounded bg-white hover:bg-yellow-100 transition">3</button>
+                        <button type="button" onclick="toggleWinDigit(4)" id="wdig-4" class="win-digit py-2 text-center text-lg font-bold border-2 border-gray-300 rounded bg-white hover:bg-yellow-100 transition">4</button>
+                        <button type="button" onclick="toggleWinDigit(5)" id="wdig-5" class="win-digit py-2 text-center text-lg font-bold border-2 border-gray-300 rounded bg-white hover:bg-yellow-100 transition">5</button>
+                        <button type="button" onclick="toggleWinDigit(6)" id="wdig-6" class="win-digit py-2 text-center text-lg font-bold border-2 border-gray-300 rounded bg-white hover:bg-yellow-100 transition">6</button>
+                        <button type="button" onclick="toggleWinDigit(7)" id="wdig-7" class="win-digit py-2 text-center text-lg font-bold border-2 border-gray-300 rounded bg-white hover:bg-yellow-100 transition">7</button>
+                        <button type="button" onclick="toggleWinDigit(8)" id="wdig-8" class="win-digit py-2 text-center text-lg font-bold border-2 border-gray-300 rounded bg-white hover:bg-yellow-100 transition">8</button>
+                        <button type="button" onclick="toggleWinDigit(9)" id="wdig-9" class="win-digit py-2 text-center text-lg font-bold border-2 border-gray-300 rounded bg-white hover:bg-yellow-100 transition">9</button>
+                        <button type="button" onclick="toggleWinDigit(0)" id="wdig-0" class="win-digit py-2 text-center text-lg font-bold border-2 border-gray-300 rounded bg-white hover:bg-yellow-100 transition">0</button>
+                    </div>
+                    <div class="flex gap-2 mb-3">
+                        <button onclick="calculateWin()" class="px-4 py-2 bg-white border-2 border-gray-400 rounded text-sm font-bold hover:bg-gray-100 transition">คำนวน</button>
+                        <button onclick="reverseWinNumbers()" class="px-4 py-2 bg-white border-2 border-gray-400 rounded text-sm font-bold hover:bg-gray-100 transition">กลับเลขวิน</button>
+                    </div>
+                    <div id="winResults" class="flex flex-wrap gap-2"></div>
+                </div>
+
                 <!-- Number Entry Form -->
-                <div class="mb-4">
+                <div class="mb-4" id="normalInputPanel">
                     <button onclick="addDoubleBet()" class="mb-2 text-sm bg-[#ffca28] text-yellow-900 px-3 py-1 rounded font-medium hover:bg-yellow-400 transition inline-block">
                         <i class="fas fa-plus mr-1"></i> เลขเบิ้ล
                     </button>
                     
                     <div class="grid grid-cols-12 gap-2 items-end">
                         <div class="col-span-12 sm:col-span-3">
-                            <label class="text-[11px] text-gray-500 block mb-0.5">ใส่เลข</label>
-                            <input type="text" id="numInput" class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:border-blue-500 outline-none h-[40px]" maxlength="2">
+                            <label class="text-[11px] text-gray-500 block mb-0.5">ใส่เลข <span class="text-blue-500">(วางหลายตัวได้)</span></label>
+                            <input type="text" id="numInput" class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:border-blue-500 outline-none h-[40px]" placeholder="12 21 31 54...">
                         </div>
                         <div class="col-span-12 sm:col-span-1 flex items-end">
                             <button onclick="reverseNumber()" class="w-full bg-[#ffca28] text-yellow-900 py-2 rounded text-[13px] font-bold hover:bg-yellow-400 transition h-[40px]">กลับเลข</button>
@@ -168,7 +585,7 @@ require_once 'includes/header.php';
                     <div class="flex items-center mb-4">
                         <label class="text-[13px] text-gray-600 mr-2 whitespace-nowrap">หมายเหตุ:</label>
                         <input type="text" id="betNote" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:border-blue-500 outline-none">
-                        <img src="<?= getFlagForCountry('US') ?>" alt="flag" class="w-8 h-5 object-cover ml-2 border border-gray-300 hidden sm:block">
+                        <img src="<?= $flagUrl ?>" alt="flag" class="w-8 h-5 object-cover ml-2 border border-gray-300 hidden sm:block">
                     </div>
                     
                     <div class="text-center">
@@ -189,19 +606,13 @@ require_once 'includes/header.php';
                         </div>
                     </div>
                 </div>
-            </div>
-
-            <div id="panel-classic" class="hidden">
-                <p class="text-gray-400 text-center py-8">โหมดคลาสสิค - กรุณาใช้แทงเร็ว</p>
-            </div>
-            <div id="panel-paste" class="hidden">
-                <p class="text-gray-400 text-center py-8">โหมดวางโพย - กรุณาใช้แทงเร็ว</p>
-            </div>
         </div>
     </div>
+    </div><!-- /bet-left -->
 
     <!-- Right Sidebar -->
-    <div class="space-y-4">
+    <div class="bet-right space-y-4">
+        <div style="position:sticky; top:16px;" class="space-y-4">
         <!-- Pay Rates -->
         <div id="rates-section" class="bg-white border border-[#2e7d32]">
             <div class="bg-green-100 flex items-center mb-0 border-b border-[#2e7d32]">
@@ -213,18 +624,18 @@ require_once 'includes/header.php';
                         <tr>
                             <th class="px-2 py-1.5 text-left font-normal border border-[#2e7d32]"><?= htmlspecialchars($lottery['name']) ?> (หวย100)</th>
                             <th class="px-2 py-1.5 text-center font-normal border border-[#2e7d32]">จ่าย (บาท)</th>
-                            <th class="px-2 py-1.5 text-center font-normal border border-[#2e7d32]">ลด (%)</th>
+
                             <th class="px-2 py-1.5 text-center font-normal border border-[#2e7d32]">ขั้นต่ำ (บาท)</th>
                         </tr>
                     </thead>
                     <tbody class="text-gray-700">
                         <?php if (empty($rates)): ?>
-                        <tr><td colspan="4" class="px-2 py-3 text-center text-gray-400">ยังไม่มีอัตราจ่าย</td></tr>
+                        <tr><td colspan="3" class="px-2 py-3 text-center text-gray-400">ยังไม่มีอัตราจ่าย</td></tr>
                         <?php else: foreach ($rates as $r): ?>
                         <tr class="hover:bg-gray-50">
                             <td class="px-2 py-1.5 border border-gray-300"><?= htmlspecialchars($r['rate_label'] ?? getBetTypeLabel($r['bet_type'])) ?></td>
                             <td class="px-2 py-1.5 text-center border border-gray-300"><?= formatMoney($r['pay_rate']) ?></td>
-                            <td class="px-2 py-1.5 text-center border border-gray-300"><?= $r['discount'] > 0 ? formatMoney($r['discount']) : '-' ?></td>
+
                             <td class="px-2 py-1.5 text-center border border-gray-300"><?= $r['min_bet'] ?> - <?= number_format($r['max_bet']) ?></td>
                         </tr>
                         <?php endforeach; endif; ?>
@@ -233,7 +644,7 @@ require_once 'includes/header.php';
             </div>
         </div>
 
-        <!-- Numbers Panel -->
+        <!-- Numbers Panel - เลขอั้น -->
         <div class="bg-white border border-[#2e7d32]">
             <div class="bg-[#2e7d32] text-white font-bold text-sm px-3 py-2 flex items-center">
                 <i class="fas fa-window-maximize mr-2 opacity-80"></i> เลขอั้น
@@ -243,20 +654,86 @@ require_once 'includes/header.php';
                 <button onclick="switchNumTab('2d')" id="numTab-2d" class="num-tab flex-1 py-1 text-center text-[13px] font-bold bg-white text-gray-800 rounded-t border-t border-l border-r border-[#2e7d32]">2 ตัว</button>
                 <button onclick="switchNumTab('run')" id="numTab-run" class="num-tab flex-1 py-1 text-center text-[13px] font-medium bg-[#2e7d32] text-white border border-[#2e7d32] hover:bg-green-700">เลขวิ่ง</button>
             </div>
-            <div id="numPanel-content" class="bg-white border-t-0 p-2">
+
+            <!-- 3 ตัว -->
+            <div id="numPanel-3d" class="bg-white p-2" style="display:none">
                 <table class="w-full text-[12px] border-collapse text-gray-700 text-center">
                     <thead>
-                        <tr>
-                            <th colspan="3" class="px-2 py-1.5 border border-gray-300 bg-gray-50">เรทจ่าย (บาท)</th>
+                        <tr><th colspan="3" class="px-2 py-1.5 border border-gray-300 bg-gray-50">เรทจ่าย (บาท)</th></tr>
+                        <tr class="bg-gray-50">
+                            <th class="px-2 py-1.5 border border-gray-300 font-normal">เลข</th>
+                            <th class="px-2 py-1.5 border border-gray-300 font-normal">3 ตัวบน</th>
+                            <th class="px-2 py-1.5 border border-gray-300 font-normal">3 ตัวโต๊ด</th>
                         </tr>
+                    </thead>
+                    <tbody>
+                        <?php if (empty($blocked3d)): ?>
+                        <tr><td colspan="3" class="px-2 py-4 border border-gray-300 text-gray-400">ไม่มีเลขอั้น</td></tr>
+                        <?php else: foreach ($blocked3d as $bn): ?>
+                        <tr class="hover:bg-red-50">
+                            <td class="px-2 py-1.5 border border-gray-300 font-bold font-mono"><?= htmlspecialchars($bn['number']) ?></td>
+                            <td class="px-2 py-1.5 border border-gray-300 <?= $bn['is_blocked'] ? 'text-red-600 font-bold' : 'text-orange-600' ?>"><?= $bn['is_blocked'] ? 'ปิดรับ' : 'จ่ายครึ่ง' ?></td>
+                            <td class="px-2 py-1.5 border border-gray-300">-</td>
+                        </tr>
+                        <?php endforeach; endif; ?>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- 2 ตัว (default visible) -->
+            <div id="numPanel-2d" class="bg-white p-2">
+                <table class="w-full text-[12px] border-collapse text-gray-700 text-center">
+                    <thead>
+                        <tr><th colspan="3" class="px-2 py-1.5 border border-gray-300 bg-gray-50">เรทจ่าย (บาท)</th></tr>
                         <tr class="bg-gray-50">
                             <th class="px-2 py-1.5 border border-gray-300 font-normal">เลข</th>
                             <th class="px-2 py-1.5 border border-gray-300 font-normal">2 ตัวบน</th>
                             <th class="px-2 py-1.5 border border-gray-300 font-normal">2 ตัวล่าง</th>
                         </tr>
                     </thead>
-                    <tbody id="numListBody">
-                        <tr><td colspan="3" class="px-2 py-4 border border-gray-300 text-gray-500">ไม่มีเลขอั้น</td></tr>
+                    <tbody>
+                        <?php if (empty($blocked2d)): ?>
+                        <tr><td colspan="3" class="px-2 py-4 border border-gray-300 text-gray-400">ไม่มีเลขอั้น</td></tr>
+                        <?php else: foreach ($blocked2d as $bn): ?>
+                        <tr class="hover:bg-red-50">
+                            <td class="px-2 py-1.5 border border-gray-300 font-bold font-mono"><?= htmlspecialchars($bn['number']) ?></td>
+                            <td class="px-2 py-1.5 border border-gray-300 <?= ($bn['bet_type']=='2top') ? ($bn['is_blocked'] ? 'text-red-600 font-bold' : 'text-orange-600') : '' ?>">
+                                <?= ($bn['bet_type']=='2top') ? ($bn['is_blocked'] ? 'ปิดรับ' : 'จ่ายครึ่ง') : '-' ?>
+                            </td>
+                            <td class="px-2 py-1.5 border border-gray-300 <?= ($bn['bet_type']=='2bot') ? ($bn['is_blocked'] ? 'text-red-600 font-bold' : 'text-orange-600') : '' ?>">
+                                <?= ($bn['bet_type']=='2bot') ? ($bn['is_blocked'] ? 'ปิดรับ' : 'จ่ายครึ่ง') : '-' ?>
+                            </td>
+                        </tr>
+                        <?php endforeach; endif; ?>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- เลขวิ่ง -->
+            <div id="numPanel-run" class="bg-white p-2" style="display:none">
+                <table class="w-full text-[12px] border-collapse text-gray-700 text-center">
+                    <thead>
+                        <tr><th colspan="3" class="px-2 py-1.5 border border-gray-300 bg-gray-50">เรทจ่าย (บาท)</th></tr>
+                        <tr class="bg-gray-50">
+                            <th class="px-2 py-1.5 border border-gray-300 font-normal">เลข</th>
+                            <th class="px-2 py-1.5 border border-gray-300 font-normal">วิ่งบน</th>
+                            <th class="px-2 py-1.5 border border-gray-300 font-normal">วิ่งล่าง</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php if (empty($blockedRun)): ?>
+                        <tr><td colspan="3" class="px-2 py-4 border border-gray-300 text-gray-400">ไม่มีเลขอั้น</td></tr>
+                        <?php else: foreach ($blockedRun as $bn): ?>
+                        <tr class="hover:bg-red-50">
+                            <td class="px-2 py-1.5 border border-gray-300 font-bold font-mono"><?= htmlspecialchars($bn['number']) ?></td>
+                            <td class="px-2 py-1.5 border border-gray-300 <?= ($bn['bet_type']=='run_top') ? ($bn['is_blocked'] ? 'text-red-600 font-bold' : 'text-orange-600') : '' ?>">
+                                <?= ($bn['bet_type']=='run_top') ? ($bn['is_blocked'] ? 'ปิดรับ' : 'จ่ายครึ่ง') : '-' ?>
+                            </td>
+                            <td class="px-2 py-1.5 border border-gray-300 <?= ($bn['bet_type']=='run_bot') ? ($bn['is_blocked'] ? 'text-red-600 font-bold' : 'text-orange-600') : '' ?>">
+                                <?= ($bn['bet_type']=='run_bot') ? ($bn['is_blocked'] ? 'ปิดรับ' : 'จ่ายครึ่ง') : '-' ?>
+                            </td>
+                        </tr>
+                        <?php endforeach; endif; ?>
                     </tbody>
                 </table>
             </div>
@@ -292,28 +769,134 @@ require_once 'includes/header.php';
                 </table>
             </div>
         </div>
+        </div>
+    </div>
+</div><!-- /bet-layout -->
+
+<!-- Recent Bills Section -->
+<div class="mt-4 bg-white border border-[#2e7d32]">
+    <div class="flex justify-between items-center px-3 py-2 bg-[#e8f5e9] border-b border-[#2e7d32]">
+        <div class="text-[#2e7d32] font-bold text-sm"><i class="fas fa-list mr-1"></i> โพยล่าสุด (แสดง 15 รายการล่าสุด)</div>
+        <a href="bills.php" class="text-xs text-[#1976d2] hover:underline">(เพิ่มเติม)</a>
+    </div>
+    <div class="overflow-x-auto">
+        <table class="w-full text-[12px]">
+            <thead>
+                <tr class="bg-[#2e7d32] text-white">
+                    <th class="px-2 py-2 text-center">#</th>
+                    <th class="px-2 py-2 text-center">เลขที่</th>
+                    <th class="px-2 py-2 text-center">เวลาแทง</th>
+                    <th class="px-2 py-2 text-left">หวย</th>
+                    <th class="px-2 py-2 text-center">รายการ</th>
+                    <th class="px-2 py-2 text-center">บาท</th>
+                    <th class="px-2 py-2 text-center">หมายเหตุ</th>
+                    <th class="px-2 py-2 text-center">ลบโพย</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php if (empty($recentBills)): ?>
+                <tr><td colspan="8" class="text-center text-gray-400 py-6">ยังไม่มีรายการ</td></tr>
+                <?php else: ?>
+                <?php foreach ($recentBills as $i => $bill):
+                    $statusMap = ['pending'=>'รอผล','won'=>'ถูกรางวัล','lost'=>'ไม่ถูก','cancelled'=>'ยกเลิก'];
+                    $isCancelled = $bill['status'] === 'cancelled';
+                ?>
+                <tr class="border-b border-gray-100 hover:bg-gray-50 <?= $isCancelled ? 'bg-red-50 line-through text-gray-400' : '' ?>">
+                    <td class="px-2 py-2 text-center"><?= $isCancelled ? '<span class="text-red-500">✕</span> ' : '' ?><?= $i+1 ?></td>
+                    <td class="px-2 py-2 text-center font-mono"><?= htmlspecialchars($bill['bet_number']) ?></td>
+                    <td class="px-2 py-2 text-center whitespace-nowrap"><?= date('d/m/Y', strtotime($bill['created_at'])) ?><br><?= date('H:i:s', strtotime($bill['created_at'])) ?></td>
+                    <td class="px-2 py-2">[<?= htmlspecialchars($bill['category_name']) ?>]<br><?= htmlspecialchars($bill['lottery_name']) ?></td>
+                    <td class="px-2 py-2 text-center font-bold"><?= $bill['total_items'] ?></td>
+                    <td class="px-2 py-2 text-center"><?= number_format($bill['net_amount'], 2) ?></td>
+                    <td class="px-2 py-2 text-center"><?= htmlspecialchars($bill['note'] ?? '') ?></td>
+                    <td class="px-2 py-2 text-center">
+                        <?php if (!$isCancelled): ?>
+                        <button onclick="deleteBill(<?= $bill['id'] ?>)" class="text-red-500 hover:text-red-700" title="ลบโพย">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                        <?php endif; ?>
+                    </td>
+                </tr>
+                <?php endforeach; ?>
+                <?php endif; ?>
+            </tbody>
+        </table>
     </div>
 </div>
 
 <script>
 const LOTTERY_ID = <?= $lotteryId ?>;
 const CLOSE_TIME = '<?= $closeDateTime ?>';
+const STORAGE_KEY = 'bet_' + LOTTERY_ID;
+const OVER_LIMIT = <?= json_encode($overLimitSettings) ?>;
+
+// เลขอั้น/ปิดรับ map: key = number_bettype, value = {is_blocked, number}
+const BLOCKED_MAP = {};
+<?php foreach ($blockedNumbers as $bn): ?>
+BLOCKED_MAP['<?= $bn['number'] ?>_<?= $bn['bet_type'] ?>'] = { is_blocked: <?= $bn['is_blocked'] ?>, number: '<?= $bn['number'] ?>', bet_type: '<?= $bn['bet_type'] ?>' };
+<?php endforeach; ?>
+
+// Pay rates map: key = bet_type, value = pay_rate
+const PAY_RATES = {};
+<?php foreach ($rates as $r): ?>
+PAY_RATES['<?= $r['bet_type'] ?>'] = <?= $r['pay_rate'] ?>;
+<?php endforeach; ?>
+
+function showBlockedToast(msg, type) {
+    Swal.fire({
+        toast: true,
+        position: 'top-end',
+        icon: type === 'blocked' ? 'error' : 'warning',
+        title: msg,
+        showConfirmButton: false,
+        timer: 3000,
+        timerProgressBar: true,
+    });
+}
+
 let currentBetType = '2';
 let betGroups = [];
+let selectedNums = [];
+let classicBetGroups = [];
+let pasteBetGroups = [];
 
-// ... countdown and tabs code ...
+// โหลดข้อมูลจาก sessionStorage
+(function loadSavedState() {
+    try {
+        const saved = JSON.parse(sessionStorage.getItem(STORAGE_KEY));
+        if (saved) {
+            selectedNums = saved.selectedNums || [];
+            betGroups = saved.betGroups || [];
+            currentBetType = saved.currentBetType || '2';
+        }
+    } catch(e) {}
+})();
+
+function saveState() {
+    try {
+        sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
+            selectedNums, betGroups, currentBetType
+        }));
+    } catch(e) {}
+}
+
+function clearSavedState() {
+    sessionStorage.removeItem(STORAGE_KEY);
+}
+
+// ==========================================
+// Countdown
+// ==========================================
 function updateMainCountdown() {
     const close = new Date(CLOSE_TIME);
     const now = new Date();
     const diff = close - now;
     const el1 = document.getElementById('mainCountdown');
-    
     if (diff > 0) {
         const h = Math.floor(diff / 3600000);
         const m = Math.floor((diff % 3600000) / 60000);
         const s = Math.floor((diff % 60000) / 1000);
-        const text = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
-        if (el1) el1.textContent = text;
+        if (el1) el1.textContent = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
     } else {
         if (el1) el1.textContent = 'ปิดรับแล้ว';
     }
@@ -321,6 +904,9 @@ function updateMainCountdown() {
 setInterval(updateMainCountdown, 1000);
 updateMainCountdown();
 
+// ==========================================
+// Tab Switching
+// ==========================================
 function switchBetTab(tab) {
     document.querySelectorAll('.bet-tab').forEach(b => { b.className = 'bet-tab px-6 py-3 text-sm font-medium text-gray-500 hover:text-gray-800 border-t-[3px] border-transparent'; });
     document.getElementById('tab-' + tab).className = 'bet-tab px-6 py-3 text-sm font-bold bg-white border-t-[3px] border-[#e53935] text-gray-800';
@@ -329,151 +915,482 @@ function switchBetTab(tab) {
 }
 
 function switchNumTab(tab) {
-    document.querySelectorAll('.num-tab').forEach(b => { b.className = 'num-tab flex-1 py-1 text-center text-[13px] font-medium bg-[#2e7d32] text-white border border-[#2e7d32] hover:bg-green-700'; });
-    const active = document.getElementById('numTab-' + tab);
-    if(active) active.className = 'num-tab flex-1 py-1 text-center text-[13px] font-bold bg-white text-gray-800 rounded-t border-t border-l border-r border-[#2e7d32]';
+    ['3d','2d','run'].forEach(t => {
+        const panel = document.getElementById('numPanel-' + t);
+        const btn = document.getElementById('numTab-' + t);
+        if (t === tab) {
+            if (panel) panel.style.display = '';
+            if (btn) btn.className = 'num-tab flex-1 py-1 text-center text-[13px] font-bold bg-white text-gray-800 rounded-t border-t border-l border-r border-[#2e7d32]';
+        } else {
+            if (panel) panel.style.display = 'none';
+            if (btn) btn.className = 'num-tab flex-1 py-1 text-center text-[13px] font-medium bg-[#2e7d32] text-white border border-[#2e7d32] hover:bg-green-700';
+        }
+    });
 }
 
+// ==========================================
+// Quick Bet - Bet Type
+// ==========================================
 function setBetType(type) {
     currentBetType = type;
+    selectedNums = [];
+    renderSelectedNumbers();
+    
     document.querySelectorAll('.bet-type-btn').forEach(b => { b.className = 'bet-type-btn px-4 py-1.5 rounded text-sm font-medium bg-[#fff8e1] text-[#f57f17] border border-[#ffca28] hover:bg-[#ffca28] hover:text-yellow-900'; });
     const btn = document.getElementById('btn-type-' + type);
     if (btn) btn.className = 'bet-type-btn px-4 py-1.5 rounded text-sm font-bold bg-[#ffca28] text-yellow-900 border border-[#ffca28]';
     
+    // Show/hide win panel
+    const winPanel = document.getElementById('winPanel');
+    const normalInput = document.getElementById('normalInputPanel');
+    if (type === 'win') {
+        if (winPanel) winPanel.style.display = '';
+        if (normalInput) normalInput.style.display = 'none';
+        // Reset win grid
+        winSelectedDigits = [];
+        document.querySelectorAll('.win-digit').forEach(b => { b.className = 'win-digit py-2 text-center text-lg font-bold border-2 border-gray-300 rounded bg-white hover:bg-yellow-100 transition'; });
+        document.getElementById('winResults').innerHTML = '';
+        return;
+    } else {
+        if (winPanel) winPanel.style.display = 'none';
+        if (normalInput) normalInput.style.display = '';
+    }
+    
     const numInput = document.getElementById('numInput');
     if (type === '3' || type === '6') numInput.maxLength = 3;
-    else if (type === 'run' || type === 'win') numInput.maxLength = 1;
+    else if (type === 'run') numInput.maxLength = 1;
+    else if (type === '19') numInput.maxLength = 1;
     else numInput.maxLength = 2;
+    
+    numInput.value = '';
+    numInput.focus();
 }
 
+// ==========================================
+// Auto-add Numbers on Input (auto-add + paste หลายตัว)
+// ==========================================
+function addSingleNumber(val) {
+    const type = currentBetType;
+    if (type === '2' && /^\d{2}$/.test(val)) {
+        if (!selectedNums.includes(val)) selectedNums.push(val);
+        return true;
+    } else if (type === '3' && /^\d{3}$/.test(val)) {
+        if (!selectedNums.includes(val)) selectedNums.push(val);
+        return true;
+    } else if (type === '6' && /^\d{3}$/.test(val)) {
+        const perms = getPermutations(val);
+        perms.forEach(p => { if (!selectedNums.includes(p)) selectedNums.push(p); });
+        return true;
+    } else if (type === '19' && /^\d$/.test(val)) {
+        const nums = get19Door(val);
+        nums.forEach(n => { if (!selectedNums.includes(n)) selectedNums.push(n); });
+        return true;
+    } else if ((type === 'run' || type === 'win') && /^\d$/.test(val)) {
+        if (!selectedNums.includes(val)) selectedNums.push(val);
+        return true;
+    }
+    return false;
+}
+
+function handleNumInput(e) {
+    const val = e.target.value.trim();
+    // ตรวจว่ามีช่องว่าง/เครื่องหมาย = วางหลายตัว
+    if (/[\s,\/\-]/.test(val)) {
+        handleMultiPaste(val);
+        e.target.value = '';
+        return;
+    }
+    if (addSingleNumber(val)) {
+        e.target.value = '';
+        renderSelectedNumbers();
+        saveState();
+    }
+}
+
+// ==========================================
+// Paste หลายตัว: "12 21 31 54 87" → เพิ่มทั้งหมด
+// ==========================================
+function handleMultiPaste(text) {
+    // แยกด้วย space, comma, newline, tab, slash, dash
+    const parts = text.split(/[\s,\/\-\n\r\t]+/).filter(n => n.length > 0 && /^\d+$/.test(n));
+    let added = 0;
+    parts.forEach(num => {
+        if (addSingleNumber(num)) added++;
+    });
+    renderSelectedNumbers();
+    if (added > 0) {
+        saveState();
+        // Flash effect
+        const container = document.getElementById('selectedNumbers');
+        container.style.transition = 'background 0.3s';
+        container.style.background = '#e8f5e9';
+        setTimeout(() => { container.style.background = ''; }, 500);
+    }
+}
+
+// ==========================================
+// 6กลับ: Get all unique permutations of 3 digits
+// ==========================================
+function getPermutations(str) {
+    const digits = str.split('');
+    const result = new Set();
+    for (let i = 0; i < 3; i++) {
+        for (let j = 0; j < 3; j++) {
+            for (let k = 0; k < 3; k++) {
+                if (i !== j && j !== k && i !== k) {
+                    result.add(digits[i] + digits[j] + digits[k]);
+                }
+            }
+        }
+    }
+    return [...result];
+}
+
+// ==========================================
+// 19ประตู: Get all 19 two-digit numbers containing digit
+// ==========================================
+function get19Door(digit) {
+    const nums = new Set();
+    for (let i = 0; i <= 9; i++) {
+        nums.add(digit + String(i)); // digit as first
+        nums.add(String(i) + digit); // digit as second
+    }
+    // Remove the double (e.g., 22 appears twice), Set handles that
+    return [...nums].sort();
+}
+
+// ==========================================
+// เลขเบิ้ล: All doubles for 2ตัว
+// ==========================================
+function addDoubleBet() {
+    if (currentBetType === '2' || currentBetType === '3') {
+        // For 2ตัว: add all doubles 00,11,22,...99
+        if (currentBetType === '2') {
+            for (let i = 0; i <= 9; i++) {
+                const d = String(i) + String(i);
+                if (!selectedNums.includes(d)) selectedNums.push(d);
+            }
+        } else {
+            // For 3ตัว: add all triples 000,111,...999
+            for (let i = 0; i <= 9; i++) {
+                const d = String(i) + String(i) + String(i);
+                if (!selectedNums.includes(d)) selectedNums.push(d);
+            }
+        }
+        renderSelectedNumbers();
+        saveState();
+    } else {
+        Swal.fire({ icon: 'info', title: 'เลขเบิ้ล', text: 'กรุณาเลือกโหมด 2 ตัว หรือ 3 ตัว', confirmButtonColor: '#2e7d32' });
+    }
+}
+
+// ==========================================
+// Render Selected Numbers (red badges)
+// ==========================================
+function renderSelectedNumbers() {
+    const container = document.getElementById('selectedNumbers');
+    if (!container) return;
+    
+    if (selectedNums.length === 0) {
+        container.innerHTML = '';
+        return;
+    }
+    
+    container.innerHTML = selectedNums.map((n, i) => 
+        `<span class="inline-flex items-center px-3 py-1.5 text-sm font-bold bg-[#e53935] text-black cursor-pointer hover:bg-red-400 transition" style="border-radius:4px;" onclick="removeSelectedNum(${i})" title="คลิกเพื่อลบ">${n}</span>`
+    ).join('');
+}
+
+function removeSelectedNum(index) {
+    selectedNums.splice(index, 1);
+    renderSelectedNumbers();
+    saveState();
+}
+
+// ==========================================
+// Reverse Number
+// ==========================================
 function reverseNumber() {
     const input = document.getElementById('numInput');
     input.value = input.value.split('').reverse().join('');
 }
 
+// ==========================================
+// Add Bet Item (Quick Mode) - uses selectedNums if available
+// ==========================================
 function addBetItem() {
-    let numInputStr = document.getElementById('numInput').value.trim();
     const top = parseFloat(document.getElementById('topAmount').value) || 0;
     const bot = parseFloat(document.getElementById('botAmount').value) || 0;
     
-    if (!numInputStr) { alert('กรุณาใส่เลข'); return; }
-    if (top === 0 && bot === 0) { alert('กรุณาใส่จำนวนเงิน'); return; }
+    // Use selectedNums if any, fallback to input field
+    let numbers = [];
+    if (selectedNums.length > 0) {
+        numbers = [...selectedNums];
+    } else {
+        const numInputStr = document.getElementById('numInput').value.trim();
+        if (!numInputStr) { Swal.fire({ icon: 'warning', title: 'กรุณาใส่เลข', confirmButtonColor: '#f59e0b' }); return; }
+        numbers = numInputStr.split(/[\s,]+/).filter(n => n.length > 0);
+    }
     
-    // Split input by space or comma if user pasted multiple
-    let numbers = numInputStr.split(/[\s,]+/).filter(n => n.length > 0);
-    if(numbers.length === 0) return;
+    if (numbers.length === 0) { Swal.fire({ icon: 'warning', title: 'กรุณาใส่เลข', confirmButtonColor: '#f59e0b' }); return; }
+    if (top === 0 && bot === 0) { Swal.fire({ icon: 'warning', title: 'กรุณาใส่จำนวนเงิน', confirmButtonColor: '#f59e0b' }); return; }
+
+    // =============================================
+    // ตรวจสอบเลขอั้น / ปิดรับ
+    // =============================================
+    const blockedNums = [];
+    const halfPayNums = [];
+    const cleanNumbers = [];
+
+    numbers.forEach(num => {
+        let betTypes = [];
+        if (currentBetType === '2' || currentBetType === '6' || currentBetType === '19') {
+            if (top > 0) betTypes.push('2top');
+            if (bot > 0) betTypes.push('2bot');
+        } else if (currentBetType === '3') {
+            if (top > 0) betTypes.push('3top');
+            if (bot > 0) betTypes.push('3tod');
+        } else if (currentBetType === 'run' || currentBetType === 'win') {
+            if (top > 0) betTypes.push('run_top');
+            if (bot > 0) betTypes.push('run_bot');
+        }
+
+        let isBlocked = false;
+        betTypes.forEach(bt => {
+            const key = num + '_' + bt;
+            if (BLOCKED_MAP[key]) {
+                if (BLOCKED_MAP[key].is_blocked) {
+                    isBlocked = true;
+                    blockedNums.push(num);
+                } else {
+                    const fullRate = PAY_RATES[bt] || 0;
+                    halfPayNums.push(`${num} (จ่าย ${fullRate/2} แทน ${fullRate})`);
+                }
+            }
+        });
+
+        if (!isBlocked) cleanNumbers.push(num);
+    });
+
+    if (blockedNums.length > 0) {
+        showBlockedToast('🚫 ปิดรับ: ' + [...new Set(blockedNums)].join(', '), 'blocked');
+    }
+    if (halfPayNums.length > 0) {
+        showBlockedToast('½ จ่ายครึ่ง: ' + [...new Set(halfPayNums)].join(', '), 'half');
+    }
+
+    if (cleanNumbers.length === 0 && blockedNums.length > 0) {
+        return; // ทุกเลขถูกปิดรับ
+    }
+
+    // ใช้ cleanNumbers แทน numbers (ลบเลขปิดรับออก)
+    numbers = cleanNumbers;
 
     let typeLabel1 = currentBetType === 'run' ? 'เลขวิ่ง' : (currentBetType === 'win' ? 'วินเลข' : currentBetType + ' ตัว');
+    if (currentBetType === '6') typeLabel1 = '6 กลับ';
+    if (currentBetType === '19') typeLabel1 = '19 ประตู';
+    
     let typeLabel2 = (top>0 && bot>0) ? 'บน x ล่าง' : (top>0 ? 'บน' : 'ล่าง');
     let typeLabel3 = (top>0 && bot>0) ? `${top} x ${bot}` : (top>0 ? top : bot);
+    if (currentBetType === '3' || currentBetType === '6') typeLabel2 = (top>0 && bot>0) ? 'บน x โต๊ด' : (top>0 ? 'บน' : 'โต๊ด');
 
-    if (currentBetType === '3') typeLabel2 = (top>0 && bot>0) ? 'บน x โต๊ด' : (top>0 ? 'บน' : 'โต๊ด');
-    
-    // Find existing group or create new
     let group = betGroups.find(g => g.typeCategory === currentBetType && g.amountTop === top && g.amountBot === bot);
     
     if (group) {
-        numbers.forEach(n => {
-            if(!group.numbers.includes(n)) group.numbers.push(n);
-        });
+        numbers.forEach(n => { if(!group.numbers.includes(n)) group.numbers.push(n); });
     } else {
         betGroups.push({
             id: Date.now(),
             typeCategory: currentBetType,
-            typeLabel1: typeLabel1,
-            typeLabel2: typeLabel2,
-            typeLabel3: typeLabel3,
-            numbers: numbers,
-            amountTop: top,
-            amountBot: bot
+            typeLabel1, typeLabel2, typeLabel3,
+            numbers: [...numbers],
+            amountTop: top, amountBot: bot
         });
     }
     
     renderBetItems();
-    
+    selectedNums = [];
+    renderSelectedNumbers();
+    saveState();
     document.getElementById('numInput').value = '';
     document.getElementById('numInput').focus();
 }
 
-function addDoubleBet() {
-    const num = document.getElementById('numInput').value.trim();
-    if (!num || num.length < 2) { alert('กรุณาใส่เลขอย่างน้อย 2 หลัก'); return; }
-    const reversed = num.split('').reverse().join('');
-    
-    const top = parseFloat(document.getElementById('topAmount').value) || 0;
-    const bot = parseFloat(document.getElementById('botAmount').value) || 0;
-    if (top === 0 && bot === 0) { alert('กรุณาใส่จำนวนเงิน'); return; }
-    
-    if (reversed !== num) {
-        document.getElementById('numInput').value = num + " " + reversed;
-        addBetItem();
+// ==========================================
+// Cancel / Clear
+// ==========================================
+function cancelBet() {
+    if (betGroups.length === 0 && selectedNums.length === 0) return;
+    Swal.fire({ title: 'ยกเลิกทั้งหมด?', text: 'ล้างเลขที่เลือกและรายการแทงทั้งหมด', icon: 'warning', showCancelButton: true, confirmButtonColor: '#e53935', cancelButtonText: 'ไม่', confirmButtonText: 'ยกเลิกทั้งหมด' }).then(r => {
+        if (r.isConfirmed) {
+            betGroups = []; selectedNums = [];
+            renderBetItems(); renderSelectedNumbers();
+            clearSavedState();
+            document.getElementById('betNote').value = '';
+            document.getElementById('numInput').value = '';
+            document.getElementById('topAmount').value = '';
+            document.getElementById('botAmount').value = '';
+        }
+    });
+}
+
+// ==========================================
+// Win Number (วินเลข) Functions
+// ==========================================
+let winSelectedDigits = [];
+
+function toggleWinDigit(d) {
+    const idx = winSelectedDigits.indexOf(d);
+    const btn = document.getElementById('wdig-' + d);
+    if (idx >= 0) {
+        winSelectedDigits.splice(idx, 1);
+        btn.className = 'win-digit py-2 text-center text-lg font-bold border-2 border-gray-300 rounded bg-white hover:bg-yellow-100 transition';
     } else {
-        addBetItem();
+        if (winSelectedDigits.length >= 7) { Swal.fire({ icon: 'warning', title: 'เลือกได้สูงสุด 7 ตัว', timer: 1500, showConfirmButton: false }); return; }
+        winSelectedDigits.push(d);
+        btn.className = 'win-digit py-2 text-center text-lg font-bold border-2 border-[#ffca28] rounded bg-[#ffca28] text-[#e65100] transition';
     }
 }
 
-function removeBetGroup(id) {
-    betGroups = betGroups.filter(g => g.id !== id);
-    renderBetItems();
+function calculateWin() {
+    if (winSelectedDigits.length < 2) { Swal.fire({ icon: 'warning', title: 'กรุณาเลือกอย่างน้อย 2 ตัว', timer: 1500, showConfirmButton: false }); return; }
+    
+    const digits = [...winSelectedDigits].sort();
+    const numDigits = parseInt(document.querySelector('input[name="winDigit"]:checked').value);
+    const includeDoubles = document.querySelector('input[name="winDouble"]:checked').value === 'yes';
+    
+    let combos = [];
+    
+    if (numDigits === 2) {
+        // จับวิน 2 ตัว
+        if (includeDoubles) {
+            // รวมเบิ้ล: combinations with repetition
+            for (let i = 0; i < digits.length; i++) {
+                for (let j = i; j < digits.length; j++) {
+                    combos.push('' + digits[i] + digits[j]);
+                }
+            }
+        } else {
+            // ไม่รวมเบิ้ล: only different digits
+            for (let i = 0; i < digits.length; i++) {
+                for (let j = i + 1; j < digits.length; j++) {
+                    combos.push('' + digits[i] + digits[j]);
+                }
+            }
+        }
+    } else {
+        // จับวิน 3 ตัว
+        if (includeDoubles) {
+            // รวมเบิ้ล: combinations with repetition
+            for (let i = 0; i < digits.length; i++) {
+                for (let j = i; j < digits.length; j++) {
+                    for (let k = j; k < digits.length; k++) {
+                        combos.push('' + digits[i] + digits[j] + digits[k]);
+                    }
+                }
+            }
+        } else {
+            // ไม่รวมเบิ้ล: only different digits
+            for (let i = 0; i < digits.length; i++) {
+                for (let j = i + 1; j < digits.length; j++) {
+                    for (let k = j + 1; k < digits.length; k++) {
+                        combos.push('' + digits[i] + digits[j] + digits[k]);
+                    }
+                }
+            }
+        }
+    }
+    
+    // Add to selectedNums
+    combos.forEach(c => { if (!selectedNums.includes(c)) selectedNums.push(c); });
+    
+    // Render results in winResults area
+    const container = document.getElementById('winResults');
+    container.innerHTML = combos.map(c => 
+        `<span class="inline-flex items-center px-3 py-1.5 text-sm font-bold bg-[#4dd0e1] text-gray-800 rounded cursor-pointer hover:bg-cyan-300 transition" onclick="removeWinResult(this,'${c}')">${c}</span>`
+    ).join('');
+    
+    renderSelectedNumbers();
+    saveState();
+    
+    // Update bet type based on digit count
+    if (numDigits === 2) currentBetType = '2';
+    else currentBetType = '3';
+}
+
+function removeWinResult(el, num) {
+    el.remove();
+    const idx = selectedNums.indexOf(num);
+    if (idx >= 0) selectedNums.splice(idx, 1);
+    renderSelectedNumbers();
+    saveState();
+}
+
+function reverseWinNumbers() {
+    // กลับเลขวิน: เพิ่ม permutations ของ selectedNums ที่มาจากวิน
+    const current = [...selectedNums];
+    let added = 0;
+    current.forEach(num => {
+        const perms = getPermutations(num);
+        perms.forEach(p => {
+            if (!selectedNums.includes(p)) { selectedNums.push(p); added++; }
+        });
+    });
+    renderSelectedNumbers();
+    saveState();
+    
+    // Update winResults to show all
+    const container = document.getElementById('winResults');
+    container.innerHTML = selectedNums.map(c => 
+        `<span class="inline-flex items-center px-3 py-1.5 text-sm font-bold bg-[#4dd0e1] text-gray-800 rounded cursor-pointer hover:bg-cyan-300 transition" onclick="removeWinResult(this,'${c}')">${c}</span>`
+    ).join('');
+    
+    if (added > 0) Swal.fire({ icon: 'success', title: `เพิ่ม ${added} เลขกลับ`, timer: 1500, showConfirmButton: false });
 }
 
 function clearAllBets() {
     if (betGroups.length === 0) return;
-    if (!confirm('ต้องการล้างตารางทั้งหมด?')) return;
-    betGroups = [];
-    renderBetItems();
-}
-
-function cancelBet() {
-    clearAllBets();
-    document.getElementById('betNote').value = '';
+    Swal.fire({ title: 'ล้างตารางทั้งหมด?', icon: 'question', showCancelButton: true, confirmButtonColor: '#e53935', cancelButtonText: 'ไม่', confirmButtonText: 'ล้าง' }).then(r => {
+        if (r.isConfirmed) { betGroups = []; renderBetItems(); }
+    });
 }
 
 function clearDuplicates() {
-    // Duplicates within groups are already prevented during entry.
+    betGroups.forEach(g => { g.numbers = [...new Set(g.numbers)]; });
     renderBetItems();
+    Swal.fire({ icon: 'success', title: 'ลบเลขซ้ำแล้ว', timer: 1200, showConfirmButton: false });
 }
 
+function removeBetGroup(id) { betGroups = betGroups.filter(g => g.id !== id); renderBetItems(); }
+
+// ==========================================
+// Render Bet Items
+// ==========================================
 function renderBetItems() {
     const tbody = document.getElementById('betItemsBody');
     if (betGroups.length === 0) {
-        tbody.innerHTML = '<div id="emptyRow" class="p-8 text-center text-gray-400">ยังไม่มีรายการ</div>';
+        tbody.innerHTML = '<div class="p-8 text-center text-gray-400">ยังไม่มีรายการ</div>';
         document.getElementById('totalAmount').textContent = '0.00';
         return;
     }
     
     let total = 0;
     tbody.innerHTML = betGroups.map(g => {
-        let groupCost = 0;
         let numCount = g.numbers.length;
-        if(g.typeCategory === 'win') {
-            // formula for win is different, simple representation for now
-            groupCost = numCount * (g.amountTop + g.amountBot);
-        } else {
-            // standard multiplier
-            let multiplier = (g.amountTop>0 ? 1 : 0) + (g.amountBot>0 ? 1 : 0);
-            if(g.typeCategory === '6') multiplier *= 6;
-            if(g.typeCategory === '19') multiplier *= 19;
-            groupCost = numCount * multiplier * Math.max(g.amountTop, g.amountBot); // Simplified
-            // Actual detailed calc is below in API payload preparation, just showing sum here correctly
-            let topTotal = g.amountTop * numCount * (g.typeCategory === '6'?6:1) * (g.typeCategory==='19'?19:1);
-            let botTotal = g.amountBot * numCount * (g.typeCategory === '6'?6:1) * (g.typeCategory==='19'?19:1);
-            groupCost = topTotal + botTotal;
-        }
-        total += groupCost;
+        let topTotal = g.amountTop * numCount;
+        let botTotal = g.amountBot * numCount;
+        total += topTotal + botTotal;
         
         return `<div class="flex p-3 hover:bg-gray-50 items-center border-b border-gray-100 last:border-0 relative">
-            <!-- Left Info -->
             <div class="w-24 text-center border-r border-gray-200 pr-3 mr-3 flex-shrink-0">
                 <div class="text-[13px] text-gray-800 font-bold">${g.typeLabel1}</div>
                 <div class="text-[13px] text-gray-600">${g.typeLabel2}</div>
                 <div class="text-[13px] text-gray-800 font-bold">${g.typeLabel3}</div>
             </div>
-            <!-- Right Numbers -->
-            <div class="flex-1 font-bold text-[15px] font-mono text-gray-900 pr-8 leading-relaxed">
-                ${g.numbers.join(' ')}
+            <div class="flex-1 font-bold text-[15px] font-mono text-gray-900 pr-8 leading-relaxed flex flex-wrap gap-1">
+                ${g.numbers.map(n => `<span class="inline-block">${n}</span>`).join(' ')}
+                <span class="text-gray-400 text-xs ml-2">(${numCount} เลข)</span>
             </div>
-            <!-- Delete -->
             <button onclick="removeBetGroup(${g.id})" class="absolute right-3 top-1/2 -translate-y-1/2 text-red-500 hover:text-red-700">
                 <i class="far fa-trash-alt text-lg"></i>
             </button>
@@ -483,62 +1400,351 @@ function renderBetItems() {
     document.getElementById('totalAmount').textContent = total.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
 }
 
+// ==========================================
+// Save Bet (Quick Mode)
+// ==========================================
 async function saveBet() {
-    if (betGroups.length === 0) { alert('ยังไม่มีรายการเดิมพัน'); return; }
+    if (betGroups.length === 0) { Swal.fire({ icon: 'warning', title: 'ยังไม่มีรายการเดิมพัน', confirmButtonColor: '#f59e0b' }); return; }
     
-    // Flatten betGroups to items array required by API
     let flatItems = [];
     betGroups.forEach(g => {
         g.numbers.forEach(num => {
-            if (g.typeCategory === '2') {
+            const tc = g.typeCategory;
+            if (tc === '2') {
                 if (g.amountTop > 0) flatItems.push({ number: num, type: '2top', amount: g.amountTop });
                 if (g.amountBot > 0) flatItems.push({ number: num, type: '2bot', amount: g.amountBot });
-            } else if (g.typeCategory === '3') {
+            } else if (tc === '3' || tc === '6') {
                 if (g.amountTop > 0) flatItems.push({ number: num, type: '3top', amount: g.amountTop });
                 if (g.amountBot > 0) flatItems.push({ number: num, type: '3tod', amount: g.amountBot });
-            } else if (g.typeCategory === 'run') {
+            } else if (tc === '19') {
+                if (g.amountTop > 0) flatItems.push({ number: num, type: '2top', amount: g.amountTop });
+                if (g.amountBot > 0) flatItems.push({ number: num, type: '2bot', amount: g.amountBot });
+            } else if (tc === 'run' || tc === 'win') {
                 if (g.amountTop > 0) flatItems.push({ number: num, type: 'run_top', amount: g.amountTop });
                 if (g.amountBot > 0) flatItems.push({ number: num, type: 'run_bot', amount: g.amountBot });
-            } else {
-                if (g.amountTop > 0) flatItems.push({ number: num, type: g.typeCategory + 'top', amount: g.amountTop });
-                if (g.amountBot > 0) flatItems.push({ number: num, type: g.typeCategory + 'bot', amount: g.amountBot });
             }
         });
     });
     
-    const data = {
-        action: 'save_bet',
-        lottery_type_id: LOTTERY_ID,
-        note: document.getElementById('betNote').value,
-        items: flatItems
-    };
+    // เช็ครายการเกิน threshold ต่อประเภท (แยกนับ 2top, 2bot ฯลฯ)
+    const typeCounts = {};
+    flatItems.forEach(i => { typeCounts[i.type] = (typeCounts[i.type] || 0) + 1; });
     
-    try {
-        const res = await fetch('api.php', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
+    const threshold = OVER_LIMIT.threshold || 50;
+    const typeLabels = { '2top': '2 ตัวบน', '2bot': '2 ตัวล่าง', '3top': '3 ตัวบน', '3tod': '3 ตัวโต๊ด', 'run_top': 'วิ่งบน', 'run_bot': 'วิ่งล่าง' };
+    const overTypes = Object.entries(typeCounts).filter(([t, c]) => c >= threshold);
+    
+    if (overTypes.length > 0) {
+        let detailHtml = overTypes.map(([type, count]) => {
+            const label = typeLabels[type] || type;
+            const rate = OVER_LIMIT[type] || '-';
+            return `<tr><td style="padding:4px 8px;">${label}</td><td style="padding:4px 8px;text-align:center;font-weight:bold;color:#e53935;">${count}</td><td style="padding:4px 8px;text-align:center;font-weight:bold;color:#e53935;">${rate}</td></tr>`;
+        }).join('');
+        
+        const confirm = await Swal.fire({
+            icon: 'warning',
+            title: `เกิน ${threshold} รายการ!`,
+            html: `<div style="font-size:14px;">
+                <p>บิลนี้มีประเภทที่เกิน <b>${threshold}</b> รายการ อัตราจ่ายจะลดลง:</p>
+                <table style="width:100%;margin-top:10px;border-collapse:collapse;">
+                    <tr style="background:#f5f5f5;"><th style="padding:4px 8px;text-align:left;">ประเภท</th><th style="padding:4px 8px;">จำนวน</th><th style="padding:4px 8px;">อัตราจ่ายใหม่</th></tr>
+                    ${detailHtml}
+                </table>
+                <p style="margin-top:10px;color:#666;">ต้องการดำเนินการต่อหรือไม่?</p>
+            </div>`,
+            showCancelButton: true,
+            confirmButtonColor: '#e53935',
+            cancelButtonColor: '#9e9e9e',
+            confirmButtonText: 'ยืนยัน บันทึก',
+            cancelButtonText: 'ยกเลิก'
         });
+        if (!confirm.isConfirmed) return;
+    }
+    
+    await doSaveBet(flatItems, document.getElementById('betNote').value, () => {
+        betGroups = []; selectedNums = [];
+        renderBetItems(); renderSelectedNumbers();
+        clearSavedState();
+        document.getElementById('betNote').value = '';
+    });
+}
+
+// ==========================================
+// Shared save function
+// ==========================================
+async function doSaveBet(items, note, onSuccess) {
+    // ==========================================
+    // สร้างหน้ายืนยันรายการก่อนบันทึก
+    // ==========================================
+    const typeLabels = { '3top': '3 ตัวบน', '3tod': '3 ตัวโต๊ด', '2top': '2 ตัวบน', '2bot': '2 ตัวล่าง', 'run_top': 'วิ่งบน', 'run_bot': 'วิ่งล่าง' };
+    let totalAmount = 0;
+    let totalDiscount = 0;
+    let rows = items.map((item, idx) => {
+        const label = typeLabels[item.type] || item.type;
+        const rate = PAY_RATES[item.type] || '-';
+        const discount = item.discount || 0;
+        totalAmount += item.amount;
+        totalDiscount += discount;
+        return `<tr style="border-bottom:1px solid #eee;">
+            <td style="padding:5px 8px;font-size:13px;">${label}</td>
+            <td style="padding:5px 8px;text-align:center;font-weight:bold;font-size:14px;">${item.number}</td>
+            <td style="padding:5px 8px;text-align:right;font-size:13px;">${item.amount.toFixed(2)}</td>
+            <td style="padding:5px 8px;text-align:right;font-size:13px;color:#1565c0;">${rate}</td>
+            <td style="padding:5px 8px;text-align:right;font-size:13px;color:#e53935;">${discount.toFixed(2)}</td>
+        </tr>`;
+    }).join('');
+
+    const confirmHtml = `
+        <div style="max-height:400px;overflow-y:auto;margin:0 -20px;">
+            <table style="width:100%;border-collapse:collapse;font-size:13px;">
+                <thead>
+                    <tr style="background:#f5f5f5;position:sticky;top:0;">
+                        <th style="padding:6px 8px;text-align:left;">ประเภท</th>
+                        <th style="padding:6px 8px;text-align:center;">หมายเลข</th>
+                        <th style="padding:6px 8px;text-align:right;">ยอดเดิมพัน</th>
+                        <th style="padding:6px 8px;text-align:right;">เรทจ่าย</th>
+                        <th style="padding:6px 8px;text-align:right;">ส่วนลด</th>
+                    </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+            </table>
+        </div>
+        <div style="margin-top:12px;padding:10px;background:#f0fdf4;border-radius:8px;font-size:14px;">
+            <div style="display:flex;justify-content:space-between;"><span>ยอดเดิมพัน</span><b>${totalAmount.toFixed(2)} บาท</b></div>
+            <div style="display:flex;justify-content:space-between;color:#e53935;"><span>ส่วนลด</span><b>${totalDiscount.toFixed(2)} บาท</b></div>
+            <div style="display:flex;justify-content:space-between;font-size:16px;margin-top:4px;padding-top:6px;border-top:1px solid #c8e6c9;"><span><b>รวม</b></span><b style="color:#2e7d32;">${(totalAmount - totalDiscount).toFixed(2)} บาท</b></div>
+        </div>
+        ${note ? `<div style="margin-top:8px;font-size:12px;color:#888;">หมายเหตุ: ${note}</div>` : ''}
+    `;
+
+    const confirm = await Swal.fire({
+        title: 'กรุณายืนยันรายการ',
+        html: confirmHtml,
+        width: 520,
+        showCancelButton: true,
+        confirmButtonColor: '#2e7d32',
+        cancelButtonColor: '#9e9e9e',
+        confirmButtonText: '<i class="fas fa-check"></i> ยืนยัน',
+        cancelButtonText: '<i class="fas fa-arrow-left"></i> ย้อนกลับ',
+        customClass: { popup: 'swal-wide' }
+    });
+
+    if (!confirm.isConfirmed) return;
+
+    // ==========================================
+    // ส่งข้อมูลไป API
+    // ==========================================
+    const data = { action: 'save_bet', lottery_type_id: LOTTERY_ID, note: note, items: items };
+    try {
+        const res = await fetch('api.php', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
         const result = await res.json();
         if (result.success) {
-            alert('บันทึกสำเร็จ! เลขที่: ' + result.bet_number);
-            betGroups = [];
-            renderBetItems();
-            document.getElementById('betNote').value = '';
+            Swal.fire({ icon: 'success', title: 'บันทึกสำเร็จ!', text: 'เลขที่: ' + result.bet_number, confirmButtonColor: '#2e7d32' });
+            if (onSuccess) onSuccess();
         } else {
-            alert('เกิดข้อผิดพลาด: ' + (result.error || 'Unknown error'));
+            Swal.fire({ icon: 'error', title: 'เกิดข้อผิดพลาด', text: result.error || 'Unknown error', confirmButtonColor: '#e53935' });
         }
     } catch (e) {
-        alert('เกิดข้อผิดพลาดในการเชื่อมต่อ: ' + e.message);
+        Swal.fire({ icon: 'error', title: 'เกิดข้อผิดพลาด', text: e.message, confirmButtonColor: '#e53935' });
     }
 }
 
-// Enter key to add
+// ==========================================
+// Classic Mode Functions
+// ==========================================
+function addClassicRow() {
+    const tbody = document.getElementById('classicBody');
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+        <td class="border px-1 py-1"><input type="text" class="classic-num w-full border rounded px-2 py-1.5 text-sm text-center outline-none" maxlength="3" placeholder="000"></td>
+        <td class="border px-1 py-1"><input type="number" class="classic-top w-full border rounded px-2 py-1.5 text-sm text-center outline-none" placeholder="0"></td>
+        <td class="border px-1 py-1"><input type="number" class="classic-bot w-full border rounded px-2 py-1.5 text-sm text-center outline-none" placeholder="0"></td>
+        <td class="border px-1 py-1"><input type="number" class="classic-tod w-full border rounded px-2 py-1.5 text-sm text-center outline-none" placeholder="0"></td>
+        <td class="border px-1 py-1 text-center"><button onclick="removeClassicRow(this)" class="text-red-400 hover:text-red-600"><i class="fas fa-times"></i></button></td>`;
+    tbody.appendChild(tr);
+    tr.querySelector('.classic-num').focus();
+}
+
+function removeClassicRow(btn) {
+    const tbody = document.getElementById('classicBody');
+    if (tbody.rows.length > 1) btn.closest('tr').remove();
+}
+
+function addClassicToBill() {
+    const rows = document.querySelectorAll('#classicBody tr');
+    let items = [];
+    rows.forEach(row => {
+        const num = row.querySelector('.classic-num')?.value.trim();
+        const top = parseFloat(row.querySelector('.classic-top')?.value) || 0;
+        const bot = parseFloat(row.querySelector('.classic-bot')?.value) || 0;
+        const tod = parseFloat(row.querySelector('.classic-tod')?.value) || 0;
+        if (!num) return;
+        if (num.length === 2) {
+            if (top > 0) items.push({ number: num, type: '2top', amount: top });
+            if (bot > 0) items.push({ number: num, type: '2bot', amount: bot });
+        } else if (num.length === 3) {
+            if (top > 0) items.push({ number: num, type: '3top', amount: top });
+            if (bot > 0) items.push({ number: num, type: '2bot', amount: bot });
+            if (tod > 0) items.push({ number: num, type: '3tod', amount: tod });
+        } else if (num.length === 1) {
+            if (top > 0) items.push({ number: num, type: 'run_top', amount: top });
+            if (bot > 0) items.push({ number: num, type: 'run_bot', amount: bot });
+        }
+    });
+    
+    if (items.length === 0) { Swal.fire({ icon: 'warning', title: 'กรุณาใส่ข้อมูล', confirmButtonColor: '#f59e0b' }); return; }
+    
+    classicBetGroups.push({ id: Date.now(), items: items });
+    renderClassicBetItems();
+    // Clear the form
+    rows.forEach(row => {
+        row.querySelectorAll('input').forEach(inp => inp.value = '');
+    });
+}
+
+function renderClassicBetItems() {
+    const tbody = document.getElementById('classicBetItemsBody');
+    if (classicBetGroups.length === 0) {
+        tbody.innerHTML = '<div class="p-6 text-center text-gray-400">ยังไม่มีรายการ</div>';
+        document.getElementById('classicTotalAmount').textContent = '0.00';
+        return;
+    }
+    let total = 0;
+    tbody.innerHTML = classicBetGroups.map(g => {
+        let cost = g.items.reduce((s, i) => s + i.amount, 0);
+        total += cost;
+        let summary = g.items.map(i => `${i.number}(${getBetTypeLabel(i.type)}:${i.amount})`).join(', ');
+        return `<div class="flex p-2 hover:bg-gray-50 items-center border-b relative">
+            <div class="flex-1 text-[12px] text-gray-700">${summary}</div>
+            <div class="text-sm font-bold text-[#1565c0] mr-8">${cost.toFixed(2)}</div>
+            <button onclick="classicBetGroups=classicBetGroups.filter(x=>x.id!==${g.id});renderClassicBetItems();" class="absolute right-2 text-red-400 hover:text-red-600"><i class="fas fa-times"></i></button>
+        </div>`;
+    }).join('');
+    document.getElementById('classicTotalAmount').textContent = total.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+}
+
+function clearClassicBets() { classicBetGroups = []; renderClassicBetItems(); }
+
+async function saveClassicBet() {
+    let allItems = [];
+    classicBetGroups.forEach(g => allItems.push(...g.items));
+    if (allItems.length === 0) { Swal.fire({ icon: 'warning', title: 'ยังไม่มีรายการ', confirmButtonColor: '#f59e0b' }); return; }
+    await doSaveBet(allItems, document.getElementById('classicBetNote')?.value || '', () => {
+        classicBetGroups = []; renderClassicBetItems();
+        if (document.getElementById('classicBetNote')) document.getElementById('classicBetNote').value = '';
+    });
+}
+
+function getBetTypeLabel(t) {
+    return { '3top': '3ตัวบน', '3tod': '3ตัวโต๊ด', '2top': '2ตัวบน', '2bot': '2ตัวล่าง', 'run_top': 'วิ่งบน', 'run_bot': 'วิ่งล่าง' }[t] || t;
+}
+
+// ==========================================
+// Paste Mode Functions
+// ==========================================
+function parsePaste() {
+    const text = document.getElementById('pasteInput').value.trim();
+    const defaultTop = parseFloat(document.getElementById('pasteTop')?.value) || 0;
+    const defaultBot = parseFloat(document.getElementById('pasteBot')?.value) || 0;
+    const defaultTod = parseFloat(document.getElementById('pasteTod')?.value) || 0;
+    
+    if (!text && (defaultTop === 0 && defaultBot === 0 && defaultTod === 0)) { 
+        Swal.fire({ icon: 'warning', title: 'กรุณาวางข้อมูลโพยหรือใส่ราคา', confirmButtonColor: '#f59e0b' }); 
+        return; 
+    }
+    
+    const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    let items = [];
+    
+    lines.forEach(line => {
+        // Format: เลข*บน*ล่าง or just เลข
+        const parts = line.split(/[*x×]/);
+        const num = parts[0]?.trim();
+        if (!num || !/^\d+$/.test(num)) return;
+        
+        let top = parts.length > 1 ? (parseFloat(parts[1]) || 0) : defaultTop;
+        let bot = parts.length > 2 ? (parseFloat(parts[2]) || 0) : defaultBot;
+        let tod = parts.length > 3 ? (parseFloat(parts[3]) || 0) : defaultTod;
+        
+        // If no per-line prices, use defaults
+        if (parts.length === 1) { top = defaultTop; bot = defaultBot; tod = defaultTod; }
+        
+        if (num.length === 2) {
+            if (top > 0) items.push({ number: num, type: '2top', amount: top });
+            if (bot > 0) items.push({ number: num, type: '2bot', amount: bot });
+        } else if (num.length === 3) {
+            if (top > 0) items.push({ number: num, type: '3top', amount: top });
+            if (bot > 0) items.push({ number: num, type: '2bot', amount: bot });
+            if (tod > 0) items.push({ number: num, type: '3tod', amount: tod });
+        } else if (num.length === 1) {
+            if (top > 0) items.push({ number: num, type: 'run_top', amount: top });
+            if (bot > 0) items.push({ number: num, type: 'run_bot', amount: bot });
+        }
+    });
+    
+    if (items.length === 0) { Swal.fire({ icon: 'warning', title: 'ไม่พบรายการที่ถูกต้อง', confirmButtonColor: '#f59e0b' }); return; }
+    
+    pasteBetGroups.push({ id: Date.now(), items: items });
+    renderPasteBetItems();
+    document.getElementById('pasteInput').value = '';
+}
+
+function renderPasteBetItems() {
+    const tbody = document.getElementById('pasteBetItemsBody');
+    if (pasteBetGroups.length === 0) {
+        tbody.innerHTML = '<div class="p-6 text-center text-gray-400">ยังไม่มีรายการ</div>';
+        document.getElementById('pasteTotalAmount').textContent = '0.00';
+        return;
+    }
+    let total = 0;
+    tbody.innerHTML = pasteBetGroups.map(g => {
+        let cost = g.items.reduce((s, i) => s + i.amount, 0);
+        total += cost;
+        return `<div class="flex p-2 hover:bg-gray-50 items-center border-b relative">
+            <div class="flex-1 text-[12px] text-gray-700">${g.items.length} รายการ</div>
+            <div class="text-sm font-bold text-[#1565c0] mr-8">${cost.toFixed(2)}</div>
+            <button onclick="pasteBetGroups=pasteBetGroups.filter(x=>x.id!==${g.id});renderPasteBetItems();" class="absolute right-2 text-red-400 hover:text-red-600"><i class="fas fa-times"></i></button>
+        </div>`;
+    }).join('');
+    document.getElementById('pasteTotalAmount').textContent = total.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+}
+
+function clearPasteBets() { pasteBetGroups = []; renderPasteBetItems(); }
+
+async function savePasteBet() {
+    let allItems = [];
+    pasteBetGroups.forEach(g => allItems.push(...g.items));
+    if (allItems.length === 0) { Swal.fire({ icon: 'warning', title: 'ยังไม่มีรายการ', confirmButtonColor: '#f59e0b' }); return; }
+    await doSaveBet(allItems, document.getElementById('pasteBetNote')?.value || '', () => {
+        pasteBetGroups = []; renderPasteBetItems();
+        if (document.getElementById('pasteBetNote')) document.getElementById('pasteBetNote').value = '';
+    });
+}
+
+// ==========================================
+// Event Listeners
+// ==========================================
+document.getElementById('numInput')?.addEventListener('input', handleNumInput);
+// Paste event: รองรับวางเลขหลายตัวพร้อมกัน
+document.getElementById('numInput')?.addEventListener('paste', function(e) {
+    e.preventDefault();
+    const text = (e.clipboardData || window.clipboardData).getData('text');
+    if (text) {
+        handleMultiPaste(text);
+        this.value = '';
+    }
+});
 document.getElementById('numInput')?.addEventListener('keypress', function(e) {
     if (e.key === 'Enter') {
-        const top = document.getElementById('topAmount');
-        if (!top.value) top.focus();
-        else addBetItem();
+        if (selectedNums.length > 0) {
+            const top = document.getElementById('topAmount');
+            if (!top.value) top.focus();
+            else addBetItem();
+        } else {
+            const top = document.getElementById('topAmount');
+            if (!top.value) top.focus();
+            else addBetItem();
+        }
     }
 });
 document.getElementById('topAmount')?.addEventListener('keypress', function(e) {
@@ -551,6 +1757,54 @@ document.getElementById('topAmount')?.addEventListener('keypress', function(e) {
 document.getElementById('botAmount')?.addEventListener('keypress', function(e) {
     if (e.key === 'Enter') addBetItem();
 });
+
+// Classic mode: auto-advance rows
+document.getElementById('classicBody')?.addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        const inputs = Array.from(document.querySelectorAll('#classicBody input'));
+        const idx = inputs.indexOf(e.target);
+        if (idx >= 0 && idx < inputs.length - 1) inputs[idx + 1].focus();
+        else addClassicRow();
+    }
+});
+
+// ==========================================
+// Restore saved state on page load
+// ==========================================
+if (selectedNums.length > 0 || betGroups.length > 0) {
+    renderSelectedNumbers();
+    renderBetItems();
+    // Restore bet type button highlight (without clearing selectedNums)
+    document.querySelectorAll('.bet-type-btn').forEach(b => { b.className = 'bet-type-btn px-4 py-1.5 rounded text-sm font-medium bg-[#fff8e1] text-[#f57f17] border border-[#ffca28] hover:bg-[#ffca28] hover:text-yellow-900'; });
+    const btn = document.getElementById('btn-type-' + currentBetType);
+    if (btn) btn.className = 'bet-type-btn px-4 py-1.5 rounded text-sm font-bold bg-[#ffca28] text-yellow-900 border border-[#ffca28]';
+}
+
+async function deleteBill(billId) {
+    const result = await Swal.fire({
+        icon: 'warning', title: 'ยกเลิกโพยนี้?',
+        text: 'โพยที่ยกเลิกแล้วจะไม่สามารถกู้คืนได้',
+        showCancelButton: true, confirmButtonColor: '#e53935',
+        cancelButtonColor: '#9e9e9e', confirmButtonText: 'ยืนยัน ยกเลิก', cancelButtonText: 'ไม่'
+    });
+    if (!result.isConfirmed) return;
+    try {
+        const res = await fetch('api.php', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ action: 'cancel_bet', bet_id: billId })
+        });
+        const data = await res.json();
+        if (data.success) {
+            Swal.fire({ icon: 'success', title: 'ยกเลิกโพยสำเร็จ', timer: 1500, showConfirmButton: false });
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            Swal.fire({ icon: 'error', title: data.error || 'เกิดข้อผิดพลาด' });
+        }
+    } catch (e) {
+        Swal.fire({ icon: 'error', title: 'เกิดข้อผิดพลาด', text: e.message });
+    }
+}
 </script>
 
 <?php require_once 'includes/footer.php'; ?>

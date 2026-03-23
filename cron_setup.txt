@@ -1,0 +1,77 @@
+# =============================================
+# Lottery Scraper — Cron Schedule
+# =============================================
+# Server: imzshop97.com (CPU 4, RAM 8GB)
+# ตั้ง cron ด้วย: crontab -e
+#
+# ✅ Smart pre-check ใน cron_scrape.php:
+#    ก่อนเปิด Camoufox จะเช็ค DB ก่อน
+#    ถ้าผลวันนี้ครบ 62 ตัวแล้ว → ข้ามทันที (ไม่เปิด browser)
+#
+# ⏰ Time windows ตามเวลาหวยออก:
+#    05:30 - 00:30 = ช่วงที่มีหวยออก
+#    01:00 - 05:00 = หยุดพัก
+#
+# 🔒 flock = ป้องกัน overlap
+# =============================================
+
+WEB=/var/www/vhosts/imzshop97.com/httpdocs
+PHP=/usr/bin/php
+LOG=/var/www/vhosts/imzshop97.com/httpdocs/storage/logs
+
+# =============================================
+# 1. Raakaadee — แหล่งหลัก (หวย + หุ้นทั้งหมด)
+#    ทุก 5 นาที (05:30 - 00:55)
+#    pre-check จะข้ามถ้าผลครบ 62 ตัวแล้ว
+# =============================================
+*/5 6-23 * * * flock -n /tmp/scrape_raakaadee.lock -c "cd $WEB && $PHP cron_scrape.php raakaadee >> $LOG/cron_raakaadee.log 2>&1"
+0,5,10,15,20,25,30,35,40,45,50,55 0 * * * flock -n /tmp/scrape_raakaadee.lock -c "cd $WEB && $PHP cron_scrape.php raakaadee >> $LOG/cron_raakaadee.log 2>&1"
+30,35,40,45,50,55 5 * * * flock -n /tmp/scrape_raakaadee.lock -c "cd $WEB && $PHP cron_scrape.php raakaadee >> $LOG/cron_raakaadee.log 2>&1"
+
+# =============================================
+# 2. Ponhuay24 — Backup
+#    ทุก 5 นาที เยื้อง 3 นาที (05:33 - 00:58)
+#    pre-check จะข้ามถ้าผลครบ 62 ตัวแล้ว
+# =============================================
+3-59/5 6-23 * * * flock -n /tmp/scrape_ponhuay24.lock -c "cd $WEB && $PHP cron_scrape.php ponhuay24 >> $LOG/cron_ponhuay24.log 2>&1"
+3,8,13,18,23,28,33,38,43,48,53,58 0 * * * flock -n /tmp/scrape_ponhuay24.lock -c "cd $WEB && $PHP cron_scrape.php ponhuay24 >> $LOG/cron_ponhuay24.log 2>&1"
+33,38,43,48,53,58 5 * * * flock -n /tmp/scrape_ponhuay24.lock -c "cd $WEB && $PHP cron_scrape.php ponhuay24 >> $LOG/cron_ponhuay24.log 2>&1"
+
+# =============================================
+# 3. ExpHuay — ทุกหวย (HTTP เร็ว, ไม่ต้องเปิด browser)
+#    ทุก 2 นาที (06:00 - 00:58)
+#    เร็วกว่า Raakaadee เพราะใช้ HTTP ธรรมดา
+#    ตัวที่ได้ผลแล้วจะ skip อัตโนมัติ (pre-check ใน processResults)
+# =============================================
+*/2 6-23 * * * flock -n /tmp/scrape_exphuay.lock -c "cd $WEB && $PHP cron_scrape.php exphuay >> $LOG/cron_exphuay.log 2>&1"
+0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38,40,42,44,46,48,50,52,54,56,58 0 * * * flock -n /tmp/scrape_exphuay.lock -c "cd $WEB && $PHP cron_scrape.php exphuay >> $LOG/cron_exphuay.log 2>&1"
+
+# =============================================
+# 4. Rayriffy — รัฐบาลไทย (วันที่ 1, 16)
+# =============================================
+*/5 15-16 1,16 * * flock -n /tmp/scrape_rayriffy.lock -c "cd $WEB && $PHP cron_scrape.php rayriffy >> $LOG/cron_rayriffy.log 2>&1"
+
+# =============================================
+# 4. GSB — ออมสิน (วันที่ 1, 16)
+# =============================================
+0,30 9-10 1,16 * * flock -n /tmp/scrape_gsb.lock -c "cd $WEB && $PHP cron_scrape.php gsb >> $LOG/cron_gsb.log 2>&1"
+
+# =============================================
+# 5. ล้าง log ทุกวัน ตี 3
+# =============================================
+0 3 * * * truncate -s 0 $LOG/cron_raakaadee.log $LOG/cron_ponhuay24.log 2>/dev/null
+
+# =============================================
+# สรุปเวลาทำงาน:
+#
+#  01:00-05:29 = ❌ หยุดพัก (ไม่มี cron)
+#  05:30-06:00 = 🟡 เริ่มดึง (ลาวประตูชัย 05:45)
+#  06:00-00:55 = 🟢 ดึงเต็มที่ ทุก 5 นาที
+#
+#  ⚡ เมื่อได้ผลครบ 62 ตัว:
+#    → cron ยังรันทุก 5 นาที
+#    → แต่ pre-check เช็ค DB แล้ว return ทันที
+#    → ไม่เปิด Camoufox = ไม่ใช้ RAM
+#
+#  ❌ ManyCai ถูกยกเลิก → ใช้ Raakaadee ดึงหุ้นปกติแทน
+# =============================================

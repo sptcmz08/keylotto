@@ -1,0 +1,16 @@
+# Dependencies
+node_modules/
+
+# Environment
+.venv/
+.env
+
+# Archives
+*.zip
+
+# Storage logs
+storage/logs/
+
+# OS files
+Thumbs.db
+.DS_Store
