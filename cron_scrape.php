@@ -678,7 +678,7 @@ function scrapeThaiRayriffy($pdo) {
     // Extract 2 ตัวล่าง
     $runningNumbers = $response['runningNumbers'] ?? [];
     foreach ($runningNumbers as $rn) {
-        if (($rn['id'] ?? '') === 'runningNumberLastTwo') {
+        if (($rn['id'] ?? '') === 'runningNumberBackTwo') {
             $twoBottom = $rn['number'][0] ?? '';
             break;
         }
@@ -690,12 +690,30 @@ function scrapeThaiRayriffy($pdo) {
         return;
     }
 
-    // Convert draw date (YYYY-MM-DD format from API)
-    if ($drawDate && strlen($drawDate) === 10) {
-        // Already YYYY-MM-DD
-    } elseif ($drawDate) {
-        // Try to parse
-        $drawDate = date('Y-m-d', strtotime($drawDate));
+    // Convert draw date — API returns Thai format: "16 มีนาคม 2569"
+    if ($drawDate) {
+        $thaiMonths = [
+            'มกราคม' => 1, 'กุมภาพันธ์' => 2, 'มีนาคม' => 3,
+            'เมษายน' => 4, 'พฤษภาคม' => 5, 'มิถุนายน' => 6,
+            'กรกฎาคม' => 7, 'สิงหาคม' => 8, 'กันยายน' => 9,
+            'ตุลาคม' => 10, 'พฤศจิกายน' => 11, 'ธันวาคม' => 12,
+        ];
+        $parsed = false;
+        foreach ($thaiMonths as $monthName => $monthNum) {
+            if (preg_match('/(\d{1,2})\s+' . preg_quote($monthName) . '\s+(\d{4})/', $drawDate, $m)) {
+                $day = intval($m[1]);
+                $year = intval($m[2]);
+                if ($year > 2500) $year -= 543; // BE to CE
+                $drawDate = sprintf('%04d-%02d-%02d', $year, $monthNum, $day);
+                $parsed = true;
+                break;
+            }
+        }
+        if (!$parsed) {
+            // Fallback: try strtotime
+            $ts = strtotime($drawDate);
+            $drawDate = $ts ? date('Y-m-d', $ts) : date('Y-m-d');
+        }
     } else {
         $drawDate = date('Y-m-d');
     }
@@ -718,28 +736,22 @@ function scrapeThaiRayriffy($pdo) {
 }
 
 function scrapeGSB($pdo) {
-    global $SCRIPT_DIR, $NODE_PATH;
+    global $SCRIPT_DIR, $PYTHON_PATH;
 
-    echo "🏦 GSB Scraper (สลากออมสิน)...\n";
-    $data = runScript("{$NODE_PATH} \"{$SCRIPT_DIR}/gsb_scrape.js\"", 'gsb');
+    echo "🏦 GSB+BAAC Scraper (สลากออมสิน + ธกส)...\n";
+    $data = runScript("{$PYTHON_PATH} \"{$SCRIPT_DIR}/scrape_thai_savings.py\"", 'thai_savings');
 
     if (!$data || empty($data['success'])) {
-        echo "❌ GSB: " . ($data['error'] ?? 'No data') . "\n";
-        logScrape($pdo, 'ออมสิน', 'gsb', 'failed', $data['error'] ?? 'No data');
+        echo "❌ ThaiSavings: " . ($data['error'] ?? 'No data') . "\n";
+        logScrape($pdo, 'ออมสิน+ธกส', 'thai_savings', 'failed', $data['error'] ?? 'No data');
         return;
     }
 
     $results = $data['results'] ?? [];
-    echo "📊 GSB: " . count($results) . " results found\n";
+    echo "📊 ThaiSavings: " . count($results) . " results found\n";
 
-    // Map gsb-1/gsb-2 slugs
-    foreach ($results as &$r) {
-        $r['slug'] = $r['slug'] ?? 'gsb';
-    }
-    unset($r);
-
-    $stats = processResults($pdo, $results, 'gsb');
-    echo "\n📊 GSB Done! ✅ {$stats['success']} ใหม่, ⏭️ {$stats['skipped']} ข้าม, ❌ {$stats['failed']} ล้มเหลว\n";
+    $stats = processResults($pdo, $results, 'thai_savings');
+    echo "\n📊 ThaiSavings Done! ✅ {$stats['success']} ใหม่, ⏭️ {$stats['skipped']} ข้าม, ❌ {$stats['failed']} ล้มเหลว\n";
 }
 
 function scrapePonhuay24($pdo) {
