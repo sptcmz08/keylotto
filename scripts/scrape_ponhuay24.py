@@ -82,9 +82,8 @@ NAME_MAPPINGS = {
     'หุ้นไต้หวันVIP': 'taiwan-vip',
     'หุ้นเกาหลีVIP': 'korea-vip',
     'หุ้นสิงคโปร์VIP': 'singapore-vip',
-    'หุ้นอังกฤษVIP': 'uk-vip',
-    'หุ้นเยอรมันVIP': 'germany-vip',
-    'หุ้นรัสเซียVIP': 'russia',
+    # หุ้นอังกฤษ/เยอรมัน/รัสเซีย/ดาวโจนส์ VIP → ออกผลดึก (23:00+) ใช้ exphuay เท่านั้น
+    # ponhuay24 ไม่มี date/time validation → ดึงผลเก่ามาเป็นวันนี้
     'หุ้นจีนเช้า': 'china-morning',
     'หุ้นจีนบ่าย': 'china-afternoon',
     'หุ้นฮั่งเส็งเช้า': 'hangseng-morning',
@@ -94,9 +93,7 @@ NAME_MAPPINGS = {
     'หุ้นเกาหลี': 'korea',
     'หุ้นสิงคโปร์': 'singapore',
     'หุ้นอินเดีย': 'india',
-    'หุ้นอังกฤษ': 'uk',
-    'หุ้นเยอรมัน': 'germany',
-    'หุ้นรัสเซีย': 'russia',
+    # หุ้นอังกฤษ/เยอรมัน/รัสเซีย → ลบออก (ออก 23:00+ ดึงจาก exphuay อย่างเดียว)
 
     # === อื่นๆ ===
     'หวย 12 ราศี': 'rasi-12',
