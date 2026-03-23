@@ -82,12 +82,12 @@ $SLUG_TO_LOTTERY_NAME = [
     'korea-vip'              => 'เกาหลี VIP',
 
     // === หุ้นปกติ (จาก Raakaadee — แทน ManyCai) ===
-    'nikkei-morning'     => 'หุ้นนิเคอิเช้า',
-    'nikkei-afternoon'   => 'หุ้นนิเคอิบ่าย',
-    'china-morning'      => 'หุ้นจีนเช้า',
-    'china-afternoon'    => 'หุ้นจีนบ่าย',
-    'hangseng-morning'   => 'หุ้นฮั่งเส็งเช้า',
-    'hangseng-afternoon' => 'หุ้นฮั่งเส็งบ่าย',
+    'nikkei-morning'     => 'นิเคอิ - เช้า',
+    'nikkei-afternoon'   => 'นิเคอิ - บ่าย',
+    'china-morning'      => 'หุ้นจีน - เช้า',
+    'china-afternoon'    => 'หุ้นจีน - บ่าย',
+    'hangseng-morning'   => 'ฮั่งเส็ง - เช้า',
+    'hangseng-afternoon' => 'ฮั่งเส็ง - บ่าย',
     'taiwan'             => 'หุ้นไต้หวัน',
     'korea'              => 'หุ้นเกาหลี',
     'singapore'          => 'หุ้นสิงคโปร์',
@@ -97,7 +97,7 @@ $SLUG_TO_LOTTERY_NAME = [
     'germany'            => 'หุ้นเยอรมัน',
     'russia'             => 'หุ้นรัสเซีย',
     'dowjones'           => 'หุ้นดาวโจนส์',
-    'thai-stock'         => 'หุ้นไทย',
+    'thai-stock'         => 'หุ้นไทย - เย็น',
 
     // === หวยไทย ===
     'thai'               => 'รัฐบาลไทย',
