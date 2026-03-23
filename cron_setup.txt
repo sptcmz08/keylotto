@@ -57,6 +57,13 @@ LOG=/var/www/vhosts/imzshop97.com/httpdocs/storage/logs
 0,30 9-10 1,16 * * flock -n /tmp/scrape_gsb.lock -c "cd $WEB && $PHP cron_scrape.php gsb >> $LOG/cron_gsb.log 2>&1"
 
 # =============================================
+# 5. Stock VIP — หุ้น VIP (Puppeteer)
+#    ทุก 10 นาที (07:00 - 01:00)
+# =============================================
+*/10 7-23 * * * flock -n /tmp/scrape_stockvip.lock -c "cd $WEB && $PHP cron_scrape.php stockvip >> $LOG/cron_stockvip.log 2>&1"
+0,10,20,30,40,50 0 * * * flock -n /tmp/scrape_stockvip.lock -c "cd $WEB && $PHP cron_scrape.php stockvip >> $LOG/cron_stockvip.log 2>&1"
+
+# =============================================
 # 5. ล้าง log ทุกวัน ตี 3
 # =============================================
 0 3 * * * truncate -s 0 $LOG/cron_raakaadee.log $LOG/cron_ponhuay24.log 2>/dev/null

@@ -218,12 +218,28 @@ def parse_thai_date(text):
 def parse_page_results(lines, found_slugs, today, yesterday, debug=False):
     """Parse results from a single page's lines"""
     results = []
-    # หุ้นที่ตลาดปิดหลังเที่ยงคืนไทย → วันที่บน Raakaadee = เมื่อวาน
-    foreign_stock_slugs = {
+    # คำนวณวันที่ย้อนหลัง 3 วัน (สำหรับวันหยุดยาว/สุดสัปดาห์)
+    day2 = (datetime.now() - timedelta(days=2)).strftime('%Y-%m-%d')
+    day3 = (datetime.now() - timedelta(days=3)).strftime('%Y-%m-%d')
+
+    # หุ้นทั้งหมด — ยอมรับผลย้อนหลัง 3 วัน (วันหยุด/สุดสัปดาห์)
+    all_stock_slugs = {
+        # หุ้นต่างประเทศ (ปิดหลังเที่ยงคืนไทย)
         'dowjones', 'dowjones-vip', 'dowjones-star',
         'uk', 'uk-vip',
         'germany', 'germany-vip',
         'russia', 'russia-vip',
+        # หุ้นเอเชีย
+        'nikkei-morning', 'nikkei-afternoon',
+        'nikkei-morning-vip', 'nikkei-afternoon-vip',
+        'china-morning', 'china-afternoon',
+        'china-morning-vip', 'china-afternoon-vip',
+        'hangseng-morning', 'hangseng-afternoon',
+        'hangseng-morning-vip', 'hangseng-afternoon-vip',
+        'taiwan', 'taiwan-vip',
+        'korea', 'korea-vip',
+        'singapore', 'singapore-vip',
+        'india', 'egypt',
     }
 
     for i, line in enumerate(lines):
@@ -243,11 +259,11 @@ def parse_page_results(lines, found_slugs, today, yesterday, debug=False):
         # === Date validation: skip stale results ===
         draw_date = parse_thai_date(line_stripped)
         if draw_date:
-            # หุ้นต่างประเทศ: ยอมรับ today หรือ yesterday (ตลาดปิดหลังเที่ยงคืนไทย)
-            if slug in foreign_stock_slugs:
-                valid_dates = [today, yesterday]
+            # หุ้นทุกตัว: ยอมรับ 3 วันย้อนหลัง (สุดสัปดาห์/วันหยุดยาว)
+            if slug in all_stock_slugs:
+                valid_dates = [today, yesterday, day2, day3]
             else:
-                valid_dates = [today]
+                valid_dates = [today, yesterday]
             if draw_date not in valid_dates:
                 if debug:
                     print(f'[Raakaadee]   ⏭️ {matched_name}: ผลเก่า ({draw_date} not in {valid_dates}) → ข้าม', file=sys.stderr)

@@ -364,6 +364,9 @@ require_once 'includes/header.php';
                     $pastCloseTime = $closeTime && $now > $closeTime;
                     $hoursPastClose = $closeTime ? ($now - $closeTime) / 3600 : 0;
                     
+                    // ตรวจสอบว่าผลล่าสุดเก่าแค่ไหน (สำหรับตรวจจับวันหยุด/สุดสัปดาห์)
+                    $lastResultAgeDays = $resultDate ? (strtotime($today) - strtotime($resultDate)) / 86400 : 999;
+                    
                     if ($isBetClosed && !$hasResultForRound) {
                         // Admin ปิดรับแทง
                         $statusClass = 'status-closed'; $statusLabel = 'ปิดรับแทง';
@@ -373,6 +376,9 @@ require_once 'includes/header.php';
                     } elseif ($hasResultForRound && $hasPending) {
                         // มีผลงวดนี้แต่ยังมี pending = กำลังประมวลผล
                         $statusClass = 'status-processing'; $statusLabel = 'กำลังประมวลผล';
+                    } elseif (!$hasResultForRound && $lastResultAgeDays > 1 && $pastCloseTime) {
+                        // ผลล่าสุดเก่ากว่าเมื่อวาน + เลย close_time = วันหยุด/สุดสัปดาห์ → งดออกผล
+                        $statusClass = 'status-suspended'; $statusLabel = 'งดออกผล';
                     } elseif ($pastCloseTime && !$hasResultForRound && $hoursPastClose > 2) {
                         // เลยเวลา > 2 ชม. ยังไม่มีผลงวดนี้ = งดออกผล
                         $statusClass = 'status-suspended'; $statusLabel = 'งดออกผล';
