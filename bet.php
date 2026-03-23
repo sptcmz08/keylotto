@@ -294,13 +294,7 @@ if (!$lotteryId) {
             return { status: 'closed', label: 'ปิดรับแล้ว', hide: false };
         }
         
-        // เลย 10 นาทีแล้ว → เช็คว่าผ่านไป 1 ชม.หลังปิดรับหรือยัง
-        if (minPastClose >= 60) {
-            // ผ่านไป 1 ชม.แล้ว → แสดงสีเหลือง (เปิดรับงวดใหม่)
-            return { status: 'waiting', label: 'รอเปิดรอบใหม่', hide: false };
-        }
-        
-        // ยังไม่ถึง 1 ชม. → ซ่อน
+        // เลย 10 นาทีแล้ว → ซ่อนไปเลย จนกว่า 2 AM จะ reload หน้าใหม่
         return { status: 'waiting', label: 'รอเปิดรอบใหม่', hide: true };
     }
 
