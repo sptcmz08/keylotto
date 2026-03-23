@@ -583,10 +583,25 @@ function viewBillDetail(betId) {
             
             let totalAmount = 0, totalNet = 0, totalWin = 0;
             let rows = '';
+            
+            // Determine per-item status text
+            let itemStatusText = '';
+            let itemStatusClass = '';
+            if (bet.status === 'won' || bet.status === 'lost') {
+                itemStatusText = 'จ่ายเงินแล้ว';
+                itemStatusClass = 'text-green-600 font-bold';
+            } else if (bet.status === 'cancelled') {
+                itemStatusText = 'ยกเลิก';
+                itemStatusClass = 'text-red-500 font-bold';
+            } else {
+                itemStatusText = 'รอผล';
+                itemStatusClass = 'text-blue-500';
+            }
+            
             items.forEach(item => {
                 const isWin = item.is_winner;
                 const rowCls = isWin ? 'bg-green-50' : '';
-                const winText = isWin ? '<span class="text-green-600 font-bold">' + fmt(item.win_amount) + '</span>' : '<span class="text-gray-400">-</span>';
+                const winText = isWin ? '<span class="text-green-600 font-bold">' + fmt(item.win_amount) + '</span>' : '<span class="text-red-400">ไม่ถูกรางวัล</span>';
                 totalAmount += parseFloat(item.amount);
 
                 totalNet += parseFloat(item.net_amount);
@@ -600,6 +615,7 @@ function viewBillDetail(betId) {
                 rows += '<td class="px-2 py-1.5 text-center border">' + fmt(item.net_amount) + '</td>';
                 rows += '<td class="px-2 py-1.5 text-center border">' + fmt(item.pay_multiplier) + '</td>';
                 rows += '<td class="px-2 py-1.5 text-center border">' + winText + '</td>';
+                rows += '<td class="px-2 py-1.5 text-center border"><span class="' + itemStatusClass + '">' + itemStatusText + '</span></td>';
                 rows += '</tr>';
             });
             
@@ -611,6 +627,7 @@ function viewBillDetail(betId) {
             rows += '<td class="px-2 py-1.5 text-center border">' + fmt(totalNet) + '</td>';
             rows += '<td class="px-2 py-1.5 text-center border"></td>';
             rows += '<td class="px-2 py-1.5 text-center border text-green-600">' + fmt(totalWin) + '</td>';
+            rows += '<td class="px-2 py-1.5 text-center border"></td>';
             rows += '</tr>';
             
             const html = `
@@ -634,6 +651,7 @@ function viewBillDetail(betId) {
                                 <th class="px-2 py-2 text-center font-bold text-gray-700 border">รวม</th>
                                 <th class="px-2 py-2 text-center font-bold text-gray-700 border">จ่าย</th>
                                 <th class="px-2 py-2 text-center font-bold text-gray-700 border">ถูกรางวัล</th>
+                                <th class="px-2 py-2 text-center font-bold text-gray-700 border">สถานะ</th>
                             </tr>
                         </thead>
                         <tbody>${rows}</tbody>
