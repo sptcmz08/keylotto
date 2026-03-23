@@ -23,19 +23,31 @@ $lotteryTypes = $pdo->query("
     ORDER BY lc.sort_order, lt.sort_order, lt.name
 ")->fetchAll();
 
-// Available draw dates (any date with bets in last 60 days)
-$availableDates = $pdo->query("
-    SELECT DISTINCT draw_date FROM bets 
-    WHERE status != 'cancelled' AND draw_date >= DATE_SUB(CURDATE(), INTERVAL 60 DAY) 
-    ORDER BY draw_date DESC LIMIT 30
-")->fetchAll(PDO::FETCH_COLUMN);
-
 // Auto-select first lottery with bets for this date
 if (empty($selectedLottery) && !empty($lotteryTypes)) {
     $firstStmt = $pdo->prepare("SELECT DISTINCT lottery_type_id FROM bets WHERE draw_date = ? AND status != 'cancelled' LIMIT 1");
     $firstStmt->execute([$selectedDate]);
     $firstLottery = $firstStmt->fetchColumn();
     $selectedLottery = $firstLottery ?: $lotteryTypes[0]['id'];
+}
+
+// Available draw dates — lottery-specific (from results + bets)
+// This ensures each lottery shows only its actual draw dates
+$availableDates = $pdo->prepare("
+    SELECT DISTINCT draw_date FROM (
+        SELECT draw_date FROM results WHERE lottery_type_id = ?
+        UNION
+        SELECT draw_date FROM bets WHERE lottery_type_id = ? AND status != 'cancelled'
+    ) combined
+    ORDER BY draw_date DESC
+    LIMIT 50
+");
+$availableDates->execute([$selectedLottery, $selectedLottery]);
+$availableDates = $availableDates->fetchAll(PDO::FETCH_COLUMN);
+
+// If selected date isn't in the list, pick the latest available
+if (!empty($availableDates) && !in_array($selectedDate, $availableDates)) {
+    $selectedDate = $availableDates[0];
 }
 
 $where = "WHERE b.draw_date = ? AND b.status != 'cancelled' AND b.lottery_type_id = ?";
