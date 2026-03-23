@@ -119,29 +119,18 @@ foreach ($allLotteries as &$l) {
     $resultDate = $l['result_date'] ?? null;
     $hasAnyResult = !empty($l['three_top']);
     
-    // === Current Round Date + Time Fix ===
+    // =============================================
+    // 1. Shift System Day by 6 hours
+    // รีเซ็ตวันใหม่ตอน 06:00 AM (ตามที่ user ต้องการ)
+    // ทำให้หวยข้ามคืน (Dow Jones 03:20) ถือเป็นของ "เมื่อวาน" โดยอัตโนมัติ
+    // ลอจิก cross-midnight ไม่จำเป็นอีกต่อไป
+    // =============================================
+    $systemTime = $now - (6 * 3600); 
+    $today = date('Y-m-d', $systemTime);
+    
+    // === Current Round Date จาก draw_schedule ===
     $drawSchedule = $l['draw_schedule'] ?? 'daily';
-    $currentRoundDate = getCurrentDrawDate($drawSchedule);
-    
-    // หวยข้ามเที่ยงคืน (เช่น ดาวโจนส์ close 01:00, open 06:00)
-    $isCrossMidnight = false;
-    $closeHour = 23;
-    if (!empty($l['close_time']) && !empty($l['open_time'])) {
-        $closeHour = intval(substr($l['close_time'], 0, 2));
-        $openHour = intval(substr($l['open_time'], 0, 2));
-        if ($closeHour < $openHour) {
-            $isCrossMidnight = true;
-        }
-    }
-    
-    if ($isCrossMidnight) {
-        $nowHour = intval(date('H'));
-        // ระหว่างเที่ยงคืนถึงเวลาปิดรับแทง (00:00 - close_time) 
-        // รอบที่เปิดรับอยู่คือรอบของ "เมื่อวาน"
-        if ($nowHour <= $closeHour) {
-            $currentRoundDate = getCurrentDrawDate($drawSchedule, $yesterday);
-        }
-    }
+    $currentRoundDate = getCurrentDrawDate($drawSchedule, $today);
     
     // เช็คว่าผลล่าสุดเป็นของงวดปัจจุบันหรือไม่
     $hasResultForCurrentRound = $hasAnyResult && $resultDate === $currentRoundDate;
@@ -402,32 +391,35 @@ require_once 'includes/header.php';
                     $hasPaid = isset($paidBets[$betKey]) && $paidBets[$betKey] > 0;
                     $isBetClosed = !empty($lt['bet_closed']);
                     
-                    // สร้าง close_time อิงจากวันที่งวดปัจจุบัน ไม่ใช่แค่วันนี้
+                    // === สร้าง close_time และ result_time อิงจากวันที่งวดปัจจุบัน ===
                     $roundDate = $lt['current_round_date'];
                     
                     $closeTime = null;
+                    $resultTime = null;
                     $pastCloseTime = false;
                     $hoursPastClose = 0;
+                    
+                    $openTimeStr = $roundDate . ' ' . ($lt['open_time'] ?? '06:00:00');
+                    $openTimeForRound = strtotime($openTimeStr);
+                    
                     if (!empty($lt['close_time'])) {
-                        $closeTimeStr = $roundDate . ' ' . $lt['close_time'];
-                        $closeTime = strtotime($closeTimeStr);
-                        
-                        $openTimeStr = $roundDate . ' ' . ($lt['open_time'] ?? '06:00:00');
-                        $openTimeForRound = strtotime($openTimeStr);
-                        
-                        // ถ้า close_time < open_time → ข้ามเที่ยงคืน → บวก 1 วัน
+                        $closeTime = strtotime($roundDate . ' ' . $lt['close_time']);
                         if ($closeTime < $openTimeForRound) {
-                            $closeTime += 86400; // +24 ชม.
+                            $closeTime += 86400; // ข้ามเที่ยงคืน
                         }
-                        
-                        $pastCloseTime = $now > $closeTime;
+                        $pastCloseTime = $now >= $closeTime;
                         $hoursPastClose = ($now - $closeTime) / 3600;
                     }
                     
-                    // ผลล่าสุดเก่าแค่ไหน (เทียบกับ draw schedule)
-                    $resultDate = $lt['result_date'] ?? null;
-                    $drawSchedule = $lt['draw_schedule'] ?? 'daily';
-                    $currentRoundDate = $lt['current_round_date']; // ใช้ค่าจาก processing loop
+                    if (!empty($lt['result_time'])) {
+                        $resultTime = strtotime($roundDate . ' ' . $lt['result_time']);
+                        if ($resultTime < $openTimeForRound) {
+                            $resultTime += 86400; // ข้ามเที่ยงคืน
+                        }
+                    }
+                    if (!$resultTime && $closeTime) {
+                        $resultTime = $closeTime + 900; // default 15 mins after close
+                    }
                     
                     // เช็คว่าวันนี้เป็นวันออกผลหรือไม่
                     $todayIsDrawDay = true;
@@ -436,19 +428,15 @@ require_once 'includes/header.php';
                         $todayIsDrawDay = ($todayDrawDate === $today);
                     }
                     
-                    // คำนวณงวดก่อนหน้า ตาม draw_schedule
+                    // คำนวณงวดก่อนหน้า เพื่อเช็คความเก่าของผล (Stale)
                     $prevDrawDate = null;
                     if ($resultDate && $drawSchedule !== 'daily') {
                         $prevDay = date('Y-m-d', strtotime($currentRoundDate . ' -1 day'));
                         $prevDrawDate = getCurrentDrawDate($drawSchedule, $prevDay);
                     }
                     
-                    // ผลล่าสุดถือว่า "เก่าเกิน" ถ้า:
-                    // - หวย daily: ผลเก่ากว่า 3 วัน
-                    // - หวยอื่น: ผลเก่ากว่างวดก่อนหน้า
                     $isResultStale = false;
                     if (!$resultDate) {
-                        // ไม่เคยมีผลเลย — ถือว่า stale เฉพาะวันที่ไม่ได้ออกหวย
                         $isResultStale = !$todayIsDrawDay;
                     } elseif ($drawSchedule === 'daily') {
                         $lastResultAgeDays = (strtotime($today) - strtotime($resultDate)) / 86400;
@@ -457,30 +445,38 @@ require_once 'includes/header.php';
                         $isResultStale = $resultDate < $prevDrawDate;
                     }
                     
-                    // === สถานะ ===
-                    if ($hasResultForRound && !$todayIsDrawDay) {
-                        // วันนี้ไม่ใช่วันออกผล + มีผลงวดล่าสุดแล้ว → รอออกผลงวดต่อไป
-                        $statusClass = 'status-next'; $statusLabel = 'รอออกผลงวดต่อไป';
-                    } elseif (!$hasResultForRound && !$todayIsDrawDay && $hasAnyResult) {
-                        // วันนี้ไม่ใช่วันออกผล + ไม่มีผลงวดนี้ แต่มีผลเก่า → รอออกผลงวดต่อไป
-                        $statusClass = 'status-next'; $statusLabel = 'รอออกผลงวดต่อไป';
-                    } elseif (!$todayIsDrawDay && !$hasAnyResult) {
-                        // วันนี้ไม่ใช่วันออกผล + ไม่เคยมีผลเลย → รอออกผลงวดต่อไป
-                        $statusClass = 'status-next'; $statusLabel = 'รอออกผลงวดต่อไป';
-                    } elseif ($isBetClosed && !$hasResultForRound) {
+                    // =============================================
+                    // สถานะใหม่ตาม User Request (วงจร 4 สถานะ):
+                    // 1. รอออกผลงวดต่อไป (ก่อน close_time)
+                    // 2. รอออกผล (หลัง close_time ก่อน result_time)
+                    // 3. กำลังประมวลผล (หลัง result_time แต่ยังไม่มีผล)
+                    // 4. จ่ายเงินแล้ว (มีผลแล้ว)
+                    // =============================================
+                    if ($isBetClosed && !$hasResultForRound) {
                         $statusClass = 'status-closed'; $statusLabel = 'ปิดรับแทง';
-                    } elseif ($hasResultForRound && !$hasPending) {
-                        $statusClass = 'status-paid'; $statusLabel = 'จ่ายเงินแล้ว';
-                    } elseif ($hasResultForRound && $hasPending) {
-                        $statusClass = 'status-processing'; $statusLabel = '<i class="fas fa-spinner fa-spin mr-1"></i> กำลังประมวลผล';
-                    } elseif ($pastCloseTime && !$hasResultForRound && $isResultStale) {
-                        $statusClass = 'status-suspended'; $statusLabel = 'งดออกผล';
-                    } elseif ($pastCloseTime && !$hasResultForRound && $hoursPastClose > 2) {
-                        $statusClass = 'status-processing'; $statusLabel = '<i class="fas fa-spinner fa-spin mr-1"></i> กำลังประมวลผล';
-                    } elseif ($pastCloseTime && !$hasResultForRound) {
-                        $statusClass = 'status-processing'; $statusLabel = '<i class="fas fa-spinner fa-spin mr-1"></i> กำลังประมวลผล';
+                    } elseif ($hasResultForRound) {
+                        if ($hasPending) {
+                            $statusClass = 'status-processing'; $statusLabel = '<i class="fas fa-spinner fa-spin mr-1"></i> กำลังประมวลผล';
+                        } else {
+                            $statusClass = 'status-paid'; $statusLabel = 'จ่ายเงินแล้ว';
+                        }
                     } else {
-                        $statusClass = 'status-waiting'; $statusLabel = 'รอออกผล';
+                        if (!$todayIsDrawDay || !$closeTime) {
+                            $statusClass = 'status-next'; $statusLabel = 'รอออกผลงวดต่อไป';
+                        } else {
+                            if ($now < $closeTime) {
+                                $statusClass = 'status-next'; $statusLabel = 'รอออกผลงวดต่อไป';
+                            } elseif ($now >= $closeTime && $now < $resultTime) {
+                                $statusClass = 'status-waiting'; $statusLabel = 'รอออกผล';
+                            } else {
+                                // เลยเวลา result_time แล้ว
+                                if ($isResultStale && $hoursPastClose > 3) {
+                                    $statusClass = 'status-suspended'; $statusLabel = 'งดออกผล';
+                                } else {
+                                    $statusClass = 'status-processing'; $statusLabel = '<i class="fas fa-spinner fa-spin mr-1"></i> กำลังประมวลผล';
+                                }
+                            }
+                        }
                     }
                 ?>
                 <tr>
