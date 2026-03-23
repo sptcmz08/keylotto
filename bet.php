@@ -75,15 +75,87 @@ if (!$lotteryId) {
     require_once 'includes/header.php';
     ?>
 
+    <?php
+    // === เตรียมข้อมูลหวยทั้งหมดเป็น flat array พร้อม draw_time (เวลาออกผล) ===
+    $allCards = [];
+    $today = date('Y-m-d');
+    $tomorrow = date('Y-m-d', strtotime('+1 day'));
+    $now = new DateTime();
+    
+    // รวมหวยทุกกลุ่มเข้าด้วยกัน
+    $allNames = [];
+    foreach ($LOTTERY_GROUPS as $group) {
+        foreach ($group['names'] as $n) $allNames[] = $n;
+    }
+    
+    foreach ($allNames as $lotteryName) {
+        $lt = $lotteryMap[$lotteryName] ?? null;
+        if (!$lt) continue;
+        
+        $flagUrl = getFlagForCountry($lt['flag_emoji'], $lotteryName);
+        $betClosed = intval($lt['bet_closed'] ?? 0);
+        $openTime = $lt['open_time'] ?? null;
+        $closeTime = $lt['close_time'] ?? null;
+        $drawTime = $lt['draw_date'] ?? null; // เวลาออกผล (draw)
+        
+        if ($openTime && $closeTime) {
+            $openDT = new DateTime($today . ' ' . $openTime);
+            $closeDT = new DateTime($today . ' ' . $closeTime);
+            
+            if ($closeDT <= $openDT) {
+                if ($now < $closeDT) {
+                    $drawDate = $today;
+                    $openDT->modify('-1 day');
+                } else if ($now >= $openDT) {
+                    $drawDate = $tomorrow;
+                    $closeDT->modify('+1 day');
+                } else {
+                    $drawDate = $tomorrow;
+                    $closeDT->modify('+1 day');
+                }
+            } else {
+                if ($now > $closeDT) {
+                    $drawDate = $tomorrow;
+                    $openDT->modify('+1 day');
+                    $closeDT->modify('+1 day');
+                } else {
+                    $drawDate = $today;
+                }
+            }
+            
+            $openISO = $openDT->format('Y-m-d\TH:i:s');
+            $closeISO = $closeDT->format('Y-m-d\TH:i:s');
+            $openDisplay = $openDT->format('d/m/y H:i:s');
+        } else {
+            $drawDate = $today;
+            $openISO = '';
+            $closeISO = '';
+            $openDisplay = '';
+        }
+        
+        $allCards[] = [
+            'lt' => $lt,
+            'name' => $lotteryName,
+            'flagUrl' => $flagUrl,
+            'betClosed' => $betClosed,
+            'drawDate' => $drawDate,
+            'drawDateDisplay' => date('d-m-Y', strtotime($drawDate)),
+            'openISO' => $openISO,
+            'closeISO' => $closeISO,
+            'openDisplay' => $openDisplay,
+        ];
+    }
+    ?>
+
     <style>
         .lottery-card {
-            border: 2px solid #1aa34a;
+            border: 2px solid #43a047;
             border-radius: 8px;
             padding: 12px;
             display: flex;
             align-items: flex-start;
             gap: 10px;
-            transition: all 0.3s;
+            transition: all 0.4s ease;
             cursor: pointer;
             text-decoration: none;
             color: inherit;
@@ -93,273 +165,252 @@ if (!$lotteryId) {
             transform: translateY(-2px);
             box-shadow: 0 4px 15px rgba(0,0,0,0.15);
         }
-        /* สีเขียว = เปิดรับแทง */
         .lottery-card.card-open {
             background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
             border-color: #43a047;
         }
-        /* สีเหลือง = ยังไม่ถึงเวลา */
         .lottery-card.card-waiting {
             background: linear-gradient(135deg, #fffde7 0%, #fff9c4 100%);
             border-color: #f9a825;
         }
-        /* สีเทา = ปิดรับแทง */
         .lottery-card.card-closed {
             background: linear-gradient(135deg, #f5f5f5 0%, #e0e0e0 100%);
             border-color: #bdbdbd;
-            opacity: 0.75;
+            opacity: 0.65;
         }
-        .lottery-card.card-closed .lottery-title {
-            color: #757575 !important;
-        }
+        .lottery-card.card-closed .lottery-title { color: #757575 !important; }
+        .lottery-card.card-hidden { display: none !important; }
         .lottery-card .flag {
-            width: 50px;
-            height: 34px;
-            object-fit: cover;
-            border-radius: 4px;
-            border: 1px solid #ddd;
-            flex-shrink: 0;
-            margin-top: 2px;
+            width: 50px; height: 34px;
+            object-fit: cover; border-radius: 4px;
+            border: 1px solid #ddd; flex-shrink: 0; margin-top: 2px;
         }
-        .lottery-card .info {
-            flex: 1;
-            min-width: 0;
-        }
+        .lottery-card .info { flex: 1; min-width: 0; }
         .lottery-card .lottery-title {
-            font-weight: 700;
-            color: #1a5c2e;
-            font-size: 14px;
-            line-height: 1.3;
+            font-weight: 700; color: #1a5c2e; font-size: 14px; line-height: 1.3;
         }
-        .lottery-card .draw-date {
-            color: #1aa34a;
-            font-size: 12px;
-            font-weight: 600;
-        }
+        .lottery-card .draw-date { color: #1aa34a; font-size: 12px; font-weight: 600; }
         .lottery-card .time-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-top: 4px;
+            display: flex; justify-content: space-between; align-items: center; margin-top: 4px;
         }
-        .lottery-card .time-label {
-            font-size: 11px;
-            color: #d97706;
-        }
-        .lottery-card .time-value {
-            font-size: 11px;
-            color: #666;
-        }
-        .lottery-card .status-text {
-            font-size: 11px;
-            font-weight: 600;
-        }
+        .lottery-card .time-label { font-size: 11px; color: #d97706; }
+        .lottery-card .time-value { font-size: 11px; color: #666; }
+        .lottery-card .status-text { font-size: 11px; font-weight: 600; }
         .lottery-card .status-open { color: #16a34a; }
         .lottery-card .status-countdown { color: #d97706; }
-        .lottery-card .status-closed { color: #dc2626; }
-        .cat-section-title {
-            font-weight: 700;
-            font-size: 15px;
-            padding: 8px 14px;
-            border-left: 4px solid;
-            margin-bottom: 12px;
+        .lottery-card .status-closed { color: #9e9e9e; }
+        .status-section-title {
+            font-weight: 700; font-size: 14px; padding: 6px 14px;
+            border-left: 4px solid; margin-bottom: 8px; margin-top: 16px; border-radius: 2px;
         }
+        .status-section-title:first-child { margin-top: 0; }
     </style>
 
-    <?php foreach ($LOTTERY_GROUPS as $group): ?>
-    <div class="mb-6">
-        <div class="cat-section-title" style="color: <?= $group['color'] ?>; border-color: <?= $group['color'] ?>; background: <?= $group['bg'] ?>;">
-            <?= $group['label'] ?>
+    <!-- Section: เปิดรับแทง (เขียว) -->
+    <div id="section-open" style="display:none;">
+        <div class="status-section-title" style="color:#2e7d32; border-color:#43a047; background:#e8f5e9;">
+            <i class="fas fa-check-circle mr-1"></i> เปิดรับแทง
         </div>
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            <?php foreach ($group['names'] as $lotteryName):
-                $lt = $lotteryMap[$lotteryName] ?? null;
-                if (!$lt) continue;
-                
-                $flagUrl = getFlagForCountry($lt['flag_emoji'], $lotteryName);
-                $betClosed = intval($lt['bet_closed'] ?? 0);
-                
-                $openTime = $lt['open_time'] ?? null;
-                $closeTime = $lt['close_time'] ?? null;
-                
-                // ====================================
-                // คำนวณงวดอัตโนมัติจากเวลาเปิด/ปิด
-                // ====================================
-                $today = date('Y-m-d');
-                $tomorrow = date('Y-m-d', strtotime('+1 day'));
-                $now = new DateTime();
-                
-                if ($openTime && $closeTime) {
-                    // สร้าง DateTime สำหรับเวลาเปิด/ปิดวันนี้
-                    $openDT = new DateTime($today . ' ' . $openTime);
-                    $closeDT = new DateTime($today . ' ' . $closeTime);
-                    
-                    // ถ้า close < open แสดงว่าข้ามวัน (เช่น เปิด 06:00 ปิด 00:15)
-                    if ($closeDT <= $openDT) {
-                        // ตรวจสอบว่าอยู่ช่วงไหน
-                        if ($now < $closeDT) {
-                            // ตอนนี้ก่อนเที่ยงคืน → กำลังเปิดอยู่ (เปิดเมื่อวาน)
-                            $drawDate = $today;
-                            $openDT->modify('-1 day'); // เปิดเมื่อวาน
-                        } else if ($now >= $openDT) {
-                            // เปิดแล้ว → ปิดพรุ่งนี้
-                            $drawDate = $tomorrow;
-                            $closeDT->modify('+1 day');
-                        } else {
-                            // อยู่ระหว่าง close กับ open → รอบถัดไป
-                            $drawDate = $tomorrow;
-                            $closeDT->modify('+1 day');
-                        }
-                    } else {
-                        // ปกติ (เปิด/ปิดวันเดียวกัน)
-                        if ($now > $closeDT) {
-                            // เลยเวลาปิดแล้ว → งวดพรุ่งนี้
-                            $drawDate = $tomorrow;
-                            $openDT->modify('+1 day');
-                            $closeDT->modify('+1 day');
-                        } else {
-                            $drawDate = $today;
-                        }
-                    }
-                    
-                    $openISO = $openDT->format('Y-m-d\TH:i:s');
-                    $closeISO = $closeDT->format('Y-m-d\TH:i:s');
-                    $openDisplay = $openDT->format('d/m/y H:i:s');
-                } else {
-                    $drawDate = $today;
-                    $openISO = '';
-                    $closeISO = '';
-                    $openDisplay = '';
-                }
-                
-                $drawDateDisplay = date('d-m-Y', strtotime($drawDate));
-            ?>
-            <div class="lottery-card card-waiting" onclick="handleCardClick(this)"
-               data-id="<?= $lt['id'] ?>" data-open="<?= $openISO ?>" data-close="<?= $closeISO ?>" data-forced-closed="<?= $betClosed ?>"
-               data-name="<?= htmlspecialchars($lotteryName) ?>">
-                <img src="<?= $flagUrl ?>" alt="flag" class="flag">
-                <div class="info">
-                    <div class="lottery-title"><?= htmlspecialchars($lotteryName) ?></div>
-                    <div class="draw-date"><?= $drawDateDisplay ?></div>
-                    <div class="time-row">
-                        <span class="time-label">เวลาเปิด</span>
-                        <span class="time-value"><?= $openDisplay ?: '-' ?></span>
-                    </div>
-                    <div class="time-row">
-                        <span class="status-text countdown-status">สถานะ</span>
-                        <span class="status-text countdown-text status-countdown">กำลังโหลด...</span>
-                    </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3" id="grid-open"></div>
+    </div>
+
+    <!-- Section: รอเปิดรับ (เหลือง) -->
+    <div id="section-waiting" style="display:none;">
+        <div class="status-section-title" style="color:#e65100; border-color:#f9a825; background:#fffde7;">
+            <i class="fas fa-clock mr-1"></i> รอเปิดรับแทง
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3" id="grid-waiting"></div>
+    </div>
+
+    <!-- Section: ปิดรับแทง (เทา) -->
+    <div id="section-closed" style="display:none;">
+        <div class="status-section-title" style="color:#757575; border-color:#bdbdbd; background:#f5f5f5;">
+            <i class="fas fa-ban mr-1"></i> ปิดรับแทง
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3" id="grid-closed"></div>
+    </div>
+
+    <!-- ซ่อนการ์ดทั้งหมดไว้ก่อน แล้ว JS จะจัดเรียงใหม่ -->
+    <div id="all-cards-pool" style="display:none;">
+        <?php foreach ($allCards as $card):
+            $lt = $card['lt'];
+        ?>
+        <div class="lottery-card" onclick="handleCardClick(this)"
+           data-id="<?= $lt['id'] ?>"
+           data-open="<?= $card['openISO'] ?>"
+           data-close="<?= $card['closeISO'] ?>"
+           data-forced-closed="<?= $card['betClosed'] ?>"
+           data-name="<?= htmlspecialchars($card['name']) ?>">
+            <img src="<?= $card['flagUrl'] ?>" alt="flag" class="flag">
+            <div class="info">
+                <div class="lottery-title"><?= htmlspecialchars($card['name']) ?></div>
+                <div class="draw-date"><?= $card['drawDateDisplay'] ?></div>
+                <div class="time-row">
+                    <span class="time-label">เวลาเปิด</span>
+                    <span class="time-value"><?= $card['openDisplay'] ?: '-' ?></span>
+                </div>
+                <div class="time-row">
+                    <span class="status-text countdown-status">สถานะ</span>
+                    <span class="status-text countdown-text status-countdown">กำลังโหลด...</span>
                 </div>
             </div>
-            <?php endforeach; ?>
         </div>
+        <?php endforeach; ?>
     </div>
-    <?php endforeach; ?>
 
     <script>
-    function getCardStatus(card) {
+    const CLOSE_GRACE_MINUTES = 10; // แสดง "ปิดรับ" สีเทานาน 10 นาที แล้วซ่อน
+
+    function getCardStatusDetailed(card) {
         const openStr = card.dataset.open;
         const closeStr = card.dataset.close;
         const forcedClosed = card.dataset.forcedClosed === '1';
-        if (forcedClosed) return 'closed';
-        if (!closeStr) return 'waiting';
         const now = new Date();
+        
+        if (forcedClosed) return { status: 'closed', label: 'ปิดรับ (แอดมิน)', hide: false };
+        if (!closeStr) return { status: 'waiting', label: 'รอกำหนดเวลา', hide: false };
+
         const openTime = openStr ? new Date(openStr) : null;
         const closeTime = new Date(closeStr);
-        if (openTime && now < openTime) return 'waiting';
-        if (now < closeTime) return 'open';
-        return 'waiting'; // เลยเวลาปิด = รอเปิดรอบใหม่ (ไม่ใช่ปิดรับ)
+        const msPastClose = now - closeTime;
+        const minPastClose = msPastClose / 60000;
+
+        if (openTime && now < openTime) {
+            // ยังไม่ถึงเวลาเปิด
+            const diff = openTime - now;
+            return { status: 'waiting', label: 'เปิดในอีก ' + formatDiff(diff), hide: false };
+        }
+        
+        if (now < closeTime) {
+            // กำลังเปิดรับแทง
+            const diff = closeTime - now;
+            return { status: 'open', label: 'ปิดรับใน ' + formatDiff(diff), hide: false };
+        }
+        
+        // เลยเวลาปิดแล้ว
+        if (minPastClose <= CLOSE_GRACE_MINUTES) {
+            // เพิ่งปิด ≤ 10 นาที → แสดงสีเทา
+            const remain = Math.ceil(CLOSE_GRACE_MINUTES - minPastClose);
+            return { status: 'closed', label: 'ปิดรับแล้ว', hide: false };
+        }
+        
+        // เลย 10 นาทีแล้ว → ซ่อน (จนกว่าจะถึงรอบใหม่)
+        // เช็คว่าเป็นรอบใหม่หรือยัง (เวลาเปิดรอบถัดไป)
+        if (openTime) {
+            // คำนวณ openTime ถัดไป (พรุ่งนี้)
+            const nextOpen = new Date(openTime);
+            if (nextOpen <= now) nextOpen.setDate(nextOpen.getDate() + 1);
+            
+            // ถ้าใกล้เปิด (1 ชั่วโมงก่อนเปิด) → แสดงสีเหลือง
+            const msBeforeOpen = nextOpen - now;
+            const hrsBeforeOpen = msBeforeOpen / 3600000;
+            if (hrsBeforeOpen <= 1) {
+                const diff = nextOpen - now;
+                return { status: 'waiting', label: 'เปิดในอีก ' + formatDiff(diff), hide: false };
+            }
+        }
+        
+        return { status: 'waiting', label: 'รอเปิดรอบใหม่', hide: true };
     }
 
     function handleCardClick(card) {
-        const status = getCardStatus(card);
+        const info = getCardStatusDetailed(card);
         const name = card.dataset.name;
-        if (status === 'closed') {
-            Swal.fire({
-                icon: 'error',
-                title: 'ปิดรับแทง',
-                text: name + ' ถูกปิดรับแทงโดยแอดมิน',
-                confirmButtonColor: '#dc2626',
-                confirmButtonText: 'ตกลง'
-            });
+        if (info.status === 'closed') {
+            Swal.fire({ icon: 'error', title: 'ปิดรับแทง', text: name + ' ปิดรับแทงแล้ว', confirmButtonColor: '#9e9e9e', confirmButtonText: 'ตกลง' });
             return;
         }
-        if (status === 'waiting') {
-            Swal.fire({
-                icon: 'warning',
-                title: 'ยังไม่เปิดรับแทง',
-                text: name + ' ยังไม่ถึงเวลาเปิดรับแทง',
-                confirmButtonColor: '#f59e0b',
-                confirmButtonText: 'ตกลง'
-            });
+        if (info.status === 'waiting') {
+            Swal.fire({ icon: 'warning', title: 'ยังไม่เปิดรับแทง', text: name + ' ยังไม่ถึงเวลาเปิดรับแทง', confirmButtonColor: '#f59e0b', confirmButtonText: 'ตกลง' });
             return;
         }
-        // status === 'open' → ไปหน้าแทง
         window.location.href = 'bet.php?id=' + card.dataset.id;
     }
 
-    function updateCountdowns() {
-        const now = new Date();
-        document.querySelectorAll('.lottery-card').forEach(card => {
-            const openStr = card.dataset.open;
-            const closeStr = card.dataset.close;
-            const forcedClosed = card.dataset.forcedClosed === '1';
+    function sortAndDistribute() {
+        const pool = document.getElementById('all-cards-pool');
+        const cards = Array.from(pool.querySelectorAll('.lottery-card'));
+        
+        const gridOpen = document.getElementById('grid-open');
+        const gridWaiting = document.getElementById('grid-waiting');
+        const gridClosed = document.getElementById('grid-closed');
+        
+        // เก็บ arrays
+        const openCards = [];
+        const waitingCards = [];
+        const closedCards = [];
+        
+        cards.forEach(card => {
+            const info = getCardStatusDetailed(card);
             const statusEl = card.querySelector('.countdown-status');
             const textEl = card.querySelector('.countdown-text');
-
-            // Admin ปิดรับด้วยมือ → สีเทา (เฉพาะกรณีนี้เท่านั้น)
-            if (forcedClosed) {
-                card.className = 'lottery-card card-closed';
-                statusEl.textContent = 'สถานะ';
-                textEl.textContent = 'ปิดรับ (แอดมิน)';
-                textEl.className = 'status-text countdown-text status-closed';
+            
+            if (info.hide) {
+                // ซ่อนการ์ด (ไม่แสดงเลย)
                 return;
             }
             
-            if (!closeStr) {
-                card.className = 'lottery-card card-waiting';
-                statusEl.textContent = 'สถานะ';
-                textEl.textContent = 'รอกำหนดเวลา';
-                textEl.className = 'status-text countdown-text status-countdown';
-                return;
-            }
-
-            const openTime = openStr ? new Date(openStr) : null;
-            const closeTime = new Date(closeStr);
-
-            if (openTime && now < openTime) {
-                // 🟡 ยังไม่ถึงเวลาเปิด → รอเปิด
-                card.className = 'lottery-card card-waiting';
-                const diff = openTime - now;
-                statusEl.textContent = 'สถานะ';
-                textEl.textContent = 'เปิดในอีก ' + formatDiff(diff);
-                textEl.className = 'status-text countdown-text status-countdown';
-            } else if (now < closeTime) {
-                // 🟢 เปิดรับแทง
-                card.className = 'lottery-card card-open';
-                const diff = closeTime - now;
-                statusEl.textContent = 'สถานะ';
-                textEl.textContent = 'ปิดรับใน ' + formatDiff(diff);
-                textEl.className = 'status-text countdown-text status-open';
+            statusEl.textContent = 'สถานะ';
+            textEl.textContent = info.label;
+            
+            // Clone card เพื่อย้ายไปแสดง
+            const clone = card.cloneNode(true);
+            clone.onclick = function() { handleCardClick(this); };
+            
+            if (info.status === 'open') {
+                clone.className = 'lottery-card card-open';
+                clone.querySelector('.countdown-text').className = 'status-text countdown-text status-open';
+                openCards.push(clone);
+            } else if (info.status === 'closed') {
+                clone.className = 'lottery-card card-closed';
+                clone.querySelector('.countdown-text').className = 'status-text countdown-text status-closed';
+                closedCards.push(clone);
             } else {
-                // 🟡 เลยเวลาปิดแล้ว → รอเปิดรอบใหม่ (ไม่ใช่ปิดรับ!)
-                card.className = 'lottery-card card-waiting';
-                statusEl.textContent = 'สถานะ';
-                textEl.textContent = 'รอเปิดรอบใหม่';
-                textEl.className = 'status-text countdown-text status-countdown';
+                clone.className = 'lottery-card card-waiting';
+                clone.querySelector('.countdown-text').className = 'status-text countdown-text status-countdown';
+                waitingCards.push(clone);
             }
         });
+        
+        // เคลียร์ grids
+        gridOpen.innerHTML = '';
+        gridWaiting.innerHTML = '';
+        gridClosed.innerHTML = '';
+        
+        // จัดเรียงเข้า grid
+        openCards.forEach(c => gridOpen.appendChild(c));
+        waitingCards.forEach(c => gridWaiting.appendChild(c));
+        closedCards.forEach(c => gridClosed.appendChild(c));
+        
+        // แสดง/ซ่อน sections ตามว่ามีการ์ดไหม
+        document.getElementById('section-open').style.display = openCards.length ? '' : 'none';
+        document.getElementById('section-waiting').style.display = waitingCards.length ? '' : 'none';
+        document.getElementById('section-closed').style.display = closedCards.length ? '' : 'none';
     }
 
     function formatDiff(ms) {
+        if (ms < 0) ms = 0;
         const h = Math.floor(ms / 3600000);
         const m = Math.floor((ms % 3600000) / 60000);
         const s = Math.floor((ms % 60000) / 1000);
         return String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
     }
 
-    setInterval(updateCountdowns, 1000);
-    updateCountdowns();
+    // เช็คเที่ยงคืน → reload หน้าใหม่ เพื่อรีเซ็ตงวด
+    let lastDay = new Date().getDate();
+    function checkMidnight() {
+        const nowDay = new Date().getDate();
+        if (nowDay !== lastDay) {
+            location.reload();
+        }
+    }
+
+    // อัพเดททุก 1 วินาที
+    setInterval(() => {
+        sortAndDistribute();
+        checkMidnight();
+    }, 1000);
+    sortAndDistribute();
     </script>
 
     <?php require_once 'includes/footer.php'; ?>
