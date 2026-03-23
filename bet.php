@@ -610,7 +610,7 @@ require_once 'includes/header.php';
                             <input type="text" id="numInput" class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:border-blue-500 outline-none h-[40px]" placeholder="12 21 31 54...">
                         </div>
                         <div class="col-span-12 sm:col-span-1 flex items-end">
-                            <button onclick="toggleReverse()" id="btn-reverse" class="w-full bg-[#ffca28] text-yellow-900 py-2 rounded text-[13px] font-bold hover:bg-yellow-400 transition h-[40px]">กลับเลข</button>
+                            <button onclick="reverseNumber()" id="btn-reverse" class="w-full bg-[#ffca28] text-yellow-900 py-2 rounded text-[13px] font-bold hover:bg-yellow-400 transition h-[40px]">กลับเลข</button>
                         </div>
                         <div class="col-span-6 sm:col-span-3">
                             <label class="text-[11px] text-gray-500 block mb-0.5 text-center">บน</label>
@@ -904,7 +904,7 @@ function showBlockedToast(msg, type) {
 }
 
 let currentBetType = '2';
-let reverseMode = false;
+let reverseMode = false; // kept for backward compat but unused
 let betGroups = [];
 let selectedNums = [];
 let classicBetGroups = [];
@@ -1023,112 +1023,50 @@ function addSingleNumber(val) {
     const type = currentBetType;
     if (type === '2' && /^\d{2}$/.test(val)) {
         selectedNums.push(val);
-        if (reverseMode) {
-            const rev = val.split('').reverse().join('');
-            if (rev !== val) selectedNums.push(rev);
-        }
-        checkBlockedOnInput();
         return true;
     } else if (type === '3' && /^\d{3}$/.test(val)) {
         selectedNums.push(val);
-        if (reverseMode) {
-            const rev = val.split('').reverse().join('');
-            if (rev !== val) selectedNums.push(rev);
-        }
-        checkBlockedOnInput();
         return true;
     } else if (type === '6' && /^\d{3}$/.test(val)) {
         const perms = getPermutations(val);
         perms.forEach(p => { if (!selectedNums.includes(p)) selectedNums.push(p); });
-        checkBlockedOnInput();
         return true;
     } else if (type === '19' && /^\d$/.test(val)) {
         const nums = get19Door(val);
         nums.forEach(n => { if (!selectedNums.includes(n)) selectedNums.push(n); });
-        checkBlockedOnInput();
         return true;
     } else if ((type === 'run' || type === 'win') && /^\d$/.test(val)) {
         if (!selectedNums.includes(val)) selectedNums.push(val);
-        checkBlockedOnInput();
         return true;
     }
     return false;
 }
 
 // ==========================================
-// ตรวจเลขอั้น/ห้ามแทง ทันทีตอนกรอก
+// กลับเลข: กดแล้วสลับเลขที่เลือกไว้ทั้งหมด
 // ==========================================
-function checkBlockedOnInput() {
-    const type = currentBetType;
-    const blockedMsgs = [];
-    const halfMsgs = [];
-    const toRemove = new Set();
-
-    // กำหนด bet types ที่จะเช็คตาม currentBetType
-    let checkTypes = [];
-    if (type === '2' || type === '6' || type === '19') {
-        checkTypes = [{key: '2top', label: '2 ตัวบน'}, {key: '2bot', label: '2 ตัวล่าง'}];
-    } else if (type === '3') {
-        checkTypes = [{key: '3top', label: '3 ตัวบน'}, {key: '3tod', label: '3 ตัวโต๊ด'}];
-    } else if (type === 'run' || type === 'win') {
-        checkTypes = [{key: 'run_top', label: 'วิ่งบน'}, {key: 'run_bot', label: 'วิ่งล่าง'}];
+function reverseNumber() {
+    if (selectedNums.length === 0) {
+        Swal.fire({ icon: 'info', title: 'กลับเลข', text: 'ยังไม่มีเลขที่เลือก กรุณาเพิ่มเลขก่อน', confirmButtonColor: '#2e7d32' });
+        return;
     }
-
+    const reversed = [];
+    const addedRevs = [];
     selectedNums.forEach(num => {
-        checkTypes.forEach(ct => {
-            const mapKey = num + '_' + ct.key;
-            if (BLOCKED_MAP[mapKey]) {
-                if (BLOCKED_MAP[mapKey].is_blocked) {
-                    // ห้ามแทง → ลบออก
-                    blockedMsgs.push(`<b>${num}</b> → ${ct.label} <span style="color:#e53935">ห้ามแทง</span>`);
-                    toRemove.add(num);
-                } else {
-                    // อั้น/จ่ายครึ่ง → เตือน
-                    const fullRate = PAY_RATES[ct.key] || 0;
-                    halfMsgs.push(`<b>${num}</b> → ${ct.label} <span style="color:#e65100">จ่าย ${fullRate/2} แทน ${fullRate}</span>`);
-                }
-            }
-        });
+        reversed.push(num);
+        const rev = num.split('').reverse().join('');
+        if (rev !== num && !reversed.includes(rev)) {
+            reversed.push(rev);
+            addedRevs.push(rev);
+        }
     });
-
-    // ลบเลขที่ห้ามแทงออก
-    if (toRemove.size > 0) {
-        selectedNums = selectedNums.filter(n => !toRemove.has(n));
-    }
-
-    // แสดง popup ถ้ามีเลขห้ามหรืออั้น
-    if (blockedMsgs.length > 0 || halfMsgs.length > 0) {
-        let html = '';
-        if (blockedMsgs.length > 0) {
-            html += '<div style="text-align:left;margin-bottom:8px;"><b style="color:#e53935">🚫 เลขห้ามแทง (ลบออกแล้ว):</b><br>' + blockedMsgs.join('<br>') + '</div>';
-        }
-        if (halfMsgs.length > 0) {
-            html += '<div style="text-align:left;"><b style="color:#e65100">⚠️ เลขอั้น (จ่ายครึ่ง):</b><br>' + halfMsgs.join('<br>') + '</div>';
-        }
-        Swal.fire({
-            icon: blockedMsgs.length > 0 ? 'error' : 'warning',
-            title: blockedMsgs.length > 0 ? 'มีเลขห้ามแทง!' : 'มีเลขอั้น',
-            html: html,
-            confirmButtonColor: '#2e7d32',
-            confirmButtonText: 'รับทราบ'
-        });
-    }
-}
-
-// ==========================================
-// กลับเลข Toggle Mode
-// ==========================================
-function toggleReverse() {
-    reverseMode = !reverseMode;
-    const btn = document.getElementById('btn-reverse');
-    if (reverseMode) {
-        btn.className = 'w-full bg-[#2e7d32] text-white py-2 rounded text-[13px] font-bold hover:bg-green-700 transition h-[40px] ring-2 ring-green-400';
-        btn.innerHTML = '<i class="fas fa-check mr-1"></i>กลับเลข';
-        Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'เปิดกลับเลขอัตโนมัติ', showConfirmButton: false, timer: 1500 });
+    selectedNums = reversed;
+    renderSelectedNumbers();
+    saveState();
+    if (addedRevs.length > 0) {
+        Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'กลับเลขเรียบร้อย +' + addedRevs.length + ' ตัว', showConfirmButton: false, timer: 1500 });
     } else {
-        btn.className = 'w-full bg-[#ffca28] text-yellow-900 py-2 rounded text-[13px] font-bold hover:bg-yellow-400 transition h-[40px]';
-        btn.innerHTML = 'กลับเลข';
-        Swal.fire({ toast: true, position: 'top-end', icon: 'info', title: 'ปิดกลับเลขอัตโนมัติ', showConfirmButton: false, timer: 1500 });
+        Swal.fire({ toast: true, position: 'top-end', icon: 'info', title: 'ไม่มีเลขที่ต้องกลับ', showConfirmButton: false, timer: 1500 });
     }
 }
 
@@ -1271,47 +1209,60 @@ function addBetItem() {
     if (top === 0 && bot === 0) { Swal.fire({ icon: 'warning', title: 'กรุณาใส่จำนวนเงิน', confirmButtonColor: '#f59e0b' }); return; }
 
     // =============================================
-    // ตรวจสอบเลขอั้น / ปิดรับ
+    // ตรวจสอบเลขอั้น / ปิดรับ + แจ้งเตือนละเอียด
     // =============================================
     const blockedNums = [];
-    const halfPayNums = [];
+    const blockedDetails = [];
+    const halfPayDetails = [];
     const cleanNumbers = [];
 
     numbers.forEach(num => {
         let betTypes = [];
         if (currentBetType === '2' || currentBetType === '6' || currentBetType === '19') {
-            if (top > 0) betTypes.push('2top');
-            if (bot > 0) betTypes.push('2bot');
+            if (top > 0) betTypes.push({key: '2top', label: '2 ตัวบน'});
+            if (bot > 0) betTypes.push({key: '2bot', label: '2 ตัวล่าง'});
         } else if (currentBetType === '3') {
-            if (top > 0) betTypes.push('3top');
-            if (bot > 0) betTypes.push('3tod');
+            if (top > 0) betTypes.push({key: '3top', label: '3 ตัวบน'});
+            if (bot > 0) betTypes.push({key: '3tod', label: '3 ตัวโต๊ด'});
         } else if (currentBetType === 'run' || currentBetType === 'win') {
-            if (top > 0) betTypes.push('run_top');
-            if (bot > 0) betTypes.push('run_bot');
+            if (top > 0) betTypes.push({key: 'run_top', label: 'วิ่งบน'});
+            if (bot > 0) betTypes.push({key: 'run_bot', label: 'วิ่งล่าง'});
         }
 
         let isBlocked = false;
         betTypes.forEach(bt => {
-            const key = num + '_' + bt;
+            const key = num + '_' + bt.key;
             if (BLOCKED_MAP[key]) {
                 if (BLOCKED_MAP[key].is_blocked) {
                     isBlocked = true;
-                    blockedNums.push(num);
+                    blockedDetails.push(`<b>${num}</b> → ${bt.label} <span style="color:#e53935">ห้ามแทง</span>`);
                 } else {
-                    const fullRate = PAY_RATES[bt] || 0;
-                    halfPayNums.push(`${num} (จ่าย ${fullRate/2} แทน ${fullRate})`);
+                    const fullRate = PAY_RATES[bt.key] || 0;
+                    halfPayDetails.push(`<b>${num}</b> → ${bt.label} <span style="color:#e65100">จ่าย ${fullRate/2} แทน ${fullRate}</span>`);
                 }
             }
         });
 
-        if (!isBlocked) cleanNumbers.push(num);
+        if (isBlocked) blockedNums.push(num);
+        else cleanNumbers.push(num);
     });
 
-    if (blockedNums.length > 0) {
-        showBlockedToast('🚫 ปิดรับ: ' + [...new Set(blockedNums)].join(', '), 'blocked');
-    }
-    if (halfPayNums.length > 0) {
-        showBlockedToast('½ จ่ายครึ่ง: ' + [...new Set(halfPayNums)].join(', '), 'half');
+    // แสดง popup แจ้งเตือนละเอียด
+    if (blockedDetails.length > 0 || halfPayDetails.length > 0) {
+        let html = '';
+        if (blockedDetails.length > 0) {
+            html += '<div style="text-align:left;margin-bottom:8px;"><b style="color:#e53935">🚫 เลขห้ามแทง (ลบออกแล้ว):</b><br>' + blockedDetails.join('<br>') + '</div>';
+        }
+        if (halfPayDetails.length > 0) {
+            html += '<div style="text-align:left;"><b style="color:#e65100">⚠️ เลขอั้น (จ่ายครึ่ง):</b><br>' + halfPayDetails.join('<br>') + '</div>';
+        }
+        Swal.fire({
+            icon: blockedDetails.length > 0 ? 'error' : 'warning',
+            title: blockedDetails.length > 0 ? 'มีเลขห้ามแทง!' : 'มีเลขอั้น',
+            html: html,
+            confirmButtonColor: '#2e7d32',
+            confirmButtonText: 'รับทราบ'
+        });
     }
 
     if (cleanNumbers.length === 0 && blockedNums.length > 0) {
