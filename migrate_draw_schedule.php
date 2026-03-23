@@ -91,7 +91,7 @@ $scheduleRules = [
     // === หวยไทย (1,16 หรือ เฉพาะ 16) ===
     ['keywords' => ['ธกส', 'ธ.ก.ส'], 'schedule' => '16'],          // ธกส ออกเฉพาะวันที่ 16!
     ['keywords' => ['รัฐบาล'], 'schedule' => '1,16'],
-    ['keywords' => ['ออมสิน'], 'schedule' => '1,16'],
+    ['keywords' => ['ออมสิน'], 'schedule' => '16'],              // ออมสิน 1 ปี ออกเฉพาะวันที่ 16
     ['keywords' => ['หวยไทยชุด'], 'schedule' => '1,16'],
     ['keywords' => ['หวยไทย JACKPOT'], 'schedule' => '1,16'],
     ['keywords' => ['12 ราศี'], 'schedule' => '1,16'],
