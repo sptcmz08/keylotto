@@ -2,25 +2,70 @@
 /**
  * Migration: Add draw_schedule column to lottery_types
  * 
- * Values:
- *   "daily"            = ออกทุกวัน
- *   "mon,wed,fri"      = ออกเฉพาะวัน (จ,พ,ศ)
- *   "mon,tue,wed,thu,fri" = จ-ศ (หุ้น)
- *   "1,16"             = วันที่ 1 กับ 16 ของเดือน (หวยไทย)
+ * ตารางออกรางวัลที่ตรวจสอบแล้วจากแหล่งออนไลน์:
+ * 
+ * === หวยไทย ===
+ *   รัฐบาลไทย     → 1,16   (วันที่ 1 และ 16 ของเดือน)
+ *   ออมสิน         → 1,16   (วันที่ 1 และ 16 ของเดือน)
+ *   ธกส            → 16     (เฉพาะวันที่ 16 ของเดือน)
+ *   หวย 12 ราศี    → 1,16   (ตามหวยรัฐบาล)
+ *
+ * === หวยลาว ===
+ *   ลาวพัฒนา       → mon,wed,fri  (จ,พ,ศ ถ่ายทอด 20:00 น.)
+ *   ลาวชุด/JACKPOT → mon,wed,fri  (ตามลาวพัฒนา)
+ *   ลาวประตูชัย    → daily
+ *   ลาวสันติภาพ    → daily
+ *   ประชาชนลาว     → daily
+ *   ลาว EXTRA      → daily
+ *   ลาว TV         → daily
+ *   ลาว HD         → daily
+ *   ลาวสตาร์       → daily
+ *   ลาวใต้         → daily
+ *   ลาวสามัคคี     → daily
+ *   ลาวอาเซียน     → daily
+ *   ลาว VIP        → daily
+ *   ลาวกาชาด       → daily
+ *
+ * === หวยฮานอย ===
+ *   ฮานอยทุกตัว    → daily  (ออกทุกวัน ไม่เว้นวันหยุด)
+ *
+ * === หวยหุ้น ===
+ *   นิเคอิ (ญี่ปุ่น)   → mon,tue,wed,thu,fri (จ-ศ)
+ *   ฮั่งเส็ง (ฮ่องกง)  → mon,tue,wed,thu,fri
+ *   ไต้หวัน            → mon,tue,wed,thu,fri
+ *   เกาหลี            → mon,tue,wed,thu,fri
+ *   สิงคโปร์          → mon,tue,wed,thu,fri
+ *   จีน               → mon,tue,wed,thu,fri
+ *   อินเดีย           → mon,tue,wed,thu,fri
+ *   อียิปต์           → mon,tue,wed,thu,fri (Sun-Thu จริง แต่ในไทยจับ จ-ศ)
+ *   อังกฤษ            → mon,tue,wed,thu,fri
+ *   เยอรมัน           → mon,tue,wed,thu,fri
+ *   รัสเซีย           → mon,tue,wed,thu,fri
+ *   ดาวโจนส์          → mon,tue,wed,thu,fri
+ *   หุ้นไทย           → mon,tue,wed,thu,fri
+ *
+ * === หวยมาเลเซีย ===
+ *   มาเลเซีย          → wed,sat,sun (พ,ส,อา)
+ *
+ * === หวยชุด ===
+ *   หวยไทยชุด/JACKPOT  → ตามรัฐบาล 1,16
+ *   ฮานอยชุด/JACKPOT   → daily (ตามฮานอย)
  *
  * Run: php migrate_draw_schedule.php
  */
 require_once __DIR__ . '/config.php';
 
-echo "🔧 Adding draw_schedule column...\n";
+echo "═══════════════════════════════════════\n";
+echo "🔧 Migration: draw_schedule\n";
+echo "═══════════════════════════════════════\n\n";
 
 // Add column if not exists
 try {
     $pdo->exec("ALTER TABLE lottery_types ADD COLUMN draw_schedule VARCHAR(100) DEFAULT 'daily' AFTER close_time");
-    echo "✅ Column added\n";
+    echo "✅ Column draw_schedule added\n";
 } catch (Exception $e) {
     if (strpos($e->getMessage(), 'Duplicate column') !== false) {
-        echo "⏭️  Column already exists\n";
+        echo "⏭️  Column draw_schedule already exists\n";
     } else {
         echo "❌ Error: " . $e->getMessage() . "\n";
     }
@@ -29,67 +74,64 @@ try {
 // Also add open_time if it doesn't exist
 try {
     $pdo->exec("ALTER TABLE lottery_types ADD COLUMN open_time TIME DEFAULT '06:00:00' AFTER close_time");
-    echo "✅ open_time column added\n";
+    echo "✅ Column open_time added\n";
 } catch (Exception $e) {
     if (strpos($e->getMessage(), 'Duplicate column') !== false) {
-        echo "⏭️  open_time already exists\n";
+        echo "⏭️  Column open_time already exists\n";
     }
 }
 
-echo "\n📋 Setting schedules based on lottery names...\n";
+echo "\n📋 Setting draw schedules...\n\n";
 
-// Keyword-based schedule mapping (order matters: most specific first)
+// =============================================
+// Schedule rules (ORDER MATTERS - most specific first)
+// =============================================
+$WD = 'mon,tue,wed,thu,fri'; // weekdays shorthand
 $scheduleRules = [
-    // หวยไทย — วันที่ 1, 16 ของเดือน
+    // === หวยไทย (1,16 หรือ เฉพาะ 16) ===
+    ['keywords' => ['ธกส', 'ธ.ก.ส'], 'schedule' => '16'],          // ธกส ออกเฉพาะวันที่ 16!
     ['keywords' => ['รัฐบาล'], 'schedule' => '1,16'],
-    ['keywords' => ['หวยออมสิน', 'ออมสิน'], 'schedule' => '1,16'],
-    ['keywords' => ['ธกส'], 'schedule' => '1,16'],
+    ['keywords' => ['ออมสิน'], 'schedule' => '1,16'],
     ['keywords' => ['หวยไทยชุด'], 'schedule' => '1,16'],
     ['keywords' => ['หวยไทย JACKPOT'], 'schedule' => '1,16'],
     ['keywords' => ['12 ราศี'], 'schedule' => '1,16'],
     
-    // หุ้นไทย — จ-ศ
-    ['keywords' => ['หุ้นไทย'], 'schedule' => 'mon,tue,wed,thu,fri'],
-    
-    // ลาวพัฒนา — จ, พ, ศ
+    // === ลาวพัฒนา + ชุดลาว (จ,พ,ศ) ===
     ['keywords' => ['ลาวพัฒนา'], 'schedule' => 'mon,wed,fri'],
+    ['keywords' => ['หวยลาวชุด'], 'schedule' => 'mon,wed,fri'],
     
-    // หวย VIP ต่างๆ — จ-ส (6 วัน)
-    ['keywords' => ['นิเคอิเช้า VIP'], 'schedule' => 'mon,tue,wed,thu,fri'],
-    ['keywords' => ['นิเคอิบ่าย VIP'], 'schedule' => 'mon,tue,wed,thu,fri'],
-    ['keywords' => ['จีนเช้า VIP'], 'schedule' => 'mon,tue,wed,thu,fri'],
-    ['keywords' => ['จีนบ่าย VIP'], 'schedule' => 'mon,tue,wed,thu,fri'],
-    ['keywords' => ['ฮั่งเส็งเช้า VIP'], 'schedule' => 'mon,tue,wed,thu,fri'],
-    ['keywords' => ['ฮั่งเส็งบ่าย VIP'], 'schedule' => 'mon,tue,wed,thu,fri'],
-    ['keywords' => ['เกาหลี VIP'], 'schedule' => 'mon,tue,wed,thu,fri'],
-    ['keywords' => ['ไต้หวัน VIP'], 'schedule' => 'mon,tue,wed,thu,fri'],
-    ['keywords' => ['สิงคโปร์ VIP'], 'schedule' => 'mon,tue,wed,thu,fri'],
-    ['keywords' => ['อังกฤษ VIP'], 'schedule' => 'mon,tue,wed,thu,fri'],
-    ['keywords' => ['เยอรมัน VIP'], 'schedule' => 'mon,tue,wed,thu,fri'],
-    ['keywords' => ['ดาวโจนส์ VIP'], 'schedule' => 'mon,tue,wed,thu,fri'],
-    ['keywords' => ['รัสเซีย VIP', 'หุ้นรัสเซีย'], 'schedule' => 'mon,tue,wed,thu,fri'],
-    
-    // หุ้นทั้งหมด — จ-ศ
-    ['keywords' => ['หุ้นดาวโจนส์'], 'schedule' => 'mon,tue,wed,thu,fri'],
-    ['keywords' => ['หุ้นอังกฤษ'], 'schedule' => 'mon,tue,wed,thu,fri'],
-    ['keywords' => ['หุ้นเยอรมัน'], 'schedule' => 'mon,tue,wed,thu,fri'],
-    ['keywords' => ['หุ้นรัสเซีย'], 'schedule' => 'mon,tue,wed,thu,fri'],
-    ['keywords' => ['หุ้นจีน'], 'schedule' => 'mon,tue,wed,thu,fri'],
-    ['keywords' => ['หุ้นเกาหลี'], 'schedule' => 'mon,tue,wed,thu,fri'],
-    ['keywords' => ['หุ้นไต้หวัน'], 'schedule' => 'mon,tue,wed,thu,fri'],
-    ['keywords' => ['หุ้นสิงคโปร์'], 'schedule' => 'mon,tue,wed,thu,fri'],
-    ['keywords' => ['หุ้นอินเดีย'], 'schedule' => 'mon,tue,wed,thu,fri'],
-    ['keywords' => ['หุ้นอียิปต์'], 'schedule' => 'mon,tue,wed,thu,fri'],
-    ['keywords' => ['นิเคอิ - เช้า', 'นิเคอิ - บ่าย'], 'schedule' => 'mon,tue,wed,thu,fri'],
-    ['keywords' => ['ฮั่งเส็ง - เช้า', 'ฮั่งเส็ง - บ่าย'], 'schedule' => 'mon,tue,wed,thu,fri'],
-    ['keywords' => ['ดาวโจนส์ STAR'], 'schedule' => 'mon,tue,wed,thu,fri'],
-    
-    // มาเลย์ — พ, ส, อา
+    // === มาเลเซีย (พ,ส,อา) ===
     ['keywords' => ['มาเลย์', 'มาเลเซีย'], 'schedule' => 'wed,sat,sun'],
+    
+    // === หุ้น VIP (ตาม stock exchange จ-ศ) ===
+    ['keywords' => ['นิเคอิ'], 'schedule' => $WD],
+    ['keywords' => ['ฮั่งเส็ง'], 'schedule' => $WD],
+    ['keywords' => ['จีนเช้า', 'จีนบ่าย', 'หุ้นจีน'], 'schedule' => $WD],
+    ['keywords' => ['เกาหลี'], 'schedule' => $WD],
+    ['keywords' => ['ไต้หวัน'], 'schedule' => $WD],
+    ['keywords' => ['สิงคโปร์'], 'schedule' => $WD],
+    ['keywords' => ['อินเดีย'], 'schedule' => $WD],
+    ['keywords' => ['อียิปต์'], 'schedule' => $WD],
+    ['keywords' => ['หุ้นไทย'], 'schedule' => $WD],
+    
+    // === หุ้น + ดาวโจนส์ต่างประเทศ (จ-ศ) ===
+    ['keywords' => ['หุ้นดาวโจนส์'], 'schedule' => $WD],
+    ['keywords' => ['หุ้นอังกฤษ'], 'schedule' => $WD],
+    ['keywords' => ['หุ้นเยอรมัน'], 'schedule' => $WD],
+    ['keywords' => ['หุ้นรัสเซีย'], 'schedule' => $WD],
+    ['keywords' => ['ดาวโจนส์ STAR'], 'schedule' => $WD],
+    ['keywords' => ['ดาวโจนส์อเมริกา'], 'schedule' => $WD],
+    ['keywords' => ['ดาวโจนส์ VIP'], 'schedule' => $WD],
+    ['keywords' => ['อังกฤษ VIP'], 'schedule' => $WD],
+    ['keywords' => ['เยอรมัน VIP'], 'schedule' => $WD],
+    ['keywords' => ['รัสเซีย VIP'], 'schedule' => $WD],
+    
+    // === ทุกอย่างที่ไม่จับ = daily (ฮานอย, ลาวรายวัน, VIP, One, ฯลฯ) ===
 ];
 
-$allLotteries = $pdo->query("SELECT id, name, draw_schedule FROM lottery_types")->fetchAll();
+$allLotteries = $pdo->query("SELECT id, name FROM lottery_types ORDER BY id")->fetchAll();
 $updated = 0;
+$daily = 0;
 
 foreach ($allLotteries as $lt) {
     $matched = false;
@@ -97,20 +139,28 @@ foreach ($allLotteries as $lt) {
         foreach ($rule['keywords'] as $kw) {
             if (mb_strpos($lt['name'], $kw) !== false) {
                 $pdo->prepare("UPDATE lottery_types SET draw_schedule = ? WHERE id = ?")->execute([$rule['schedule'], $lt['id']]);
-                echo "  ✅ {$lt['name']} → {$rule['schedule']}\n";
+                echo "  ✅ [{$lt['id']}] {$lt['name']} → {$rule['schedule']}\n";
                 $updated++;
                 $matched = true;
-                break 2; // break both foreach loops
+                break 2;
             }
         }
     }
-    if (!$matched && $lt['draw_schedule'] === 'daily') {
-        echo "  ⏭️  {$lt['name']} → daily (default)\n";
+    if (!$matched) {
+        $pdo->prepare("UPDATE lottery_types SET draw_schedule = 'daily' WHERE id = ?")->execute([$lt['id']]);
+        echo "  📅 [{$lt['id']}] {$lt['name']} → daily\n";
+        $daily++;
     }
 }
 
 echo "\n═══════════════════════════════════════\n";
-echo "✅ Done! Updated $updated lotteries\n";
+echo "✅ Complete!\n";
+echo "   Schedules set: $updated | Daily: $daily\n";
 echo "═══════════════════════════════════════\n";
-echo "\n💡 หมายเหตุ: หวยที่ไม่ได้ตั้ง schedule จะใช้ 'daily' เป็น default\n";
-echo "   สามารถแก้ไขเพิ่มเติมใน admin → จัดการหวย ได้ครับ\n";
+echo "\n📌 ตารางสรุป:\n";
+echo "   หวยไทย (รัฐบาล/ออมสิน) = วันที่ 1,16\n";
+echo "   ธกส = เฉพาะวันที่ 16\n";
+echo "   ลาวพัฒนา = จ,พ,ศ\n";
+echo "   หุ้นทั้งหมด = จ-ศ\n";
+echo "   มาเลเซีย = พ,ส,อา\n";
+echo "   ลาว/ฮานอยรายวัน = ทุกวัน\n";
