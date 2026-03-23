@@ -407,7 +407,7 @@ require_once 'includes/header.php';
                         $statusClass = 'status-paid'; $statusLabel = 'จ่ายเงินแล้ว';
                     } elseif ($hasResultForRound && $hasPending) {
                         // มีผลงวดนี้แต่ยังมี pending = กำลังประมวลผล
-                        $statusClass = 'status-processing'; $statusLabel = 'กำลังประมวลผล';
+                        $statusClass = 'status-processing'; $statusLabel = '<i class="fas fa-spinner fa-spin mr-1"></i> กำลังประมวลผล';
                     } elseif ($pastCloseTime && !$hasResultForRound && $lastResultAgeDays > 3) {
                         // ผลเก่ากว่า 3 วัน + เลย close_time = งดออกผล (วันหยุดยาว)
                         $statusClass = 'status-suspended'; $statusLabel = 'งดออกผล';
@@ -416,7 +416,7 @@ require_once 'includes/header.php';
                         $statusClass = 'status-suspended'; $statusLabel = 'งดออกผล';
                     } elseif ($pastCloseTime && !$hasResultForRound) {
                         // เลยเวลา ≤ 2 ชม. = กำลังประมวลผล
-                        $statusClass = 'status-processing'; $statusLabel = 'กำลังประมวลผล';
+                        $statusClass = 'status-processing'; $statusLabel = '<i class="fas fa-spinner fa-spin mr-1"></i> กำลังประมวลผล';
                     } else {
                         // ยังไม่ถึงเวลาปิดรับ = รอออกผล
                         $statusClass = 'status-waiting'; $statusLabel = 'รอออกผล';
