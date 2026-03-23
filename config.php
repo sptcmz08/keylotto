@@ -17,6 +17,9 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
+// Set Timezone
+date_default_timezone_set('Asia/Bangkok');
+
 // PDO Connection
 try {
     $pdo = new PDO(
