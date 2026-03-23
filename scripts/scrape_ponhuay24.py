@@ -69,10 +69,7 @@ NAME_MAPPINGS = {
     'ฮานอยตรุษจีน': 'hanoi-chinese-ny',
 
     # === หุ้น ===
-    'ดาวโจนส์STAR': 'dowjones-star',
-    'ดาวโจนส์สตาร์': 'dowjones-star',
-    'ดาวโจนส์VIP': 'dowjones-vip',
-    'หุ้นดาวโจนส์': 'dowjones',
+    # ดาวโจนส์/STAR/VIP → ออกผลดึก (00:00+) ใช้ exphuay เท่านั้น
     'หุ้นนิเคอิเช้าVIP': 'nikkei-morning-vip',
     'หุ้นนิเคอิบ่ายVIP': 'nikkei-afternoon-vip',
     'หุ้นจีนเช้าVIP': 'china-morning-vip',

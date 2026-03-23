@@ -444,6 +444,9 @@ require_once 'includes/header.php';
                     } elseif (!$hasResultForRound && !$todayIsDrawDay && $hasAnyResult) {
                         // วันนี้ไม่ใช่วันออกผล + ไม่มีผลงวดนี้ แต่มีผลเก่า → รอออกผลงวดต่อไป
                         $statusClass = 'status-next'; $statusLabel = 'รอออกผลงวดต่อไป';
+                    } elseif (!$todayIsDrawDay && !$hasAnyResult) {
+                        // วันนี้ไม่ใช่วันออกผล + ไม่เคยมีผลเลย → รอออกผลงวดต่อไป
+                        $statusClass = 'status-next'; $statusLabel = 'รอออกผลงวดต่อไป';
                     } elseif ($isBetClosed && !$hasResultForRound) {
                         $statusClass = 'status-closed'; $statusLabel = 'ปิดรับแทง';
                     } elseif ($hasResultForRound && !$hasPending) {
