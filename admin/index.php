@@ -2,12 +2,6 @@
 require_once __DIR__ . '/../auth.php';
 requireLogin();
 
-if (isset($_GET['logout'])) {
-    session_destroy();
-    header('Location: login.php');
-    exit;
-}
-
 // Handle cancel approval (safe - columns may not exist yet)
 try {
     if (isset($_POST['approve_cancel'])) {

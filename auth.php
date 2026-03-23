@@ -7,7 +7,7 @@ function requireLogin() {
     $isAdminDir = strpos($script, '/admin/') !== false;
 
     if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
-        $loginUrl = $isAdminDir ? 'login.php' : 'login.php';
+        $loginUrl = $isAdminDir ? '../login.php' : 'login.php';
         header("Location: $loginUrl");
         exit;
     }
