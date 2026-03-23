@@ -395,9 +395,33 @@ require_once 'includes/header.php';
                         $hoursPastClose = ($now - $closeTime) / 3600;
                     }
                     
-                    // ผลล่าสุดเก่าแค่ไหน
+                    // ผลล่าสุดเก่าแค่ไหน (เทียบกับ draw schedule)
                     $resultDate = $lt['result_date'] ?? null;
-                    $lastResultAgeDays = $resultDate ? (strtotime($today) - strtotime($resultDate)) / 86400 : 999;
+                    $drawSchedule = $lt['draw_schedule'] ?? 'daily';
+                    
+                    // คำนวณงวดก่อนหน้า ตาม draw_schedule
+                    // ถ้าผลล่าสุด >= งวดก่อนหน้า = ปกติ (ยังไม่มีผลงวดนี้)
+                    // ถ้าผลล่าสุด < งวดก่อนหน้า = ขาดหาย (งดออกผล)
+                    $prevDrawDate = null;
+                    if ($resultDate && $drawSchedule !== 'daily') {
+                        // หาวันก่อน currentRoundDate 1 วัน แล้วหา draw date ล่าสุดก่อนหน้า
+                        $prevDay = date('Y-m-d', strtotime($currentRoundDate . ' -1 day'));
+                        $prevDrawDate = getCurrentDrawDate($drawSchedule, $prevDay);
+                    }
+                    
+                    // ผลล่าสุดถือว่า "เก่าเกิน" ถ้า:
+                    // - หวย daily: ผลเก่ากว่า 3 วัน
+                    // - หวยอื่น: ผลเก่ากว่างวดก่อนหน้า
+                    $isResultStale = false;
+                    if (!$resultDate) {
+                        $isResultStale = true; // ไม่เคยมีผลเลย
+                    } elseif ($drawSchedule === 'daily') {
+                        $lastResultAgeDays = (strtotime($today) - strtotime($resultDate)) / 86400;
+                        $isResultStale = $lastResultAgeDays > 3;
+                    } elseif ($prevDrawDate) {
+                        // เช็คว่าผลล่าสุดเก่ากว่างวดก่อนหน้าหรือเปล่า
+                        $isResultStale = $resultDate < $prevDrawDate;
+                    }
                     
                     if ($isBetClosed && !$hasResultForRound) {
                         // Admin ปิดรับแทง
@@ -408,12 +432,12 @@ require_once 'includes/header.php';
                     } elseif ($hasResultForRound && $hasPending) {
                         // มีผลงวดนี้แต่ยังมี pending = กำลังประมวลผล
                         $statusClass = 'status-processing'; $statusLabel = '<i class="fas fa-spinner fa-spin mr-1"></i> กำลังประมวลผล';
-                    } elseif ($pastCloseTime && !$hasResultForRound && $lastResultAgeDays > 3) {
-                        // ผลเก่ากว่า 3 วัน + เลย close_time = งดออกผล (วันหยุดยาว)
+                    } elseif ($pastCloseTime && !$hasResultForRound && $isResultStale) {
+                        // ผลเก่ากว่าที่ควร + เลย close_time = งดออกผล
                         $statusClass = 'status-suspended'; $statusLabel = 'งดออกผล';
                     } elseif ($pastCloseTime && !$hasResultForRound && $hoursPastClose > 2) {
-                        // เลยเวลา > 2 ชม. ยังไม่มีผลงวดนี้ = งดออกผล
-                        $statusClass = 'status-suspended'; $statusLabel = 'งดออกผล';
+                        // เลยเวลา > 2 ชม. ยังไม่มีผลงวดนี้ = กำลังประมวลผล
+                        $statusClass = 'status-processing'; $statusLabel = '<i class="fas fa-spinner fa-spin mr-1"></i> กำลังประมวลผล';
                     } elseif ($pastCloseTime && !$hasResultForRound) {
                         // เลยเวลา ≤ 2 ชม. = กำลังประมวลผล
                         $statusClass = 'status-processing'; $statusLabel = '<i class="fas fa-spinner fa-spin mr-1"></i> กำลังประมวลผล';
