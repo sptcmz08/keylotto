@@ -592,7 +592,7 @@ require_once 'includes/header.php';
                             <input type="text" id="numInput" class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:border-blue-500 outline-none h-[40px]" placeholder="12 21 31 54...">
                         </div>
                         <div class="col-span-12 sm:col-span-1 flex items-end">
-                            <button onclick="reverseNumber()" class="w-full bg-[#ffca28] text-yellow-900 py-2 rounded text-[13px] font-bold hover:bg-yellow-400 transition h-[40px]">กลับเลข</button>
+                            <button onclick="toggleReverse()" id="btn-reverse" class="w-full bg-[#ffca28] text-yellow-900 py-2 rounded text-[13px] font-bold hover:bg-yellow-400 transition h-[40px]">กลับเลข</button>
                         </div>
                         <div class="col-span-6 sm:col-span-3">
                             <label class="text-[11px] text-gray-500 block mb-0.5 text-center">บน</label>
@@ -894,6 +894,7 @@ function showBlockedToast(msg, type) {
 }
 
 let currentBetType = '2';
+let reverseMode = false;
 let betGroups = [];
 let selectedNums = [];
 let classicBetGroups = [];
@@ -1012,9 +1013,19 @@ function addSingleNumber(val) {
     const type = currentBetType;
     if (type === '2' && /^\d{2}$/.test(val)) {
         selectedNums.push(val);
+        // กลับเลขอัตโนมัติ
+        if (reverseMode) {
+            const rev = val.split('').reverse().join('');
+            if (rev !== val) selectedNums.push(rev);
+        }
         return true;
     } else if (type === '3' && /^\d{3}$/.test(val)) {
         selectedNums.push(val);
+        // กลับเลขอัตโนมัติ
+        if (reverseMode) {
+            const rev = val.split('').reverse().join('');
+            if (rev !== val) selectedNums.push(rev);
+        }
         return true;
     } else if (type === '6' && /^\d{3}$/.test(val)) {
         const perms = getPermutations(val);
@@ -1029,6 +1040,23 @@ function addSingleNumber(val) {
         return true;
     }
     return false;
+}
+
+// ==========================================
+// กลับเลข Toggle Mode
+// ==========================================
+function toggleReverse() {
+    reverseMode = !reverseMode;
+    const btn = document.getElementById('btn-reverse');
+    if (reverseMode) {
+        btn.className = 'w-full bg-[#2e7d32] text-white py-2 rounded text-[13px] font-bold hover:bg-green-700 transition h-[40px] ring-2 ring-green-400';
+        btn.innerHTML = '<i class="fas fa-check mr-1"></i>กลับเลข';
+        Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'เปิดกลับเลขอัตโนมัติ', showConfirmButton: false, timer: 1500 });
+    } else {
+        btn.className = 'w-full bg-[#ffca28] text-yellow-900 py-2 rounded text-[13px] font-bold hover:bg-yellow-400 transition h-[40px]';
+        btn.innerHTML = 'กลับเลข';
+        Swal.fire({ toast: true, position: 'top-end', icon: 'info', title: 'ปิดกลับเลขอัตโนมัติ', showConfirmButton: false, timer: 1500 });
+    }
 }
 
 function handleNumInput(e) {
@@ -1123,27 +1151,6 @@ function addDoubleBet() {
     }
 }
 
-// ==========================================
-// กลับเลข: สลับตัวเลขทุกตัวที่เลือกไว้ เช่น 21→12, 456→654
-// ==========================================
-function reverseNumber() {
-    if (selectedNums.length === 0) {
-        Swal.fire({ icon: 'info', title: 'กลับเลข', text: 'ยังไม่มีเลขที่เลือก กรุณาเพิ่มเลขก่อน', confirmButtonColor: '#2e7d32' });
-        return;
-    }
-    const reversed = [];
-    selectedNums.forEach(num => {
-        reversed.push(num);
-        const rev = num.split('').reverse().join('');
-        if (rev !== num) {
-            reversed.push(rev);
-        }
-    });
-    selectedNums = reversed;
-    renderSelectedNumbers();
-    saveState();
-    Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'กลับเลขเรียบร้อย', showConfirmButton: false, timer: 1500 });
-}
 
 // ==========================================
 // Render Selected Numbers (red badges)
@@ -1168,13 +1175,7 @@ function removeSelectedNum(index) {
     saveState();
 }
 
-// ==========================================
-// Reverse Number
-// ==========================================
-function reverseNumber() {
-    const input = document.getElementById('numInput');
-    input.value = input.value.split('').reverse().join('');
-}
+// (reverseNumber removed - replaced by toggleReverse)
 
 // ==========================================
 // Add Bet Item (Quick Mode) - uses selectedNums if available
