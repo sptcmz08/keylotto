@@ -1418,9 +1418,46 @@ function clearAllBets() {
 }
 
 function clearDuplicates() {
-    betGroups.forEach(g => { g.numbers = [...new Set(g.numbers)]; });
+    let dupes = [];
+    
+    // ลบซ้ำจาก selectedNums (เลขที่เลือกไว้ด้านบน)
+    if (selectedNums.length > 0) {
+        const seen = new Set();
+        const unique = [];
+        selectedNums.forEach(n => {
+            if (seen.has(n)) {
+                if (!dupes.includes(n)) dupes.push(n);
+            } else {
+                seen.add(n);
+                unique.push(n);
+            }
+        });
+        selectedNums = unique;
+        renderSelectedNumbers();
+        saveState();
+    }
+    
+    // ลบซ้ำจาก betGroups (ตารางรายการแทง)
+    betGroups.forEach(g => {
+        const seen = new Set();
+        const unique = [];
+        g.numbers.forEach(n => {
+            if (seen.has(n)) {
+                if (!dupes.includes(n)) dupes.push(n);
+            } else {
+                seen.add(n);
+                unique.push(n);
+            }
+        });
+        g.numbers = unique;
+    });
     renderBetItems();
-    Swal.fire({ icon: 'success', title: 'ลบเลขซ้ำแล้ว', timer: 1200, showConfirmButton: false });
+    
+    if (dupes.length > 0) {
+        Swal.fire({ icon: 'success', title: 'ลบเลขซ้ำแล้ว', html: '<b>เลขที่ซ้ำ:</b> ' + dupes.join(', '), confirmButtonColor: '#2e7d32', confirmButtonText: 'ตกลง' });
+    } else {
+        Swal.fire({ icon: 'info', title: 'ไม่มีเลขซ้ำ', timer: 1500, showConfirmButton: false });
+    }
 }
 
 function removeBetGroup(id) { betGroups = betGroups.filter(g => g.id !== id); renderBetItems(); }
