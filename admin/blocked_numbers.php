@@ -202,10 +202,11 @@ require_once 'includes/header.php';
                     <td class="px-3 py-2 font-bold text-lg font-mono text-gray-800"><?= htmlspecialchars($bn['number']) ?></td>
                     <td class="px-3 py-2 text-xs"><?= htmlspecialchars($bn['lottery_name']) ?></td>
                     <td class="px-3 py-2 text-xs"><?= $betTypeLabels[$bn['bet_type']] ?? $bn['bet_type'] ?></td>
-                    <td class="px-3 py-2 text-center">
-                        <span class="px-2 py-0.5 rounded-full text-[10px] font-medium <?= $bn['is_blocked'] ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700' ?>">
-                            <?= $bn['is_blocked'] ? '🚫 ปิดรับ' : '½ จ่ายครึ่ง' ?>
-                        </span>
+                    <td class="px-3 py-2 text-center whitespace-nowrap">
+                        <div class="inline-flex rounded-lg overflow-hidden border border-gray-200">
+                            <button onclick="quickToggle(<?= $bn['id'] ?>, 0)" class="px-2.5 py-1 text-[11px] font-medium transition <?= !$bn['is_blocked'] ? 'bg-orange-500 text-white' : 'bg-white text-gray-400 hover:bg-orange-50 hover:text-orange-600' ?>">½ จ่ายครึ่ง</button>
+                            <button onclick="quickToggle(<?= $bn['id'] ?>, 1)" class="px-2.5 py-1 text-[11px] font-medium transition <?= $bn['is_blocked'] ? 'bg-red-500 text-white' : 'bg-white text-gray-400 hover:bg-red-50 hover:text-red-600' ?>">🚫 ห้ามแทง</button>
+                        </div>
                     </td>
                     <td class="px-3 py-2 text-center whitespace-nowrap">
                         <button onclick="editBlocked(<?= $bn['id'] ?>, '<?= htmlspecialchars($bn['number']) ?>', <?= $bn['is_blocked'] ?>)" class="text-blue-500 hover:text-blue-700 mr-2" title="แก้ไข"><i class="fas fa-edit"></i></button>
@@ -242,6 +243,18 @@ function updateSelectAll() {
 }
 
 document.querySelectorAll('.lottery-cb').forEach(cb => cb.addEventListener('change', updateSelectAll));
+
+function quickToggle(id, isBlocked) {
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.innerHTML = `
+        <input type="hidden" name="form_action" value="update">
+        <input type="hidden" name="id" value="${id}">
+        <input type="hidden" name="is_blocked" value="${isBlocked}">
+    `;
+    document.body.appendChild(form);
+    form.submit();
+}
 
 function editBlocked(id, number, isBlocked) {
     Swal.fire({
