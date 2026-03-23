@@ -381,16 +381,16 @@ if (!$lotteryId) {
         return String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
     }
 
-    // เช็คตี 2 → reload หน้าใหม่ เพื่อรีเซ็ตงวด (ไม่ใช้เที่ยงคืน เพราะดาวโจนส์ยังไม่ปิดรับ)
+    // เช็คตี 4 → reload หน้าใหม่ เพื่อรีเซ็ตงวด (หลังหุ้นดาวโจนส์ปิด 03:30)
     let hasReloaded = false;
     function checkReset() {
         const now = new Date();
         const hour = now.getHours();
-        if (hour === 2 && !hasReloaded) {
+        if (hour === 4 && !hasReloaded) {
             hasReloaded = true;
             location.reload();
         }
-        if (hour !== 2) hasReloaded = false;
+        if (hour !== 4) hasReloaded = false;
     }
 
     // อัพเดททุก 1 วินาที
