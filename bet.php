@@ -294,22 +294,13 @@ if (!$lotteryId) {
             return { status: 'closed', label: 'ปิดรับแล้ว', hide: false };
         }
         
-        // เลย 10 นาทีแล้ว → ซ่อน (จนกว่าจะถึงรอบใหม่)
-        // เช็คว่าเป็นรอบใหม่หรือยัง (เวลาเปิดรอบถัดไป)
-        if (openTime) {
-            // คำนวณ openTime ถัดไป (พรุ่งนี้)
-            const nextOpen = new Date(openTime);
-            if (nextOpen <= now) nextOpen.setDate(nextOpen.getDate() + 1);
-            
-            // ถ้าใกล้เปิด (10 นาทีก่อนเปิด) → แสดงสีเหลือง
-            const msBeforeOpen = nextOpen - now;
-            const minBeforeOpen = msBeforeOpen / 60000;
-            if (minBeforeOpen <= 10) {
-                const diff = nextOpen - now;
-                return { status: 'waiting', label: 'เปิดในอีก ' + formatDiff(diff), hide: false };
-            }
+        // เลย 10 นาทีแล้ว → เช็คว่าผ่านไป 1 ชม.หลังปิดรับหรือยัง
+        if (minPastClose >= 60) {
+            // ผ่านไป 1 ชม.แล้ว → แสดงสีเหลือง (เปิดรับงวดใหม่)
+            return { status: 'waiting', label: 'รอเปิดรอบใหม่', hide: false };
         }
         
+        // ยังไม่ถึง 1 ชม. → ซ่อน
         return { status: 'waiting', label: 'รอเปิดรอบใหม่', hide: true };
     }
 
