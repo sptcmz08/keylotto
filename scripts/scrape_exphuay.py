@@ -184,41 +184,69 @@ def scrape_result_page(target_date, debug=False):
             print(f'[ExpHuay] ❌ Failed to fetch /result page', file=sys.stderr)
         return []
     
-    results = []
+    if debug:
+        # Show a sample of what we're working with
+        sample_pos = html.find('/result/set')
+        if sample_pos >= 0:
+            print(f'[ExpHuay]   Sample HTML around /result/set:', file=sys.stderr)
+            print(f'[ExpHuay]   {html[sample_pos:sample_pos+300]}', file=sys.stderr)
     
-    # Pattern: /result/SLUG followed by numbers like >534< >65<
-    # or in text: /result/SLUG) 534 65
-    # HTML format: <a href="/result/set">...</a> ... <span>534</span> ... <span>65</span>
+    results = []
+    found_slugs = set()
     
     for exp_slug, key_slug in EXPHUAY_LOTTERIES.items():
-        # Find the result link for this slug
         slug_pattern = f'/result/{exp_slug}'
-        pos = html.find(slug_pattern)
-        if pos == -1:
-            continue
         
-        # Get a chunk after the slug reference
-        chunk = html[pos:pos + 500]
-        
-        # Look for 3-digit and 2-digit numbers
-        numbers = re.findall(r'>(\d{2,3})<', chunk)
+        # Find ALL occurrences of the slug
         three_top = None
         two_bot = None
+        search_start = 0
         
-        for n in numbers:
-            if len(n) == 3 and three_top is None:
-                three_top = n
-            elif len(n) == 2 and two_bot is None and three_top is not None:
-                two_bot = n
+        while True:
+            pos = html.find(slug_pattern, search_start)
+            if pos == -1:
+                break
+            
+            # Make sure this is an exact slug match (not a prefix of another slug)
+            end_pos = pos + len(slug_pattern)
+            if end_pos < len(html) and html[end_pos].isalnum():
+                search_start = end_pos
+                continue
+            
+            # Get a larger chunk after the slug reference
+            chunk = html[pos:pos + 1000]
+            
+            # Strategy 1: Numbers in HTML tags >534< >65<
+            numbers = re.findall(r'>(\d{2,3})<', chunk)
+            for n in numbers:
+                if len(n) == 3 and three_top is None:
+                    three_top = n
+                elif len(n) == 2 and two_bot is None and three_top is not None:
+                    two_bot = n
+                if three_top and two_bot:
+                    break
+            
             if three_top and two_bot:
                 break
-        
-        if not three_top or not two_bot:
-            # Try plain text pattern: 534 65
+            
+            # Strategy 2: Numbers after closing tag: </a> 534 65 or </span> 534 65
+            m = re.search(r'</[^>]+>\s*(\d{3})\s+(\d{2})', chunk)
+            if m:
+                three_top = m.group(1)
+                two_bot = m.group(2)
+                break
+            
+            # Strategy 3: Plain text pattern
             m = re.search(r'(\d{3})\s+(\d{2})', chunk)
             if m:
                 three_top = m.group(1)
                 two_bot = m.group(2)
+                break
+            
+            # Reset for next occurrence
+            three_top = None
+            two_bot = None
+            search_start = end_pos
         
         if three_top and two_bot:
             if debug:
@@ -231,6 +259,10 @@ def scrape_result_page(target_date, debug=False):
                 'draw_date': target_date,
                 'source': 'exphuay.com',
             })
+            found_slugs.add(exp_slug)
+        else:
+            if debug and html.find(slug_pattern) >= 0:
+                print(f'[ExpHuay]   ⚠️ {exp_slug} found in HTML but no numbers', file=sys.stderr)
     
     if debug:
         print(f'[ExpHuay] 📊 /result page: {len(results)} results found', file=sys.stderr)
