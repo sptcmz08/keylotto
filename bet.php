@@ -1026,10 +1026,10 @@ function setBetType(type) {
 function addSingleNumber(val) {
     const type = currentBetType;
     if (type === '2' && /^\d{2}$/.test(val)) {
-        if (!selectedNums.includes(val)) selectedNums.push(val);
+        selectedNums.push(val);
         return true;
     } else if (type === '3' && /^\d{3}$/.test(val)) {
-        if (!selectedNums.includes(val)) selectedNums.push(val);
+        selectedNums.push(val);
         return true;
     } else if (type === '6' && /^\d{3}$/.test(val)) {
         const perms = getPermutations(val);
@@ -1136,6 +1136,28 @@ function addDoubleBet() {
     } else {
         Swal.fire({ icon: 'info', title: 'เลขเบิ้ล', text: 'กรุณาเลือกโหมด 2 ตัว หรือ 3 ตัว', confirmButtonColor: '#2e7d32' });
     }
+}
+
+// ==========================================
+// กลับเลข: สลับตัวเลขทุกตัวที่เลือกไว้ เช่น 21→12, 456→654
+// ==========================================
+function reverseNumber() {
+    if (selectedNums.length === 0) {
+        Swal.fire({ icon: 'info', title: 'กลับเลข', text: 'ยังไม่มีเลขที่เลือก กรุณาเพิ่มเลขก่อน', confirmButtonColor: '#2e7d32' });
+        return;
+    }
+    const reversed = [];
+    selectedNums.forEach(num => {
+        reversed.push(num);
+        const rev = num.split('').reverse().join('');
+        if (rev !== num) {
+            reversed.push(rev);
+        }
+    });
+    selectedNums = reversed;
+    renderSelectedNumbers();
+    saveState();
+    Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'กลับเลขเรียบร้อย', showConfirmButton: false, timer: 1500 });
 }
 
 // ==========================================
