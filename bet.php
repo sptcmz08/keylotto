@@ -445,10 +445,28 @@ try {
         $overLimitSettings[$k] = floatval($s['setting_value']);
     }
 } catch (Exception $e) {}
-// Group by type: 3d, 2d, run
-$blocked3d = array_filter($blockedNumbers, fn($b) => in_array($b['bet_type'], ['3top','3tod']));
-$blocked2d = array_filter($blockedNumbers, fn($b) => in_array($b['bet_type'], ['2top','2bot']));
-$blockedRun = array_filter($blockedNumbers, fn($b) => in_array($b['bet_type'], ['run_top','run_bot']));
+// Group by type and merge same numbers into one row
+$blocked3dMap = [];
+$blocked2dMap = [];
+$blockedRunMap = [];
+foreach ($blockedNumbers as $bn) {
+    $num = $bn['number'];
+    $bt = $bn['bet_type'];
+    $blocked = $bn['is_blocked'];
+    if (in_array($bt, ['3top','3tod'])) {
+        if (!isset($blocked3dMap[$num])) $blocked3dMap[$num] = ['number' => $num, '3top' => null, '3tod' => null];
+        $blocked3dMap[$num][$bt] = $blocked;
+    } elseif (in_array($bt, ['2top','2bot'])) {
+        if (!isset($blocked2dMap[$num])) $blocked2dMap[$num] = ['number' => $num, '2top' => null, '2bot' => null];
+        $blocked2dMap[$num][$bt] = $blocked;
+    } elseif (in_array($bt, ['run_top','run_bot'])) {
+        if (!isset($blockedRunMap[$num])) $blockedRunMap[$num] = ['number' => $num, 'run_top' => null, 'run_bot' => null];
+        $blockedRunMap[$num][$bt] = $blocked;
+    }
+}
+$blocked3d = array_values($blocked3dMap);
+$blocked2d = array_values($blocked2dMap);
+$blockedRun = array_values($blockedRunMap);
 
 $flagUrl = getFlagForCountry($lottery['flag_emoji'], $lottery['name']);
 $drawDate = $lottery['draw_date'] ? formatDateDisplay($lottery['draw_date']) : date('d-m-Y');
@@ -711,8 +729,8 @@ require_once 'includes/header.php';
                         <?php else: foreach ($blocked3d as $bn): ?>
                         <tr class="hover:bg-red-50">
                             <td class="px-2 py-1.5 border border-gray-300 font-bold font-mono"><?= htmlspecialchars($bn['number']) ?></td>
-                            <td class="px-2 py-1.5 border border-gray-300 <?= $bn['is_blocked'] ? 'text-red-600 font-bold' : 'text-orange-600' ?>"><?= $bn['is_blocked'] ? 'ปิดรับ' : 'จ่ายครึ่ง' ?></td>
-                            <td class="px-2 py-1.5 border border-gray-300">-</td>
+                            <td class="px-2 py-1.5 border border-gray-300 <?= $bn['3top'] !== null ? ($bn['3top'] ? 'text-red-600 font-bold' : 'text-orange-600') : '' ?>"><?= $bn['3top'] !== null ? ($bn['3top'] ? 'ปิดรับ' : 'จ่ายครึ่ง') : '-' ?></td>
+                            <td class="px-2 py-1.5 border border-gray-300 <?= $bn['3tod'] !== null ? ($bn['3tod'] ? 'text-red-600 font-bold' : 'text-orange-600') : '' ?>"><?= $bn['3tod'] !== null ? ($bn['3tod'] ? 'ปิดรับ' : 'จ่ายครึ่ง') : '-' ?></td>
                         </tr>
                         <?php endforeach; endif; ?>
                     </tbody>
@@ -736,12 +754,8 @@ require_once 'includes/header.php';
                         <?php else: foreach ($blocked2d as $bn): ?>
                         <tr class="hover:bg-red-50">
                             <td class="px-2 py-1.5 border border-gray-300 font-bold font-mono"><?= htmlspecialchars($bn['number']) ?></td>
-                            <td class="px-2 py-1.5 border border-gray-300 <?= ($bn['bet_type']=='2top') ? ($bn['is_blocked'] ? 'text-red-600 font-bold' : 'text-orange-600') : '' ?>">
-                                <?= ($bn['bet_type']=='2top') ? ($bn['is_blocked'] ? 'ปิดรับ' : 'จ่ายครึ่ง') : '-' ?>
-                            </td>
-                            <td class="px-2 py-1.5 border border-gray-300 <?= ($bn['bet_type']=='2bot') ? ($bn['is_blocked'] ? 'text-red-600 font-bold' : 'text-orange-600') : '' ?>">
-                                <?= ($bn['bet_type']=='2bot') ? ($bn['is_blocked'] ? 'ปิดรับ' : 'จ่ายครึ่ง') : '-' ?>
-                            </td>
+                            <td class="px-2 py-1.5 border border-gray-300 <?= $bn['2top'] !== null ? ($bn['2top'] ? 'text-red-600 font-bold' : 'text-orange-600') : '' ?>"><?= $bn['2top'] !== null ? ($bn['2top'] ? 'ปิดรับ' : 'จ่ายครึ่ง') : '-' ?></td>
+                            <td class="px-2 py-1.5 border border-gray-300 <?= $bn['2bot'] !== null ? ($bn['2bot'] ? 'text-red-600 font-bold' : 'text-orange-600') : '' ?>"><?= $bn['2bot'] !== null ? ($bn['2bot'] ? 'ปิดรับ' : 'จ่ายครึ่ง') : '-' ?></td>
                         </tr>
                         <?php endforeach; endif; ?>
                     </tbody>
@@ -765,12 +779,8 @@ require_once 'includes/header.php';
                         <?php else: foreach ($blockedRun as $bn): ?>
                         <tr class="hover:bg-red-50">
                             <td class="px-2 py-1.5 border border-gray-300 font-bold font-mono"><?= htmlspecialchars($bn['number']) ?></td>
-                            <td class="px-2 py-1.5 border border-gray-300 <?= ($bn['bet_type']=='run_top') ? ($bn['is_blocked'] ? 'text-red-600 font-bold' : 'text-orange-600') : '' ?>">
-                                <?= ($bn['bet_type']=='run_top') ? ($bn['is_blocked'] ? 'ปิดรับ' : 'จ่ายครึ่ง') : '-' ?>
-                            </td>
-                            <td class="px-2 py-1.5 border border-gray-300 <?= ($bn['bet_type']=='run_bot') ? ($bn['is_blocked'] ? 'text-red-600 font-bold' : 'text-orange-600') : '' ?>">
-                                <?= ($bn['bet_type']=='run_bot') ? ($bn['is_blocked'] ? 'ปิดรับ' : 'จ่ายครึ่ง') : '-' ?>
-                            </td>
+                            <td class="px-2 py-1.5 border border-gray-300 <?= $bn['run_top'] !== null ? ($bn['run_top'] ? 'text-red-600 font-bold' : 'text-orange-600') : '' ?>"><?= $bn['run_top'] !== null ? ($bn['run_top'] ? 'ปิดรับ' : 'จ่ายครึ่ง') : '-' ?></td>
+                            <td class="px-2 py-1.5 border border-gray-300 <?= $bn['run_bot'] !== null ? ($bn['run_bot'] ? 'text-red-600 font-bold' : 'text-orange-600') : '' ?>"><?= $bn['run_bot'] !== null ? ($bn['run_bot'] ? 'ปิดรับ' : 'จ่ายครึ่ง') : '-' ?></td>
                         </tr>
                         <?php endforeach; endif; ?>
                     </tbody>
