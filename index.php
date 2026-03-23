@@ -491,5 +491,28 @@ require_once 'includes/header.php';
     </div>
 </div>
 
+<script>
+// Auto-refresh ทุก 30 วินาที เพื่ออัพเดทสถานะ real-time
+// จะ refresh เฉพาะตอนที่ tab เปิดอยู่
+let refreshInterval;
+function startAutoRefresh() {
+    refreshInterval = setInterval(() => {
+        if (!document.hidden) {
+            location.reload();
+        }
+    }, 30000); // 30 วินาที
+}
+startAutoRefresh();
+
+// หยุด refresh เมื่อ tab ไม่ได้ focus
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+        clearInterval(refreshInterval);
+    } else {
+        startAutoRefresh();
+    }
+});
+</script>
+
 <?php require_once 'includes/footer.php'; ?>
 
