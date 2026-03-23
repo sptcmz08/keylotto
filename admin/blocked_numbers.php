@@ -14,28 +14,55 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $lotteryIds = $_POST['lottery_ids'] ?? [];
         $numbers = preg_split('/[\s,]+/', trim($_POST['numbers'] ?? ''));
         $betType = $_POST['bet_type'] ?? '2top';
-        $blockType = $_POST['block_type'] ?? 'half'; // 'half' = จ่ายครึ่ง, 'block' = ปิดรับ
+        $blockType = $_POST['block_type'] ?? 'half';
         
         $isBlocked = ($blockType === 'block') ? 1 : 0;
+        $statusLabel = $isBlocked ? '🚫 ปิดรับ' : '½ จ่ายครึ่ง';
         
         if (empty($lotteryIds)) {
             $msg = 'กรุณาเลือกหวยอย่างน้อย 1 รายการ';
             $msgType = 'error';
         } else {
-            $stmt = $pdo->prepare("INSERT INTO blocked_numbers (lottery_type_id, number, bet_type, custom_pay_rate, is_blocked) VALUES (?, ?, ?, NULL, ?) ON DUPLICATE KEY UPDATE is_blocked = VALUES(is_blocked), custom_pay_rate = NULL");
-            $count = 0;
+            $checkStmt = $pdo->prepare("SELECT id, is_blocked FROM blocked_numbers WHERE lottery_type_id = ? AND number = ? AND bet_type = ?");
+            $insertStmt = $pdo->prepare("INSERT INTO blocked_numbers (lottery_type_id, number, bet_type, custom_pay_rate, is_blocked) VALUES (?, ?, ?, NULL, ?)");
+            $updateStmt = $pdo->prepare("UPDATE blocked_numbers SET is_blocked = ?, custom_pay_rate = NULL WHERE id = ?");
+            
+            $newCount = 0;
+            $updatedCount = 0;
+            $dupeNums = [];
+            
             foreach ($lotteryIds as $lid) {
                 $lid = intval($lid);
                 foreach ($numbers as $num) {
                     $num = trim($num);
-                    if ($num !== '' && $lid > 0) {
-                        $stmt->execute([$lid, $num, $betType, $isBlocked]);
-                        $count++;
+                    if ($num === '' || $lid <= 0) continue;
+                    
+                    $checkStmt->execute([$lid, $num, $betType]);
+                    $existing = $checkStmt->fetch();
+                    
+                    if ($existing) {
+                        if ($existing['is_blocked'] == $isBlocked) {
+                            // เลขซ้ำ สถานะเดิม
+                            if (!in_array($num, $dupeNums)) $dupeNums[] = $num;
+                        } else {
+                            // เลขซ้ำ แต่เปลี่ยนสถานะ
+                            $updateStmt->execute([$isBlocked, $existing['id']]);
+                            $updatedCount++;
+                        }
+                    } else {
+                        $insertStmt->execute([$lid, $num, $betType, $isBlocked]);
+                        $newCount++;
                     }
                 }
             }
-            $msg = ($isBlocked ? '🚫 ปิดรับ' : '½ จ่ายครึ่ง') . " {$count} รายการ (" . count($lotteryIds) . " หวย)";
-            $msgType = 'success';
+            
+            $parts = [];
+            if ($newCount > 0) $parts[] = "✅ เพิ่มใหม่ {$newCount} รายการ ({$statusLabel})";
+            if ($updatedCount > 0) $parts[] = "🔄 อัพเดทสถานะ {$updatedCount} รายการ → {$statusLabel}";
+            if (!empty($dupeNums)) $parts[] = "⚠️ เลขซ้ำ (มีอยู่แล้ว): " . implode(', ', $dupeNums);
+            
+            $msg = implode(' | ', $parts);
+            $msgType = (!empty($dupeNums) && $newCount === 0 && $updatedCount === 0) ? 'error' : 'success';
         }
     } elseif ($action === 'delete') {
         $id = intval($_POST['id']);
