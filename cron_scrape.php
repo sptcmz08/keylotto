@@ -362,8 +362,19 @@ function processResults($pdo, $results, $source) {
             continue;
         }
 
-        // INSERT new result
+        // INSERT new result — but first check for duplicate from previous day
+        // (ป้องกัน scraper ดึก save ผลเดิมเป็นวันใหม่)
         try {
+            $stmtDup = $pdo->prepare("SELECT three_top, two_bot FROM results WHERE lottery_type_id = ? AND draw_date = DATE_SUB(?, INTERVAL 1 DAY) LIMIT 1");
+            $stmtDup->execute([$lotteryTypeId, $drawDate]);
+            $prevResult = $stmtDup->fetch();
+            
+            if ($prevResult && $prevResult['three_top'] === $threeTop && $prevResult['two_bot'] === $twoBot) {
+                echo "⚠️  {$keyLotteryName}: เลขซ้ำกับวันก่อน ({$threeTop}/{$twoBot}) → ข้าม (ผลเก่า)\n";
+                $skippedCount++;
+                continue;
+            }
+            
             $stmt = $pdo->prepare("
                 INSERT INTO results (lottery_type_id, draw_date, three_top, two_top, two_bot, run_top, run_bot)
                 VALUES (?, ?, ?, ?, ?, ?, ?)

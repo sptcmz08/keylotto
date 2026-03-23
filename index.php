@@ -373,10 +373,23 @@ require_once 'includes/header.php';
                     $hasPaid = isset($paidBets[$betKey]) && $paidBets[$betKey] > 0;
                     $isBetClosed = !empty($lt['bet_closed']);
                     
-                    // สร้าง close_time เป็น full datetime ของวันนี้
-                    $closeTime = !empty($lt['close_time']) ? strtotime(date('Y-m-d') . ' ' . $lt['close_time']) : null;
-                    $pastCloseTime = $closeTime && $now > $closeTime;
-                    $hoursPastClose = $closeTime ? ($now - $closeTime) / 3600 : 0;
+                    // สร้าง close_time เป็น full datetime
+                    // ถ้า close_time < open_time → หมายถึงข้ามเที่ยงคืน (เช่น DJ VIP close 00:15)
+                    $closeTime = null;
+                    $pastCloseTime = false;
+                    $hoursPastClose = 0;
+                    if (!empty($lt['close_time'])) {
+                        $closeTime = strtotime(date('Y-m-d') . ' ' . $lt['close_time']);
+                        $openTimeToday = strtotime(date('Y-m-d') . ' ' . ($lt['open_time'] ?? '06:00:00'));
+                        
+                        // ถ้า close_time < open_time → ข้ามเที่ยงคืน → บวก 1 วัน
+                        if ($closeTime < $openTimeToday) {
+                            $closeTime += 86400; // +24 ชม.
+                        }
+                        
+                        $pastCloseTime = $now > $closeTime;
+                        $hoursPastClose = ($now - $closeTime) / 3600;
+                    }
                     
                     // ผลล่าสุดเก่าแค่ไหน
                     $resultDate = $lt['result_date'] ?? null;
