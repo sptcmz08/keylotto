@@ -810,8 +810,9 @@ function scrapeExphuay($pdo) {
 }
 
 // =============================================
-// Main
+// Main (only runs when called directly, not via require)
 // =============================================
+if (basename(__FILE__) === basename($_SERVER['SCRIPT_FILENAME'] ?? $_SERVER['argv'][0] ?? '')) {
 $scraper = $argv[1] ?? 'all';
 $startTime = microtime(true);
 
@@ -878,3 +879,4 @@ echo "\n════════════════════════
 echo "⏱️  เสร็จใน {$elapsed} วินาที\n";
 echo "═══════════════════════════════════════\n";
 
+} // end if (main guard)
