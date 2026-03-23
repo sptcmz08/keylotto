@@ -399,8 +399,10 @@ require_once 'includes/header.php';
                     $pastCloseTime = false;
                     $hoursPastClose = 0;
                     
-                    $openTimeStr = $roundDate . ' ' . ($lt['open_time'] ?? '06:00:00');
+                    $openTimeStr = $roundDate . ' ' . ($lt['open_time'] ?? '05:00:00');
                     $openTimeForRound = strtotime($openTimeStr);
+                    $closeTimeStr = $roundDate . ' ' . ($lt['close_time'] ?? '18:00:00');
+                    $resultTimeStr = $roundDate . ' ' . ($lt['result_time'] ?? '18:30:00');
                     
                     if (!empty($lt['close_time'])) {
                         $closeTime = strtotime($roundDate . ' ' . $lt['close_time']);
