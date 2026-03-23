@@ -166,13 +166,101 @@ def parse_backward_page(html, target_date, exphuay_slug, key_slug, debug=False):
 
     return None
 
+# Reverse mapping: URL slug → key_slug (for /result page parsing)
+RESULT_SLUG_TO_KEY = {}
+for exp_slug, key_slug in EXPHUAY_LOTTERIES.items():
+    RESULT_SLUG_TO_KEY[exp_slug] = key_slug
+
+
+def scrape_result_page(target_date, debug=False):
+    """Scrape from /result page — gets ALL today's results in one request"""
+    url = 'https://exphuay.com/result'
+    if debug:
+        print(f'[ExpHuay] 🌐 Fetching /result page...', file=sys.stderr)
+    
+    html = fetch_page(url, debug)
+    if not html:
+        if debug:
+            print(f'[ExpHuay] ❌ Failed to fetch /result page', file=sys.stderr)
+        return []
+    
+    results = []
+    
+    # Pattern: /result/SLUG followed by numbers like >534< >65<
+    # or in text: /result/SLUG) 534 65
+    # HTML format: <a href="/result/set">...</a> ... <span>534</span> ... <span>65</span>
+    
+    for exp_slug, key_slug in EXPHUAY_LOTTERIES.items():
+        # Find the result link for this slug
+        slug_pattern = f'/result/{exp_slug}'
+        pos = html.find(slug_pattern)
+        if pos == -1:
+            continue
+        
+        # Get a chunk after the slug reference
+        chunk = html[pos:pos + 500]
+        
+        # Look for 3-digit and 2-digit numbers
+        numbers = re.findall(r'>(\d{2,3})<', chunk)
+        three_top = None
+        two_bot = None
+        
+        for n in numbers:
+            if len(n) == 3 and three_top is None:
+                three_top = n
+            elif len(n) == 2 and two_bot is None and three_top is not None:
+                two_bot = n
+            if three_top and two_bot:
+                break
+        
+        if not three_top or not two_bot:
+            # Try plain text pattern: 534 65
+            m = re.search(r'(\d{3})\s+(\d{2})', chunk)
+            if m:
+                three_top = m.group(1)
+                two_bot = m.group(2)
+        
+        if three_top and two_bot:
+            if debug:
+                print(f'[ExpHuay]   ✅ {exp_slug} → {three_top}/{two_bot}', file=sys.stderr)
+            results.append({
+                'slug': key_slug,
+                'three_top': three_top,
+                'two_top': three_top[-2:],
+                'two_bottom': two_bot,
+                'draw_date': target_date,
+                'source': 'exphuay.com',
+            })
+    
+    if debug:
+        print(f'[ExpHuay] 📊 /result page: {len(results)} results found', file=sys.stderr)
+    
+    return results
+
 
 def scrape_exphuay(target_date=None, debug=False):
     """Main scraper — fetch all lotteries from ExpHuay"""
     if not target_date:
         target_date = date.today().strftime('%Y-%m-%d')
 
+    today = date.today().strftime('%Y-%m-%d')
     results = []
+    
+    # === Strategy 1: /result page (fast, 1 request, today only) ===
+    if target_date == today:
+        results = scrape_result_page(target_date, debug)
+        if results:
+            return {
+                'success': True,
+                'results': results,
+                'total': len(results),
+                'scraped_at': datetime.now().isoformat(),
+                'source': 'exphuay.com/result',
+            }
+        if debug:
+            print(f'[ExpHuay] ⚠️ /result page returned 0 results, trying backward pages...', file=sys.stderr)
+    
+    # === Strategy 2: backward pages (slower, 55 requests, any date) ===
     skipped = 0
     failed = 0
 
@@ -220,3 +308,4 @@ if __name__ == '__main__':
 
     result = scrape_exphuay(target_date=args.date, debug=args.debug)
     print(json.dumps(result, ensure_ascii=False))
+
