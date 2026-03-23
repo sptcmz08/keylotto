@@ -80,7 +80,7 @@ UPDATE lottery_types SET open_time='06:00:00', close_time='22:45:00', result_tim
 UPDATE lottery_types SET open_time='06:00:00', close_time='22:45:00', result_time='23:00:00' WHERE name='หุ้นรัสเซีย';
 UPDATE lottery_types SET open_time='06:00:00', close_time='23:45:00', result_time='00:10:00' WHERE name='ดาวโจนส์อเมริกา';
 UPDATE lottery_types SET open_time='06:00:00', close_time='01:00:00', result_time='01:30:00' WHERE name='ดาวโจนส์ STAR';
-UPDATE lottery_types SET open_time='06:00:00', close_time='02:50:00', result_time='03:20:00' WHERE name='หุ้นดาวโจนส์';
+UPDATE lottery_types SET open_time='06:00:00', close_time='02:50:00', result_time='03:20:00', draw_schedule='mon,tue,wed,thu,fri' WHERE name='หุ้นดาวโจนส์';
 UPDATE lottery_types SET open_time='06:00:00', close_time='14:45:00', result_time='15:00:00' WHERE name='หวย 12 ราศี';
 
 -- =============================================
