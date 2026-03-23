@@ -82,7 +82,7 @@ EXPHUAY_LOTTERIES = {
     'laosvip':          'lao-vip',
     'laosasean':        'lao-asean',
     'laoredcross':      'lao-redcross',
-    'laopattanamidday': 'lao-pattana',
+    # 'laopattanamidday' = ลาวพัฒนาเที่ยง 12:30 (ไม่ใช่ลาวพัฒนาเย็น 20:15)
 
     # === ดาวโจนส์ ===
     'dowjonestar':      'dowjones-star',
