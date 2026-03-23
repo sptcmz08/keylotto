@@ -398,13 +398,18 @@ require_once 'includes/header.php';
                     // ผลล่าสุดเก่าแค่ไหน (เทียบกับ draw schedule)
                     $resultDate = $lt['result_date'] ?? null;
                     $drawSchedule = $lt['draw_schedule'] ?? 'daily';
+                    $currentRoundDate = $lt['current_round_date']; // ใช้ค่าจาก processing loop
+                    
+                    // เช็คว่าวันนี้เป็นวันออกผลหรือไม่
+                    $todayIsDrawDay = true;
+                    if ($drawSchedule !== 'daily') {
+                        $todayDrawDate = getCurrentDrawDate($drawSchedule, $today);
+                        $todayIsDrawDay = ($todayDrawDate === $today);
+                    }
                     
                     // คำนวณงวดก่อนหน้า ตาม draw_schedule
-                    // ถ้าผลล่าสุด >= งวดก่อนหน้า = ปกติ (ยังไม่มีผลงวดนี้)
-                    // ถ้าผลล่าสุด < งวดก่อนหน้า = ขาดหาย (งดออกผล)
                     $prevDrawDate = null;
                     if ($resultDate && $drawSchedule !== 'daily') {
-                        // หาวันก่อน currentRoundDate 1 วัน แล้วหา draw date ล่าสุดก่อนหน้า
                         $prevDay = date('Y-m-d', strtotime($currentRoundDate . ' -1 day'));
                         $prevDrawDate = getCurrentDrawDate($drawSchedule, $prevDay);
                     }
@@ -414,35 +419,34 @@ require_once 'includes/header.php';
                     // - หวยอื่น: ผลเก่ากว่างวดก่อนหน้า
                     $isResultStale = false;
                     if (!$resultDate) {
-                        $isResultStale = true; // ไม่เคยมีผลเลย
+                        $isResultStale = true;
                     } elseif ($drawSchedule === 'daily') {
                         $lastResultAgeDays = (strtotime($today) - strtotime($resultDate)) / 86400;
                         $isResultStale = $lastResultAgeDays > 3;
                     } elseif ($prevDrawDate) {
-                        // เช็คว่าผลล่าสุดเก่ากว่างวดก่อนหน้าหรือเปล่า
                         $isResultStale = $resultDate < $prevDrawDate;
                     }
                     
-                    if ($isBetClosed && !$hasResultForRound) {
-                        // Admin ปิดรับแทง
+                    // === สถานะ ===
+                    if ($hasResultForRound && !$todayIsDrawDay) {
+                        // วันนี้ไม่ใช่วันออกผล + มีผลงวดล่าสุดแล้ว → จ่ายเงินแล้ว
+                        $statusClass = 'status-paid'; $statusLabel = 'จ่ายเงินแล้ว';
+                    } elseif (!$hasResultForRound && !$todayIsDrawDay && $hasAnyResult) {
+                        // วันนี้ไม่ใช่วันออกผล + ไม่มีผลงวดนี้ แต่มีผลเก่า → แสดงผลเก่า + จ่ายแล้ว
+                        $statusClass = 'status-paid'; $statusLabel = 'จ่ายเงินแล้ว';
+                    } elseif ($isBetClosed && !$hasResultForRound) {
                         $statusClass = 'status-closed'; $statusLabel = 'ปิดรับแทง';
                     } elseif ($hasResultForRound && !$hasPending) {
-                        // มีผลงวดนี้ + ไม่มี pending = จ่ายเงินแล้ว
                         $statusClass = 'status-paid'; $statusLabel = 'จ่ายเงินแล้ว';
                     } elseif ($hasResultForRound && $hasPending) {
-                        // มีผลงวดนี้แต่ยังมี pending = กำลังประมวลผล
                         $statusClass = 'status-processing'; $statusLabel = '<i class="fas fa-spinner fa-spin mr-1"></i> กำลังประมวลผล';
                     } elseif ($pastCloseTime && !$hasResultForRound && $isResultStale) {
-                        // ผลเก่ากว่าที่ควร + เลย close_time = งดออกผล
                         $statusClass = 'status-suspended'; $statusLabel = 'งดออกผล';
                     } elseif ($pastCloseTime && !$hasResultForRound && $hoursPastClose > 2) {
-                        // เลยเวลา > 2 ชม. ยังไม่มีผลงวดนี้ = กำลังประมวลผล
                         $statusClass = 'status-processing'; $statusLabel = '<i class="fas fa-spinner fa-spin mr-1"></i> กำลังประมวลผล';
                     } elseif ($pastCloseTime && !$hasResultForRound) {
-                        // เลยเวลา ≤ 2 ชม. = กำลังประมวลผล
                         $statusClass = 'status-processing'; $statusLabel = '<i class="fas fa-spinner fa-spin mr-1"></i> กำลังประมวลผล';
                     } else {
-                        // ยังไม่ถึงเวลาปิดรับ = รอออกผล
                         $statusClass = 'status-waiting'; $statusLabel = 'รอออกผล';
                     }
                 ?>
