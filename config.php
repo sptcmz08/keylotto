@@ -154,3 +154,123 @@ function validateCsrf() {
     $token = $_POST['csrf_token'] ?? '';
     return !empty($token) && hash_equals($_SESSION['csrf_token'] ?? '', $token);
 }
+
+// =============================================
+// Draw Schedule — คำนวณวันที่งวดปัจจุบัน
+// =============================================
+/**
+ * คำนวณวันที่งวดปัจจุบันหรือล่าสุด ตาม draw_schedule
+ * 
+ * @param string $schedule  'daily', '1,16', 'mon,wed,fri', etc.
+ * @param string|null $refDate  วันอ้างอิง (default: วันนี้)
+ * @return string  Y-m-d format
+ */
+function getCurrentDrawDate($schedule, $refDate = null) {
+    $ref = $refDate ? strtotime($refDate) : time();
+    $refYmd = date('Y-m-d', $ref);
+    
+    // daily = ทุกวัน
+    if (empty($schedule) || $schedule === 'daily') {
+        return $refYmd;
+    }
+    
+    // Monthly format: "1,16" = วันที่ของเดือน
+    if (preg_match('/^\d+(,\d+)*$/', $schedule)) {
+        $days = array_map('intval', explode(',', $schedule));
+        sort($days);
+        $currentDay = intval(date('d', $ref));
+        $currentMonth = intval(date('m', $ref));
+        $currentYear = intval(date('Y', $ref));
+        
+        // หาวัน draw ล่าสุด (รวมวันนี้)
+        foreach (array_reverse($days) as $d) {
+            if ($d <= $currentDay) {
+                // ตรวจสอบว่าวันนั้นมีจริงในเดือนนี้
+                $daysInMonth = intval(date('t', $ref));
+                if ($d <= $daysInMonth) {
+                    return sprintf('%04d-%02d-%02d', $currentYear, $currentMonth, $d);
+                }
+            }
+        }
+        
+        // ยังไม่ถึงวัน draw แรกของเดือน → ใช้วัน draw สุดท้ายของเดือนก่อน
+        $prevMonth = $currentMonth - 1;
+        $prevYear = $currentYear;
+        if ($prevMonth < 1) { $prevMonth = 12; $prevYear--; }
+        $lastDay = end($days);
+        $daysInPrevMonth = intval(date('t', mktime(0, 0, 0, $prevMonth, 1, $prevYear)));
+        if ($lastDay > $daysInPrevMonth) $lastDay = $daysInPrevMonth;
+        return sprintf('%04d-%02d-%02d', $prevYear, $prevMonth, $lastDay);
+    }
+    
+    // Weekday format: "mon,wed,fri" = วันในสัปดาห์
+    $dayMap = ['mon'=>1,'tue'=>2,'wed'=>3,'thu'=>4,'fri'=>5,'sat'=>6,'sun'=>7];
+    $scheduleDays = array_map('trim', explode(',', strtolower($schedule)));
+    $allowedDays = [];
+    foreach ($scheduleDays as $sd) {
+        if (isset($dayMap[$sd])) $allowedDays[] = $dayMap[$sd];
+    }
+    
+    if (empty($allowedDays)) return $refYmd;
+    sort($allowedDays);
+    
+    // ตรวจสอบวันนี้ก่อน แล้วย้อนหลังไปจนเจอวัน draw
+    for ($i = 0; $i <= 7; $i++) {
+        $checkTs = strtotime("-{$i} days", $ref);
+        $checkDow = intval(date('N', $checkTs)); // 1=Mon, 7=Sun
+        if (in_array($checkDow, $allowedDays)) {
+            return date('Y-m-d', $checkTs);
+        }
+    }
+    
+    return $refYmd;
+}
+
+/**
+ * คำนวณวันที่งวดถัดไป
+ */
+function getNextDrawDate($schedule, $refDate = null) {
+    $ref = $refDate ? strtotime($refDate) : time();
+    
+    if (empty($schedule) || $schedule === 'daily') {
+        return date('Y-m-d', strtotime('+1 day', $ref));
+    }
+    
+    // Monthly
+    if (preg_match('/^\d+(,\d+)*$/', $schedule)) {
+        $days = array_map('intval', explode(',', $schedule));
+        sort($days);
+        $currentDay = intval(date('d', $ref));
+        $currentMonth = intval(date('m', $ref));
+        $currentYear = intval(date('Y', $ref));
+        
+        foreach ($days as $d) {
+            if ($d > $currentDay) {
+                return sprintf('%04d-%02d-%02d', $currentYear, $currentMonth, $d);
+            }
+        }
+        // ถัดไปคือวันแรกของเดือนหน้า
+        $nextMonth = $currentMonth + 1;
+        $nextYear = $currentYear;
+        if ($nextMonth > 12) { $nextMonth = 1; $nextYear++; }
+        return sprintf('%04d-%02d-%02d', $nextYear, $nextMonth, $days[0]);
+    }
+    
+    // Weekday
+    $dayMap = ['mon'=>1,'tue'=>2,'wed'=>3,'thu'=>4,'fri'=>5,'sat'=>6,'sun'=>7];
+    $scheduleDays = array_map('trim', explode(',', strtolower($schedule)));
+    $allowedDays = [];
+    foreach ($scheduleDays as $sd) {
+        if (isset($dayMap[$sd])) $allowedDays[] = $dayMap[$sd];
+    }
+    if (empty($allowedDays)) return date('Y-m-d', strtotime('+1 day', $ref));
+    
+    for ($i = 1; $i <= 7; $i++) {
+        $checkTs = strtotime("+{$i} days", $ref);
+        if (in_array(intval(date('N', $checkTs)), $allowedDays)) {
+            return date('Y-m-d', $checkTs);
+        }
+    }
+    
+    return date('Y-m-d', strtotime('+1 day', $ref));
+}

@@ -82,6 +82,7 @@ $stmt = $pdo->query("
         lt.result_time,
         lt.bet_closed,
         lt.category_id,
+        lt.draw_schedule,
         r.three_top,
         r.two_bot,
         r.draw_date as result_date,
@@ -118,28 +119,9 @@ foreach ($allLotteries as &$l) {
     $resultDate = $l['result_date'] ?? null;
     $hasAnyResult = !empty($l['three_top']);
     
-    // === Smart Current Round Date ===
-    // ตรวจสอบว่าหวยนี้มีงวดวันนี้จริงหรือไม่
-    $betKeyToday = $l['id'] . '_' . $today;
-    $betKeyYesterday = $l['id'] . '_' . $yesterday;
-    $hasBetsForToday = isset($pendingBets[$betKeyToday]) || isset($paidBets[$betKeyToday]);
-    $hasBetsForYesterday = isset($pendingBets[$betKeyYesterday]) || isset($paidBets[$betKeyYesterday]);
-    $hasResultForToday = $hasAnyResult && $resultDate === $today;
-    $hasResultForYesterday = $hasAnyResult && $resultDate === $yesterday;
-    
-    if ($hasResultForToday || $hasBetsForToday) {
-        // มีผลหรือมีคนแทงวันนี้ → งวดวันนี้
-        $currentRoundDate = $today;
-    } elseif (!$isPastOpenTime && ($hasResultForYesterday || $hasBetsForYesterday)) {
-        // ยังไม่ถึง open_time + เมื่อวานมีกิจกรรม → ยังเป็นงวดเมื่อวาน (หวยดึก)
-        $currentRoundDate = $yesterday;
-    } elseif ($hasAnyResult && $resultDate) {
-        // ไม่มีกิจกรรมวันนี้ → ใช้วันที่ผลล่าสุด (เช่น หวยไทย 1/16)
-        $currentRoundDate = $resultDate;
-    } else {
-        // ไม่มีข้อมูลเลย → fallback เป็นวันนี้
-        $currentRoundDate = $isPastOpenTime ? $today : $yesterday;
-    }
+    // === Current Round Date จาก draw_schedule ===
+    $drawSchedule = $l['draw_schedule'] ?? 'daily';
+    $currentRoundDate = getCurrentDrawDate($drawSchedule);
     
     // เช็คว่าผลล่าสุดเป็นของงวดปัจจุบันหรือไม่
     $hasResultForCurrentRound = $hasAnyResult && $resultDate === $currentRoundDate;
