@@ -438,6 +438,9 @@ require_once 'includes/header.php';
                     </td>
                     <td class="text-center">
                         <span class="<?= $statusClass ?>"><?= $statusLabel ?></span>
+                        <div style="font-size:10px; color:gray; line-height:1; margin-top:4px;">
+                            hasR=<?= $hasResultForRound?'Y':'N' ?> pC=<?= $pastCloseTime?'Y':'N' ?> hPC=<?= number_format($hoursPastClose, 1) ?>
+                        </div>
                     </td>
                 </tr>
                 <?php endforeach; ?>
