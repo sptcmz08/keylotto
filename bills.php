@@ -233,7 +233,7 @@ require_once 'includes/header.php';
     </div>
 
     <!-- Summary Stats -->
-    <div class="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-4">
+    <div class="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-3">
         <div class="bg-gray-50 rounded border p-2 text-center">
             <div class="text-xs text-gray-500">ทั้งหมด</div>
             <div class="text-lg font-bold text-gray-700"><?= $stats['total_count'] ?? 0 ?></div>
@@ -253,6 +253,42 @@ require_once 'includes/header.php';
         <div class="bg-orange-50 rounded border border-orange-200 p-2 text-center">
             <div class="text-xs text-orange-500">ยอดรวม (ไม่รวมยกเลิก)</div>
             <div class="text-lg font-bold text-orange-600"><?= formatMoney($stats['active_net'] ?? 0) ?></div>
+        </div>
+    </div>
+
+    <!-- Financial Summary (Profit Calculation) -->
+    <?php 
+        $totalSales = floatval($stats['active_net'] ?? 0);
+        $totalPayout = floatval($stats['total_win'] ?? 0);
+        $profit = $totalSales - $totalPayout;
+        $profitColor = $profit >= 0 ? 'text-green-600' : 'text-red-600';
+        $profitBg = $profit >= 0 ? 'bg-green-50 border-green-300' : 'bg-red-50 border-red-300';
+    ?>
+    <div class="rounded-lg border-2 p-3 mb-4 <?= $profitBg ?>">
+        <div class="text-sm font-bold text-gray-700 mb-2"><i class="fas fa-calculator mr-1"></i> สรุปยอดกำไร-ขาดทุน</div>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div class="text-center">
+                <div class="text-xs text-gray-500">ยอดขาย (รวมรับ)</div>
+                <div class="text-lg font-bold text-blue-600"><?= formatMoney($totalSales) ?></div>
+            </div>
+            <div class="text-center">
+                <div class="text-xs text-gray-500">ยอดจ่ายรางวัล (ถูก <?= $stats['won_count'] ?? 0 ?> บิล)</div>
+                <div class="text-lg font-bold text-red-500">-<?= formatMoney($totalPayout) ?></div>
+            </div>
+            <div class="text-center">
+                <div class="text-xs text-gray-500">กำไรสุทธิ</div>
+                <div class="text-xl font-bold <?= $profitColor ?>"><?= $profit >= 0 ? '+' : '' ?><?= formatMoney($profit) ?></div>
+            </div>
+            <div class="text-center">
+                <div class="text-xs text-gray-500">สถานะ</div>
+                <?php if (($stats['pending_count'] ?? 0) == 0 && ($stats['won_count'] ?? 0) + ($stats['lost_count'] ?? 0) > 0): ?>
+                <div class="mt-1"><span class="bg-green-500 text-white px-3 py-1 rounded-full text-sm font-bold"><i class="fas fa-check-circle mr-1"></i>จ่ายเงินแล้ว</span></div>
+                <?php elseif (($stats['pending_count'] ?? 0) > 0): ?>
+                <div class="mt-1"><span class="bg-yellow-500 text-white px-3 py-1 rounded-full text-sm font-bold"><i class="fas fa-clock mr-1"></i>รอผล <?= $stats['pending_count'] ?> บิล</span></div>
+                <?php else: ?>
+                <div class="mt-1"><span class="bg-gray-400 text-white px-3 py-1 rounded-full text-sm font-bold">ยังไม่มีข้อมูล</span></div>
+                <?php endif; ?>
+            </div>
         </div>
     </div>
 
