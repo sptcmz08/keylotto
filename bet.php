@@ -301,10 +301,10 @@ if (!$lotteryId) {
             const nextOpen = new Date(openTime);
             if (nextOpen <= now) nextOpen.setDate(nextOpen.getDate() + 1);
             
-            // ถ้าใกล้เปิด (1 ชั่วโมงก่อนเปิด) → แสดงสีเหลือง
+            // ถ้าใกล้เปิด (10 นาทีก่อนเปิด) → แสดงสีเหลือง
             const msBeforeOpen = nextOpen - now;
-            const hrsBeforeOpen = msBeforeOpen / 3600000;
-            if (hrsBeforeOpen <= 1) {
+            const minBeforeOpen = msBeforeOpen / 60000;
+            if (minBeforeOpen <= 10) {
                 const diff = nextOpen - now;
                 return { status: 'waiting', label: 'เปิดในอีก ' + formatDiff(diff), hide: false };
             }
