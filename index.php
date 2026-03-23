@@ -373,17 +373,21 @@ require_once 'includes/header.php';
                     $hasPaid = isset($paidBets[$betKey]) && $paidBets[$betKey] > 0;
                     $isBetClosed = !empty($lt['bet_closed']);
                     
-                    // สร้าง close_time เป็น full datetime
-                    // ถ้า close_time < open_time → หมายถึงข้ามเที่ยงคืน (เช่น DJ VIP close 00:15)
+                    // สร้าง close_time อิงจากวันที่งวดปัจจุบัน ไม่ใช่แค่วันนี้
+                    $roundDate = $lt['current_round_date'];
+                    
                     $closeTime = null;
                     $pastCloseTime = false;
                     $hoursPastClose = 0;
                     if (!empty($lt['close_time'])) {
-                        $closeTime = strtotime(date('Y-m-d') . ' ' . $lt['close_time']);
-                        $openTimeToday = strtotime(date('Y-m-d') . ' ' . ($lt['open_time'] ?? '06:00:00'));
+                        $closeTimeStr = $roundDate . ' ' . $lt['close_time'];
+                        $closeTime = strtotime($closeTimeStr);
+                        
+                        $openTimeStr = $roundDate . ' ' . ($lt['open_time'] ?? '06:00:00');
+                        $openTimeForRound = strtotime($openTimeStr);
                         
                         // ถ้า close_time < open_time → ข้ามเที่ยงคืน → บวก 1 วัน
-                        if ($closeTime < $openTimeToday) {
+                        if ($closeTime < $openTimeForRound) {
                             $closeTime += 86400; // +24 ชม.
                         }
                         
@@ -438,9 +442,6 @@ require_once 'includes/header.php';
                     </td>
                     <td class="text-center">
                         <span class="<?= $statusClass ?>"><?= $statusLabel ?></span>
-                        <div style="font-size:10px; color:gray; line-height:1; margin-top:4px;">
-                            hasR=<?= $hasResultForRound?'Y':'N' ?> pC=<?= $pastCloseTime?'Y':'N' ?> hPC=<?= number_format($hoursPastClose, 1) ?>
-                        </div>
                     </td>
                 </tr>
                 <?php endforeach; ?>
