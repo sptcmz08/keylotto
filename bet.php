@@ -1597,53 +1597,78 @@ async function saveBet() {
 // ==========================================
 async function doSaveBet(items, note, onSuccess) {
     // ==========================================
-    // สร้างหน้ายืนยันรายการก่อนบันทึก
+    // สร้างหน้ายืนยันรายการ (ลบได้ทีละตัว)
     // ==========================================
     const typeLabels = { '3top': '3 ตัวบน', '3tod': '3 ตัวโต๊ด', '2top': '2 ตัวบน', '2bot': '2 ตัวล่าง', 'run_top': 'วิ่งบน', 'run_bot': 'วิ่งล่าง' };
-    let totalAmount = 0;
-    let totalDiscount = 0;
-    let rows = items.map((item, idx) => {
-        const label = typeLabels[item.type] || item.type;
-        const rate = PAY_RATES[item.type] || '-';
-        const discount = item.discount || 0;
-        totalAmount += item.amount;
-        totalDiscount += discount;
-        return `<tr style="border-bottom:1px solid #eee;">
-            <td style="padding:5px 8px;font-size:13px;">${label}</td>
-            <td style="padding:5px 8px;text-align:center;font-weight:bold;font-size:14px;">${item.number}</td>
-            <td style="padding:5px 8px;text-align:right;font-size:13px;">${item.amount.toFixed(2)}</td>
-            <td style="padding:5px 8px;text-align:right;font-size:13px;color:#1565c0;">${rate}</td>
-            <td style="padding:5px 8px;text-align:right;font-size:13px;color:#e53935;">${discount.toFixed(2)}</td>
-        </tr>`;
-    }).join('');
+    
+    // Store items in window scope for delete access
+    window._confirmItems = [...items];
+    
+    function buildConfirmHtml() {
+        let totalAmount = 0;
+        let totalDiscount = 0;
+        let rows = window._confirmItems.map((item, idx) => {
+            const label = typeLabels[item.type] || item.type;
+            const rate = PAY_RATES[item.type] || '-';
+            const discount = item.discount || 0;
+            totalAmount += item.amount;
+            totalDiscount += discount;
+            return `<tr style="border-bottom:1px solid #eee;" id="confirm-row-${idx}">
+                <td style="padding:5px 8px;font-size:13px;">${label}</td>
+                <td style="padding:5px 8px;text-align:center;font-weight:bold;font-size:14px;">${item.number}</td>
+                <td style="padding:5px 8px;text-align:right;font-size:13px;">${item.amount.toFixed(2)}</td>
+                <td style="padding:5px 8px;text-align:right;font-size:13px;color:#1565c0;">${rate}</td>
+                <td style="padding:5px 8px;text-align:right;font-size:13px;color:#e53935;">${discount.toFixed(2)}</td>
+                <td style="padding:2px 4px;text-align:center;">
+                    <button type="button" onclick="window._removeConfirmItem(${idx})" style="background:#fee2e2;border:none;color:#e53935;cursor:pointer;border-radius:4px;padding:4px 6px;font-size:12px;" title="ลบ">
+                        <i class="fas fa-trash-alt"></i>
+                    </button>
+                </td>
+            </tr>`;
+        }).join('');
 
-    const confirmHtml = `
-        <div style="max-height:400px;overflow-y:auto;margin:0 -20px;">
-            <table style="width:100%;border-collapse:collapse;font-size:13px;">
-                <thead>
-                    <tr style="background:#f5f5f5;position:sticky;top:0;">
-                        <th style="padding:6px 8px;text-align:left;">ประเภท</th>
-                        <th style="padding:6px 8px;text-align:center;">หมายเลข</th>
-                        <th style="padding:6px 8px;text-align:right;">ยอดเดิมพัน</th>
-                        <th style="padding:6px 8px;text-align:right;">เรทจ่าย</th>
-                        <th style="padding:6px 8px;text-align:right;">ส่วนลด</th>
-                    </tr>
-                </thead>
-                <tbody>${rows}</tbody>
-            </table>
-        </div>
-        <div style="margin-top:12px;padding:10px;background:#f0fdf4;border-radius:8px;font-size:14px;">
-            <div style="display:flex;justify-content:space-between;"><span>ยอดเดิมพัน</span><b>${totalAmount.toFixed(2)} บาท</b></div>
-            <div style="display:flex;justify-content:space-between;color:#e53935;"><span>ส่วนลด</span><b>${totalDiscount.toFixed(2)} บาท</b></div>
-            <div style="display:flex;justify-content:space-between;font-size:16px;margin-top:4px;padding-top:6px;border-top:1px solid #c8e6c9;"><span><b>รวม</b></span><b style="color:#2e7d32;">${(totalAmount - totalDiscount).toFixed(2)} บาท</b></div>
-        </div>
-        ${note ? `<div style="margin-top:8px;font-size:12px;color:#888;">หมายเหตุ: ${note}</div>` : ''}
-    `;
+        return `
+            <div style="max-height:400px;overflow-y:auto;margin:0 -20px;">
+                <table style="width:100%;border-collapse:collapse;font-size:13px;">
+                    <thead>
+                        <tr style="background:#f5f5f5;position:sticky;top:0;">
+                            <th style="padding:6px 8px;text-align:left;">ประเภท</th>
+                            <th style="padding:6px 8px;text-align:center;">หมายเลข</th>
+                            <th style="padding:6px 8px;text-align:right;">ยอดเดิมพัน</th>
+                            <th style="padding:6px 8px;text-align:right;">เรทจ่าย</th>
+                            <th style="padding:6px 8px;text-align:right;">ส่วนลด</th>
+                            <th style="padding:6px 4px;text-align:center;width:36px;">#</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>
+            <div style="margin-top:12px;padding:10px;background:#f0fdf4;border-radius:8px;font-size:14px;">
+                <div style="display:flex;justify-content:space-between;"><span>ยอดเดิมพัน</span><b>${totalAmount.toFixed(2)} บาท</b></div>
+                <div style="display:flex;justify-content:space-between;color:#e53935;"><span>ส่วนลด</span><b>${totalDiscount.toFixed(2)} บาท</b></div>
+                <div style="display:flex;justify-content:space-between;font-size:16px;margin-top:4px;padding-top:6px;border-top:1px solid #c8e6c9;"><span><b>รวม</b></span><b style="color:#2e7d32;">${(totalAmount - totalDiscount).toFixed(2)} บาท</b></div>
+            </div>
+            ${note ? `<div style="margin-top:8px;font-size:12px;color:#888;">หมายเหตุ: ${note}</div>` : ''}
+        `;
+    }
+
+    // Function to remove item and re-render
+    window._removeConfirmItem = function(idx) {
+        window._confirmItems.splice(idx, 1);
+        if (window._confirmItems.length === 0) {
+            Swal.close();
+            Swal.fire({ icon: 'info', title: 'ลบรายการหมดแล้ว', text: 'ไม่มีรายการเดิมพันเหลือ', confirmButtonColor: '#2e7d32' });
+            return;
+        }
+        // Re-render the popup content
+        const container = Swal.getHtmlContainer();
+        if (container) container.innerHTML = buildConfirmHtml();
+    };
 
     const confirm = await Swal.fire({
         title: 'กรุณายืนยันรายการ',
-        html: confirmHtml,
-        width: 520,
+        html: buildConfirmHtml(),
+        width: 560,
         showCancelButton: true,
         confirmButtonColor: '#2e7d32',
         cancelButtonColor: '#9e9e9e',
@@ -1657,7 +1682,9 @@ async function doSaveBet(items, note, onSuccess) {
     // ==========================================
     // ส่งข้อมูลไป API
     // ==========================================
-    const data = { action: 'save_bet', lottery_type_id: LOTTERY_ID, note: note, items: items };
+    const finalItems = window._confirmItems || items;
+    if (finalItems.length === 0) return;
+    const data = { action: 'save_bet', lottery_type_id: LOTTERY_ID, note: note, items: finalItems };
     try {
         const res = await fetch('api.php', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
         const result = await res.json();
