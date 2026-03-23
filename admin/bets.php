@@ -8,36 +8,43 @@ $adminPage = 'bets';
 $adminTitle = 'รายการเดิมพัน';
 $msg = '';
 
-// Handle status updates
+// Handle status updates (CSRF protected)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $action = $_POST['form_action'] ?? '';
-    if ($action === 'update_status') {
-        $id = intval($_POST['id']);
-        $status = $_POST['status'];
-        if ($status === 'cancelled') {
-            // ยกเลิกโพย: reset win_amount เพื่อไม่ให้นับในรายงาน
+    if (!validateCsrf()) {
+        $msg = '❌ CSRF token ไม่ถูกต้อง กรุณาลองใหม่';
+    } else {
+        $action = $_POST['form_action'] ?? '';
+        if ($action === 'update_status') {
+            $id = intval($_POST['id']);
+            $status = $_POST['status'];
+            if ($status === 'cancelled') {
+                try {
+                    $pdo->prepare("UPDATE bets SET status = 'cancelled', win_amount = 0 WHERE id = ?")->execute([$id]);
+                } catch (Exception $e) {
+                    $pdo->prepare("UPDATE bets SET status = 'cancelled' WHERE id = ?")->execute([$id]);
+                }
+            } else {
+                $pdo->prepare("UPDATE bets SET status = ? WHERE id = ?")->execute([$status, $id]);
+            }
+            $msg = 'อัพเดทสถานะสำเร็จ';
+        } elseif ($action === 'cancel_bet') {
+            $id = intval($_POST['id']);
             try {
-                $pdo->prepare("UPDATE bets SET status = 'cancelled', win_amount = 0 WHERE id = ?")->execute([$id]);
+                $pdo->prepare("UPDATE bets SET status = 'cancelled', win_amount = 0, cancel_approved_by = 'admin', cancel_approved_at = NOW() WHERE id = ?")->execute([$id]);
             } catch (Exception $e) {
                 $pdo->prepare("UPDATE bets SET status = 'cancelled' WHERE id = ?")->execute([$id]);
             }
-        } else {
-            $pdo->prepare("UPDATE bets SET status = ? WHERE id = ?")->execute([$status, $id]);
+            $msg = 'ยกเลิกโพยสำเร็จ - ยอดจะถูกหักออกจากรายการรวม';
+        } elseif ($action === 'delete_bet') {
+            // Soft delete: cancel instead of hard delete
+            $id = intval($_POST['id']);
+            try {
+                $pdo->prepare("UPDATE bets SET status = 'cancelled', win_amount = 0, cancel_approved_by = 'admin', cancel_approved_at = NOW() WHERE id = ?")->execute([$id]);
+            } catch (Exception $e) {
+                $pdo->prepare("UPDATE bets SET status = 'cancelled' WHERE id = ?")->execute([$id]);
+            }
+            $msg = 'ยกเลิกบิลสำเร็จ (ข้อมูลยังเก็บไว้ในระบบ)';
         }
-        $msg = 'อัพเดทสถานะสำเร็จ';
-    } elseif ($action === 'cancel_bet') {
-        $id = intval($_POST['id']);
-        try {
-            $pdo->prepare("UPDATE bets SET status = 'cancelled', win_amount = 0, cancel_approved_by = 'admin', cancel_approved_at = NOW() WHERE id = ?")->execute([$id]);
-        } catch (Exception $e) {
-            $pdo->prepare("UPDATE bets SET status = 'cancelled' WHERE id = ?")->execute([$id]);
-        }
-        $msg = 'ยกเลิกโพยสำเร็จ - ยอดจะถูกหักออกจากรายการรวม';
-    } elseif ($action === 'delete_bet') {
-        $id = intval($_POST['id']);
-        $pdo->prepare("DELETE FROM bet_items WHERE bet_id = ?")->execute([$id]);
-        $pdo->prepare("DELETE FROM bets WHERE id = ?")->execute([$id]);
-        $msg = 'ลบบิลสำเร็จ';
     }
 }
 
@@ -117,6 +124,7 @@ require_once 'includes/header.php';
                     <td class="px-3 py-2 text-right text-xs font-bold text-green-700"><?= formatMoney($b['net_amount']) ?></td>
                     <td class="px-3 py-2 text-center">
                         <form method="POST" class="inline">
+                            <?= csrfField() ?>
                             <input type="hidden" name="form_action" value="update_status">
                             <input type="hidden" name="id" value="<?= $b['id'] ?>">
                             <select name="status" onchange="this.form.submit()" class="border rounded px-1 py-0.5 text-[11px] outline-none <?= $b['status'] === 'won' ? 'text-green-600' : ($b['status'] === 'cancelled' ? 'text-red-500' : 'text-gray-600') ?>">
@@ -135,10 +143,12 @@ require_once 'includes/header.php';
                         <button onclick="confirmDelete(<?= $b['id'] ?>, '<?= htmlspecialchars($b['bet_number']) ?>')" class="text-red-400 hover:text-red-600" title="ลบบิล"><i class="fas fa-trash-alt"></i></button>
                         <!-- Hidden forms for submission -->
                         <form id="cancelForm_<?= $b['id'] ?>" method="POST" class="hidden">
+                            <?= csrfField() ?>
                             <input type="hidden" name="form_action" value="cancel_bet">
                             <input type="hidden" name="id" value="<?= $b['id'] ?>">
                         </form>
                         <form id="deleteForm_<?= $b['id'] ?>" method="POST" class="hidden">
+                            <?= csrfField() ?>
                             <input type="hidden" name="form_action" value="delete_bet">
                             <input type="hidden" name="id" value="<?= $b['id'] ?>">
                         </form>

@@ -245,6 +245,95 @@ function runScript($command, $source) {
 }
 
 // =============================================
+// Auto Payout Calculation — คำนวณผลรางวัลอัตโนมัติ
+// =============================================
+function processBetPayouts($pdo, $lotteryTypeId, $drawDate) {
+    // 1) Get result for this lottery + date
+    $stmt = $pdo->prepare("SELECT * FROM results WHERE lottery_type_id = ? AND draw_date = ?");
+    $stmt->execute([$lotteryTypeId, $drawDate]);
+    $result = $stmt->fetch();
+    if (!$result || empty($result['three_top'])) return 0;
+
+    // 2) Get pay rates for this lottery
+    $rateStmt = $pdo->prepare("SELECT bet_type, pay_rate FROM pay_rates WHERE lottery_type_id = ?");
+    $rateStmt->execute([$lotteryTypeId]);
+    $rateMap = [];
+    foreach ($rateStmt->fetchAll() as $r) {
+        $rateMap[$r['bet_type']] = floatval($r['pay_rate']);
+    }
+
+    // 3) Get all pending bets
+    $betStmt = $pdo->prepare("SELECT id FROM bets WHERE lottery_type_id = ? AND draw_date = ? AND status = 'pending'");
+    $betStmt->execute([$lotteryTypeId, $drawDate]);
+    $pendingBets = $betStmt->fetchAll();
+    if (empty($pendingBets)) return 0;
+
+    // Helper: sort string for 3tod matching
+    $sortStr = function($s) { $a = str_split($s); sort($a); return implode('', $a); };
+
+    $processed = 0;
+    foreach ($pendingBets as $bet) {
+        $betId = $bet['id'];
+
+        // Get bet items
+        $itemStmt = $pdo->prepare("SELECT * FROM bet_items WHERE bet_id = ?");
+        $itemStmt->execute([$betId]);
+        $items = $itemStmt->fetchAll();
+
+        $totalWin = 0;
+        $hasWin = false;
+
+        foreach ($items as $item) {
+            $num = $item['number'];
+            $type = $item['bet_type'];
+            $amount = floatval($item['amount']);
+            $isWinner = false;
+
+            // Check if this number wins
+            switch ($type) {
+                case '3top':
+                    $isWinner = ($result['three_top'] === $num);
+                    break;
+                case '3tod':
+                    // 3tod wins if digits are same permutation but NOT exact match (3top)
+                    if ($result['three_top'] && strlen($num) === 3) {
+                        $isWinner = ($sortStr($num) === $sortStr($result['three_top'])) && ($num !== $result['three_top']);
+                    }
+                    break;
+                case '2top':
+                    $isWinner = ($result['two_top'] === $num);
+                    break;
+                case '2bot':
+                    $isWinner = ($result['two_bot'] === $num);
+                    break;
+                case 'run_top':
+                    $isWinner = ($result['run_top'] !== null && strpos($result['three_top'], $num) !== false);
+                    break;
+                case 'run_bot':
+                    $isWinner = ($result['run_bot'] !== null && strpos($result['two_bot'], $num) !== false);
+                    break;
+            }
+
+            if ($isWinner) {
+                $hasWin = true;
+                // Use adjusted_pay_rate if set, otherwise normal rate
+                $payRate = !empty($item['adjusted_pay_rate']) ? floatval($item['adjusted_pay_rate']) : ($rateMap[$type] ?? 0);
+                $winAmount = $amount * $payRate;
+                $totalWin += $winAmount;
+            }
+        }
+
+        // Update bet status
+        $newStatus = $hasWin ? 'won' : 'lost';
+        $updateStmt = $pdo->prepare("UPDATE bets SET status = ?, win_amount = ? WHERE id = ? AND status = 'pending'");
+        $updateStmt->execute([$newStatus, $totalWin, $betId]);
+        $processed++;
+    }
+
+    return $processed;
+}
+
+// =============================================
 // Process results → INSERT into Key DB
 // =============================================
 function processResults($pdo, $results, $source) {
@@ -355,6 +444,9 @@ function processResults($pdo, $results, $source) {
                 $pdo->prepare("UPDATE results SET " . implode(', ', $setParts) . " WHERE id = ?")->execute($params);
                 echo "🔄 {$keyLotteryName}: อัพเดตผล → {$threeTop}/{$twoTop}/{$twoBot}\n";
                 logScrape($pdo, $keyLotteryName, $source, 'success', "Updated: {$threeTop}/{$twoBot}", $drawDate);
+                // Auto-calculate payouts
+                $payoutCount = processBetPayouts($pdo, $lotteryTypeId, $drawDate);
+                if ($payoutCount > 0) echo "💰 {$keyLotteryName}: คำนวณผล {$payoutCount} โพย\n";
             } else {
                 echo "⏭️  {$keyLotteryName}: มีผลอยู่แล้ว ({$existing['three_top']}/{$existing['two_bot']})\n";
             }
@@ -383,6 +475,9 @@ function processResults($pdo, $results, $source) {
 
             echo "✅ {$keyLotteryName}: {$threeTop} / {$twoTop} / {$twoBot} ({$drawDate}) [ใหม่]\n";
             logScrape($pdo, $keyLotteryName, $source, 'success', "New: {$threeTop}/{$twoBot}", $drawDate);
+            // Auto-calculate payouts
+            $payoutCount = processBetPayouts($pdo, $lotteryTypeId, $drawDate);
+            if ($payoutCount > 0) echo "💰 {$keyLotteryName}: คำนวณผล {$payoutCount} โพย\n";
             $successCount++;
         } catch (Exception $e) {
             echo "❌ {$keyLotteryName}: " . $e->getMessage() . "\n";

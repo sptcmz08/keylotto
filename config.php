@@ -134,3 +134,23 @@ function getBetTypeLabel($type)
     ];
     return $labels[$type] ?? $type;
 }
+
+// =============================================
+// CSRF Protection
+// =============================================
+function generateCsrfToken() {
+    if (empty($_SESSION['csrf_token'])) {
+        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+    }
+    return $_SESSION['csrf_token'];
+}
+
+function csrfField() {
+    return '<input type="hidden" name="csrf_token" value="' . generateCsrfToken() . '">';
+}
+
+function validateCsrf() {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') return true;
+    $token = $_POST['csrf_token'] ?? '';
+    return !empty($token) && hash_equals($_SESSION['csrf_token'] ?? '', $token);
+}

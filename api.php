@@ -1,8 +1,13 @@
 <?php
 require_once 'config.php';
+require_once 'auth.php';
 
 header('Content-Type: application/json; charset=utf-8');
-header('Access-Control-Allow-Origin: *');
+// CORS: same-origin only (no wildcard)
+$allowedOrigin = ($_SERVER['HTTP_ORIGIN'] ?? '');
+if ($allowedOrigin && parse_url($allowedOrigin, PHP_URL_HOST) === ($_SERVER['HTTP_HOST'] ?? '')) {
+    header('Access-Control-Allow-Origin: ' . $allowedOrigin);
+}
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type');
 
@@ -15,6 +20,16 @@ $action = $_GET['action'] ?? '';
 if (!$action && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $data = json_decode(file_get_contents('php://input'), true);
     $action = $data['action'] ?? '';
+}
+
+// Auth check: write operations require login
+$writeActions = ['save_bet', 'cancel_bet'];
+if (in_array($action, $writeActions)) {
+    if (!isLoggedIn()) {
+        http_response_code(401);
+        echo json_encode(['error' => 'กรุณาเข้าสู่ระบบก่อน']);
+        exit;
+    }
 }
 
 try {

@@ -11,29 +11,54 @@ if (isLoggedIn()) {
 }
 
 $error = '';
+$maxAttempts = 5;
+$lockoutTime = 300; // 5 minutes
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $username = trim($_POST['username'] ?? '');
-    $password = $_POST['password'] ?? '';
-
-    $stmt = $pdo->prepare("SELECT * FROM users WHERE username = ?");
-    $stmt->execute([$username]);
-    $user = $stmt->fetch();
-
-    if ($user && password_verify($password, $user['password'])) {
-        $_SESSION['user_id'] = $user['id'];
-        $_SESSION['username'] = $user['username'];
-        $_SESSION['user_name'] = $user['name'];
-        $_SESSION['role'] = $user['role'];
-        $_SESSION['logged_in'] = true;
-        
-        if ($user['role'] === 'admin') {
-            header('Location: admin/index.php');
-        } else {
-            header('Location: index.php');
-        }
-        exit;
+    // Rate limiting check
+    $attempts = $_SESSION['login_attempts'] ?? 0;
+    $lastAttempt = $_SESSION['login_last_attempt'] ?? 0;
+    
+    if ($attempts >= $maxAttempts && (time() - $lastAttempt) < $lockoutTime) {
+        $remaining = $lockoutTime - (time() - $lastAttempt);
+        $error = "ล็อกอินผิดพลาดเกินกำหนด กรุณารอ " . ceil($remaining / 60) . " นาที";
     } else {
-        $error = 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง';
+        // Reset if lockout expired
+        if ($attempts >= $maxAttempts && (time() - $lastAttempt) >= $lockoutTime) {
+            $_SESSION['login_attempts'] = 0;
+        }
+        
+        $username = trim($_POST['username'] ?? '');
+        $password = $_POST['password'] ?? '';
+
+        $stmt = $pdo->prepare("SELECT * FROM users WHERE username = ?");
+        $stmt->execute([$username]);
+        $user = $stmt->fetch();
+
+        if ($user && password_verify($password, $user['password'])) {
+            // Reset attempts on success
+            unset($_SESSION['login_attempts'], $_SESSION['login_last_attempt']);
+            $_SESSION['user_id'] = $user['id'];
+            $_SESSION['username'] = $user['username'];
+            $_SESSION['user_name'] = $user['name'];
+            $_SESSION['role'] = $user['role'];
+            $_SESSION['logged_in'] = true;
+            
+            if ($user['role'] === 'admin') {
+                header('Location: admin/index.php');
+            } else {
+                header('Location: index.php');
+            }
+            exit;
+        } else {
+            $_SESSION['login_attempts'] = ($attempts + 1);
+            $_SESSION['login_last_attempt'] = time();
+            $remainingAttempts = $maxAttempts - ($_SESSION['login_attempts']);
+            $error = 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง';
+            if ($remainingAttempts > 0 && $remainingAttempts <= 2) {
+                $error .= " (เหลืออีก {$remainingAttempts} ครั้ง)";
+            }
+        }
     }
 }
 ?>
