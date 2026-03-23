@@ -418,7 +418,8 @@ require_once 'includes/header.php';
                     // - หวยอื่น: ผลเก่ากว่างวดก่อนหน้า
                     $isResultStale = false;
                     if (!$resultDate) {
-                        $isResultStale = true;
+                        // ไม่เคยมีผลเลย — ถือว่า stale เฉพาะวันที่ไม่ได้ออกหวย
+                        $isResultStale = !$todayIsDrawDay;
                     } elseif ($drawSchedule === 'daily') {
                         $lastResultAgeDays = (strtotime($today) - strtotime($resultDate)) / 86400;
                         $isResultStale = $lastResultAgeDays > 3;
