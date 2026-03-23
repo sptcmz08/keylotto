@@ -1662,8 +1662,9 @@ async function doSaveBet(items, note, onSuccess) {
         const res = await fetch('api.php', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
         const result = await res.json();
         if (result.success) {
-            Swal.fire({ icon: 'success', title: 'บันทึกสำเร็จ!', text: 'เลขที่: ' + result.bet_number, confirmButtonColor: '#2e7d32' });
+            await Swal.fire({ icon: 'success', title: 'บันทึกสำเร็จ!', text: 'เลขที่: ' + result.bet_number, confirmButtonColor: '#2e7d32' });
             if (onSuccess) onSuccess();
+            location.reload();
         } else {
             Swal.fire({ icon: 'error', title: 'เกิดข้อผิดพลาด', text: result.error || 'Unknown error', confirmButtonColor: '#e53935' });
         }
