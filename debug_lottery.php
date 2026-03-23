@@ -1,90 +1,91 @@
 <?php
 /**
- * Debug: ทำไม ลาวพัฒนา ไม่แสดงบนหน้าหลัก
- * รัน: php debug_lottery.php
+ * Debug: simulate index.php logic for ลาวพัฒนา
  */
 require_once 'config.php';
 
-echo "=== Debug ลาวพัฒนา ===\n\n";
+echo "=== Simulate index.php for ลาวพัฒนา ===\n\n";
 
-// 1. Check DB
+// Same query as index.php
 $stmt = $pdo->query("
-    SELECT lt.id, lt.name, lt.is_active, lt.draw_schedule, lt.category_id, lt.close_time,
-           r.three_top, r.two_bot, r.draw_date as result_date, r.created_at as result_created_at
+    SELECT 
+        lt.id, lt.name, lt.flag_emoji, lt.draw_date, lt.open_time, lt.close_time,
+        lt.result_time, lt.bet_closed, lt.category_id, lt.draw_schedule,
+        r.three_top, r.two_bot, r.draw_date as result_date, r.created_at as result_created_at
     FROM lottery_types lt
     LEFT JOIN results r ON r.lottery_type_id = lt.id 
         AND r.draw_date = (SELECT MAX(r2.draw_date) FROM results r2 WHERE r2.lottery_type_id = lt.id)
-    WHERE lt.name LIKE '%ลาวพัฒนา%'
+    WHERE lt.is_active = 1
 ");
-$rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$allLotteries = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-echo "1️⃣ DB Query Results: " . count($rows) . " row(s)\n";
-foreach ($rows as $row) {
-    echo "   ID: {$row['id']}\n";
-    echo "   Name: '{$row['name']}'\n";
-    echo "   Name hex: " . bin2hex($row['name']) . "\n";
-    echo "   is_active: {$row['is_active']}\n";
-    echo "   draw_schedule: {$row['draw_schedule']}\n";
-    echo "   category_id: {$row['category_id']}\n";
-    echo "   close_time: {$row['close_time']}\n";
-    echo "   result_date: " . ($row['result_date'] ?? 'NULL') . "\n";
-    echo "   three_top: " . ($row['three_top'] ?? 'NULL') . "\n";
-    echo "   result_created_at: " . ($row['result_created_at'] ?? 'NULL') . "\n";
-}
+echo "Total lotteries from DB: " . count($allLotteries) . "\n";
 
-// 2. Check getCurrentDrawDate
-$schedule = 'mon,wed,fri';
+// Build lotteryMap same as index.php
+$now = time();
 $today = date('Y-m-d');
-$currentRound = getCurrentDrawDate($schedule);
-echo "\n2️⃣ getCurrentDrawDate('mon,wed,fri') = {$currentRound}\n";
-echo "   Today = {$today}\n";
-echo "   Day of week = " . date('l') . " (N=" . date('N') . ")\n";
+$lotteryMap = [];
 
-// 3. Check name matching
-$codeNames = ['ลาวพัฒนา'];
-echo "\n3️⃣ Name Matching:\n";
-foreach ($rows as $row) {
-    foreach ($codeNames as $cn) {
-        $match = ($row['name'] === $cn) ? '✅ MATCH' : '❌ NO MATCH';
-        echo "   DB '{$row['name']}' vs Code '{$cn}' → {$match}\n";
-        if ($row['name'] !== $cn) {
-            echo "   DB hex:   " . bin2hex($row['name']) . "\n";
-            echo "   Code hex: " . bin2hex($cn) . "\n";
+foreach ($allLotteries as &$l) {
+    $drawSchedule = $l['draw_schedule'] ?? 'daily';
+    $currentRoundDate = getCurrentDrawDate($drawSchedule);
+    $resultDate = $l['result_date'] ?? null;
+    $hasAnyResult = !empty($l['three_top']);
+    $hasResultForCurrentRound = $hasAnyResult && $resultDate === $currentRoundDate;
+    
+    $resultCreatedAt = !empty($l['result_created_at']) ? strtotime($l['result_created_at']) : 0;
+    $timeSinceResult = $resultCreatedAt ? ($now - $resultCreatedAt) : PHP_INT_MAX;
+    
+    if (!$hasResultForCurrentRound && $hasAnyResult && $timeSinceResult < 3600) {
+        $hasResultForCurrentRound = true;
+        $currentRoundDate = $resultDate;
+    }
+    
+    $l['current_round_date'] = $currentRoundDate;
+    $l['has_result_current_round'] = $hasResultForCurrentRound;
+    
+    $lotteryMap[$l['name']] = $l;
+}
+unset($l);
+
+echo "Total in lotteryMap: " . count($lotteryMap) . "\n\n";
+
+// Check ลาวพัฒนา
+$target = 'ลาวพัฒนา';
+if (isset($lotteryMap[$target])) {
+    $lt = $lotteryMap[$target];
+    echo "✅ ลาวพัฒนา FOUND in lotteryMap!\n";
+    echo "   round_date: {$lt['current_round_date']}\n";
+    echo "   has_result: " . ($lt['has_result_current_round'] ? 'YES' : 'NO') . "\n";
+    echo "   three_top: " . ($lt['three_top'] ?? 'NULL') . "\n";
+} else {
+    echo "❌ ลาวพัฒนา NOT in lotteryMap!\n";
+    echo "Keys containing 'ลาว' or 'พัฒนา':\n";
+    foreach (array_keys($lotteryMap) as $k) {
+        if (strpos($k, 'ลาว') !== false || strpos($k, 'พัฒนา') !== false) {
+            echo "   '$k' (hex: " . bin2hex($k) . ")\n";
         }
     }
 }
 
-// 4. Check full lottery map
-$allStmt = $pdo->query("
-    SELECT lt.id, lt.name, lt.is_active
-    FROM lottery_types lt
-    WHERE lt.is_active = 1
-    ORDER BY lt.name
-");
-$allActive = $allStmt->fetchAll(PDO::FETCH_ASSOC);
-echo "\n4️⃣ All active lotteries (" . count($allActive) . " total):\n";
-$found = false;
-foreach ($allActive as $a) {
-    if (strpos($a['name'], 'ลาว') !== false || strpos($a['name'], 'พัฒนา') !== false) {
-        echo "   #{$a['id']} '{$a['name']}'\n";
-        if ($a['name'] === 'ลาวพัฒนา') $found = true;
-    }
-}
-echo $found ? "   ✅ 'ลาวพัฒนา' found in active list\n" : "   ❌ 'ลาวพัฒนา' NOT found in active list\n";
+// Check LOTTERY_GROUPS
+echo "\n=== Check display ===\n";
+$LOTTERY_GROUPS_STOCK = [
+    'นิเคอิ - เช้า', 'นิเคอิ - บ่าย',
+    'หุ้นจีน - เช้า', 'หุ้นจีน - บ่าย',
+    'ฮั่งเส็ง - เช้า', 'ฮั่งเส็ง - บ่าย',
+    'หุ้นไต้หวัน', 'หุ้นเกาหลี', 'หุ้นสิงคโปร์',
+    'หุ้นไทย - เย็น', 'หุ้นอินเดีย', 'หุ้นอียิปต์',
+    'ลาวพัฒนา', 'หวย 12 ราศี',
+    'หุ้นอังกฤษ', 'หุ้นเยอรมัน', 'หุ้นรัสเซีย',
+    'ดาวโจนส์ STAR', 'หุ้นดาวโจนส์',
+];
 
-// 5. Check duplicate results
-$dupStmt = $pdo->query("
-    SELECT lottery_type_id, draw_date, COUNT(*) as cnt
-    FROM results
-    WHERE lottery_type_id = (SELECT id FROM lottery_types WHERE name = 'ลาวพัฒนา' LIMIT 1)
-    GROUP BY lottery_type_id, draw_date
-    HAVING cnt > 1
-    LIMIT 5
-");
-$dups = $dupStmt->fetchAll(PDO::FETCH_ASSOC);
-echo "\n5️⃣ Duplicate results: " . count($dups) . "\n";
-foreach ($dups as $d) {
-    echo "   draw_date={$d['draw_date']} count={$d['cnt']}\n";
+echo "หวยหุ้น group check:\n";
+foreach ($LOTTERY_GROUPS_STOCK as $name) {
+    $lt = $lotteryMap[$name] ?? null;
+    $status = $lt ? "✅ ID={$lt['id']} result=" . ($lt['three_top'] ?? 'none') : "❌ NOT IN MAP";
+    echo "   {$name} → {$status}\n";
 }
 
 echo "\n=== Done ===\n";
