@@ -189,7 +189,7 @@ def scrape_result_page(target_date, debug=False):
         sample_pos = html.find('/result/set')
         if sample_pos >= 0:
             print(f'[ExpHuay]   Sample HTML around /result/set:', file=sys.stderr)
-            print(f'[ExpHuay]   {html[sample_pos:sample_pos+300]}', file=sys.stderr)
+            print(f'[ExpHuay]   {html[sample_pos:sample_pos+800]}', file=sys.stderr)
     
     results = []
     found_slugs = set()
