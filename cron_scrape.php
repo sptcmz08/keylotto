@@ -115,7 +115,7 @@ $SLUG_TO_LOTTERY_NAME = [
 // ถ้าครบแล้ว → ข้าม scraping (ประหยัด CPU/RAM)
 // =============================================
 function countMissingResults($pdo, $expectedCount = 62) {
-    $today = date('Y-m-d', time() - 6 * 3600);
+    $today = date('Y-m-d', time() - 4 * 3600);
     
     // นับหวยที่ active ทั้งหมด
     $totalActive = $pdo->query("SELECT COUNT(*) FROM lottery_types WHERE is_active = 1")->fetchColumn();
@@ -337,12 +337,14 @@ function processBetPayouts($pdo, $lotteryTypeId, $drawDate) {
 // Process results → INSERT into Key DB
 // =============================================
 function processResults($pdo, $results, $source) {
+    if (empty($results)) return ['success' => 0, 'failed' => 0, 'skipped' => 0];
+
     global $SLUG_TO_LOTTERY_NAME;
 
     $successCount = 0;
     $skippedCount = 0;
     $failedCount = 0;
-    $today = date('Y-m-d', time() - 6 * 3600);
+    $today = date('Y-m-d', time() - 4 * 3600);
 
     foreach ($results as $r) {
         // Get slug from result
@@ -712,10 +714,10 @@ function scrapeThaiRayriffy($pdo) {
         if (!$parsed) {
             // Fallback: try strtotime
             $ts = strtotime($drawDate);
-            $drawDate = $ts ? date('Y-m-d', $ts) : date('Y-m-d', time() - 6 * 3600);
+            $drawDate = $ts ? date('Y-m-d', $ts) : date('Y-m-d', time() - 4 * 3600);
         }
     } else {
-        $drawDate = date('Y-m-d', time() - 6 * 3600);
+        $drawDate = date('Y-m-d', time() - 4 * 3600);
     }
 
     echo "✅ Rayriffy: รางวัลที่1={$firstPrize} (3บน={$threeTop}, 2ล่าง={$twoBottom}) วันที่={$drawDate}\n";
@@ -787,7 +789,7 @@ function scrapeExphuay($pdo) {
 
     echo "📈 ExpHuay Scraper (ทุกหวย — HTTP เร็ว)...\n";
 
-    $today = date('Y-m-d', time() - 6 * 3600);
+    $today = date('Y-m-d', time() - 4 * 3600);
 
     $stderrFile = tempnam(sys_get_temp_dir(), 'exphuay_');
     $output = [];

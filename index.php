@@ -120,12 +120,12 @@ foreach ($allLotteries as &$l) {
     $hasAnyResult = !empty($l['three_top']);
     
     // =============================================
-    // 1. Shift System Day by 6 hours
-    // รีเซ็ตวันใหม่ตอน 06:00 AM (ตามที่ user ต้องการ)
+    // 1. Shift System Day by 4 hours
+    // รีเซ็ตวันใหม่ตอน 04:00 AM (ตามที่ user ต้องการ)
     // ทำให้หวยข้ามคืน (Dow Jones 03:20) ถือเป็นของ "เมื่อวาน" โดยอัตโนมัติ
     // ลอจิก cross-midnight ไม่จำเป็นอีกต่อไป
     // =============================================
-    $systemTime = $now - (6 * 3600); 
+    $systemTime = $now - (4 * 3600); 
     $today = date('Y-m-d', $systemTime);
     
     // === Current Round Date จาก draw_schedule ===
