@@ -163,24 +163,35 @@ require_once 'includes/header.php';
     </form>
 </div>
 
+<?php
+$countBlocked = 0; $countHalf = 0;
+foreach ($blockedNumbers as $bn) { if ($bn['is_blocked']) $countBlocked++; else $countHalf++; }
+?>
 <!-- List -->
 <div class="bg-white rounded-xl shadow-sm border overflow-hidden">
-    <div class="px-4 py-3 border-b bg-gray-50 flex items-center justify-between flex-wrap gap-2">
-        <span class="font-bold text-gray-700 text-sm"><i class="fas fa-list mr-1"></i>รายการทั้งหมด (<?= count($blockedNumbers) ?>)</span>
-        <div class="flex items-center gap-2">
-            <select onchange="window.location='?filter='+this.value" class="border rounded-lg px-2 py-1 text-xs outline-none">
-                <option value="0">ทุกหวย</option>
-                <?php foreach ($lotteries as $l): ?>
-                <option value="<?= $l['id'] ?>" <?= $filterLottery == $l['id'] ? 'selected' : '' ?>><?= htmlspecialchars($l['name']) ?></option>
-                <?php endforeach; ?>
-            </select>
-            <form method="POST" class="inline">
-                <input type="hidden" name="form_action" value="clear_all">
-                <input type="hidden" name="lottery_type_id" value="<?= $filterLottery ?>">
-                <button type="submit" onclick="return confirm('ล้าง<?= $filterLottery ? 'หวยนี้' : 'ทั้งหมดทุกหวย' ?>?')" class="bg-red-500 text-white px-3 py-1 rounded-lg text-xs font-medium hover:bg-red-600 transition">
-                    <i class="fas fa-trash mr-1"></i>ล้าง<?= $filterLottery ? 'หวยนี้' : 'ทั้งหมด' ?>
-                </button>
-            </form>
+    <div class="px-4 py-3 border-b bg-gray-50">
+        <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
+            <span class="font-bold text-gray-700 text-sm"><i class="fas fa-list mr-1"></i>รายการ <span id="visibleCount"><?= count($blockedNumbers) ?></span> รายการ</span>
+            <div class="flex items-center gap-2">
+                <select onchange="window.location='?filter='+this.value" class="border rounded-lg px-2 py-1 text-xs outline-none">
+                    <option value="0">ทุกหวย</option>
+                    <?php foreach ($lotteries as $l): ?>
+                    <option value="<?= $l['id'] ?>" <?= $filterLottery == $l['id'] ? 'selected' : '' ?>><?= htmlspecialchars($l['name']) ?></option>
+                    <?php endforeach; ?>
+                </select>
+                <form method="POST" class="inline">
+                    <input type="hidden" name="form_action" value="clear_all">
+                    <input type="hidden" name="lottery_type_id" value="<?= $filterLottery ?>">
+                    <button type="submit" onclick="return confirm('ล้าง<?= $filterLottery ? 'หวยนี้' : 'ทั้งหมดทุกหวย' ?>?')" class="bg-red-500 text-white px-3 py-1 rounded-lg text-xs font-medium hover:bg-red-600 transition">
+                        <i class="fas fa-trash mr-1"></i>ล้าง<?= $filterLottery ? 'หวยนี้' : 'ทั้งหมด' ?>
+                    </button>
+                </form>
+            </div>
+        </div>
+        <div class="flex gap-2">
+            <button onclick="filterStatus('all')" id="filterAll" class="px-4 py-1.5 rounded-full text-xs font-bold transition bg-gray-700 text-white">ทั้งหมด (<?= count($blockedNumbers) ?>)</button>
+            <button onclick="filterStatus('half')" id="filterHalf" class="px-4 py-1.5 rounded-full text-xs font-bold transition bg-white text-orange-600 border border-orange-300 hover:bg-orange-50">½ จ่ายครึ่ง (<?= $countHalf ?>)</button>
+            <button onclick="filterStatus('blocked')" id="filterBlocked" class="px-4 py-1.5 rounded-full text-xs font-bold transition bg-white text-red-600 border border-red-300 hover:bg-red-50">🚫 ห้ามแทง (<?= $countBlocked ?>)</button>
         </div>
     </div>
     <div class="overflow-x-auto">
@@ -198,15 +209,14 @@ require_once 'includes/header.php';
                 <?php if (empty($blockedNumbers)): ?>
                 <tr><td colspan="5" class="px-3 py-8 text-center text-gray-400">ไม่มีรายการ</td></tr>
                 <?php else: foreach ($blockedNumbers as $bn): ?>
-                <tr class="border-b hover:bg-gray-50">
+                <tr class="border-b hover:bg-gray-50 blocked-row" data-blocked="<?= $bn['is_blocked'] ?>">
                     <td class="px-3 py-2 font-bold text-lg font-mono text-gray-800"><?= htmlspecialchars($bn['number']) ?></td>
                     <td class="px-3 py-2 text-xs"><?= htmlspecialchars($bn['lottery_name']) ?></td>
                     <td class="px-3 py-2 text-xs"><?= $betTypeLabels[$bn['bet_type']] ?? $bn['bet_type'] ?></td>
-                    <td class="px-3 py-2 text-center whitespace-nowrap">
-                        <div class="inline-flex rounded-lg overflow-hidden border border-gray-200">
-                            <button onclick="quickToggle(<?= $bn['id'] ?>, 0)" class="px-2.5 py-1 text-[11px] font-medium transition <?= !$bn['is_blocked'] ? 'bg-orange-500 text-white' : 'bg-white text-gray-400 hover:bg-orange-50 hover:text-orange-600' ?>">½ จ่ายครึ่ง</button>
-                            <button onclick="quickToggle(<?= $bn['id'] ?>, 1)" class="px-2.5 py-1 text-[11px] font-medium transition <?= $bn['is_blocked'] ? 'bg-red-500 text-white' : 'bg-white text-gray-400 hover:bg-red-50 hover:text-red-600' ?>">🚫 ห้ามแทง</button>
-                        </div>
+                    <td class="px-3 py-2 text-center">
+                        <span class="px-2.5 py-1 rounded-full text-[11px] font-bold <?= $bn['is_blocked'] ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700' ?>">
+                            <?= $bn['is_blocked'] ? '🚫 ห้ามแทง' : '½ จ่ายครึ่ง' ?>
+                        </span>
                     </td>
                     <td class="px-3 py-2 text-center whitespace-nowrap">
                         <button onclick="editBlocked(<?= $bn['id'] ?>, '<?= htmlspecialchars($bn['number']) ?>', <?= $bn['is_blocked'] ?>)" class="text-blue-500 hover:text-blue-700 mr-2" title="แก้ไข"><i class="fas fa-edit"></i></button>
@@ -244,16 +254,26 @@ function updateSelectAll() {
 
 document.querySelectorAll('.lottery-cb').forEach(cb => cb.addEventListener('change', updateSelectAll));
 
-function quickToggle(id, isBlocked) {
-    const form = document.createElement('form');
-    form.method = 'POST';
-    form.innerHTML = `
-        <input type="hidden" name="form_action" value="update">
-        <input type="hidden" name="id" value="${id}">
-        <input type="hidden" name="is_blocked" value="${isBlocked}">
-    `;
-    document.body.appendChild(form);
-    form.submit();
+function filterStatus(type) {
+    const rows = document.querySelectorAll('.blocked-row');
+    let visible = 0;
+    rows.forEach(row => {
+        const isBlocked = row.dataset.blocked;
+        if (type === 'all' || (type === 'blocked' && isBlocked === '1') || (type === 'half' && isBlocked === '0')) {
+            row.style.display = '';
+            visible++;
+        } else {
+            row.style.display = 'none';
+        }
+    });
+    document.getElementById('visibleCount').textContent = visible;
+    // Update button styles
+    const btnAll = document.getElementById('filterAll');
+    const btnHalf = document.getElementById('filterHalf');
+    const btnBlocked = document.getElementById('filterBlocked');
+    btnAll.className = 'px-4 py-1.5 rounded-full text-xs font-bold transition ' + (type==='all' ? 'bg-gray-700 text-white' : 'bg-white text-gray-500 border border-gray-300 hover:bg-gray-100');
+    btnHalf.className = 'px-4 py-1.5 rounded-full text-xs font-bold transition ' + (type==='half' ? 'bg-orange-500 text-white' : 'bg-white text-orange-600 border border-orange-300 hover:bg-orange-50');
+    btnBlocked.className = 'px-4 py-1.5 rounded-full text-xs font-bold transition ' + (type==='blocked' ? 'bg-red-500 text-white' : 'bg-white text-red-600 border border-red-300 hover:bg-red-50');
 }
 
 function editBlocked(id, number, isBlocked) {
