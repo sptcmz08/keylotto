@@ -111,18 +111,32 @@ $lotteryMap = [];
 $recentlyResulted = [];
 foreach ($allLotteries as &$l) {
     // กำหนด "งวดปัจจุบัน" โดยดูจาก open_time
-    // ถ้าตอนนี้ผ่าน open_time ของวันนี้ → งวดวันนี้
-    // ถ้ายังไม่ถึง open_time → ยังอยู่ในงวดเมื่อวาน (สำหรับหวยดึก เช่น ดาวโจนส์)
     $openTime = !empty($l['open_time']) ? strtotime(date('Y-m-d') . ' ' . $l['open_time']) : strtotime(date('Y-m-d') . ' 06:00:00');
     $isPastOpenTime = $now >= $openTime;
     
-    // งวดปัจจุบัน
+    // งวดปัจจุบัน (ตาม open_time)
     $currentRoundDate = $isPastOpenTime ? $today : date('Y-m-d', strtotime('-1 day'));
     
-    // เช็คว่าผลล่าสุดเป็นของงวดปัจจุบันหรือไม่
+    // ผลล่าสุดจาก DB
     $resultDate = $l['result_date'] ?? null;
-    $hasResultForCurrentRound = !empty($l['three_top']) && $resultDate === $currentRoundDate;
     $hasAnyResult = !empty($l['three_top']);
+    
+    // อายุผลล่าสุด (วัน)
+    $lastResultAgeDays = $resultDate ? (strtotime($today) - strtotime($resultDate)) / 86400 : 999;
+    
+    // === Smart Round Matching ===
+    // ถ้าผลล่าสุดตรงกับ currentRoundDate → match ตรง
+    // ถ้าไม่ตรง แต่ผลล่าสุดภายใน 3 วัน → ถือว่ายังเป็นงวดปัจจุบัน
+    // (สำหรับหวยที่ไม่ออกทุกวัน เช่น หุ้นวันหยุด/สุดสัปดาห์/หวยดึก)
+    $hasResultForCurrentRound = false;
+    if ($hasAnyResult && $resultDate === $currentRoundDate) {
+        // ตรงเป๊ะ
+        $hasResultForCurrentRound = true;
+    } elseif ($hasAnyResult && $lastResultAgeDays <= 3 && $lastResultAgeDays >= 0) {
+        // ผลล่าสุดภายใน 3 วัน → ถือเป็นงวดปัจจุบัน (วันหยุด/สุดสัปดาห์)
+        $hasResultForCurrentRound = true;
+        $currentRoundDate = $resultDate; // ใช้วันที่ผลจริง
+    }
     
     // คำนวณอายุผล (สำหรับ recently resulted section)
     $resultAge = $hasResultForCurrentRound && !empty($l['result_created_at']) 
@@ -134,7 +148,7 @@ foreach ($allLotteries as &$l) {
         $recentlyResulted[] = $l['name'];
         $l['smart_status'] = 'resulted';
     } elseif ($hasResultForCurrentRound && $resultAge >= 3600) {
-        // ผลงวดนี้ออกเกิน 1 ชม. → ยังอยู่ในงวดนี้ (จ่ายเงินแล้ว/ประมวลผล)
+        // ผลงวดนี้ออกเกิน 1 ชม.
         $l['smart_status'] = 'resulted_old';
     } else {
         // ยังไม่มีผลของงวดนี้ → เปิดรับ
@@ -364,7 +378,8 @@ require_once 'includes/header.php';
                     $pastCloseTime = $closeTime && $now > $closeTime;
                     $hoursPastClose = $closeTime ? ($now - $closeTime) / 3600 : 0;
                     
-                    // ตรวจสอบว่าผลล่าสุดเก่าแค่ไหน (สำหรับตรวจจับวันหยุด/สุดสัปดาห์)
+                    // ผลล่าสุดเก่าแค่ไหน
+                    $resultDate = $lt['result_date'] ?? null;
                     $lastResultAgeDays = $resultDate ? (strtotime($today) - strtotime($resultDate)) / 86400 : 999;
                     
                     if ($isBetClosed && !$hasResultForRound) {
@@ -376,8 +391,8 @@ require_once 'includes/header.php';
                     } elseif ($hasResultForRound && $hasPending) {
                         // มีผลงวดนี้แต่ยังมี pending = กำลังประมวลผล
                         $statusClass = 'status-processing'; $statusLabel = 'กำลังประมวลผล';
-                    } elseif (!$hasResultForRound && $lastResultAgeDays > 1 && $pastCloseTime) {
-                        // ผลล่าสุดเก่ากว่าเมื่อวาน + เลย close_time = วันหยุด/สุดสัปดาห์ → งดออกผล
+                    } elseif ($pastCloseTime && !$hasResultForRound && $lastResultAgeDays > 3) {
+                        // ผลเก่ากว่า 3 วัน + เลย close_time = งดออกผล (วันหยุดยาว)
                         $statusClass = 'status-suspended'; $statusLabel = 'งดออกผล';
                     } elseif ($pastCloseTime && !$hasResultForRound && $hoursPastClose > 2) {
                         // เลยเวลา > 2 ชม. ยังไม่มีผลงวดนี้ = งดออกผล
