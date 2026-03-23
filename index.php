@@ -123,6 +123,25 @@ foreach ($allLotteries as &$l) {
     $drawSchedule = $l['draw_schedule'] ?? 'daily';
     $currentRoundDate = getCurrentDrawDate($drawSchedule);
     
+    // === Cross-midnight adjustment ===
+    // หวยข้ามเที่ยงคืน (เช่น ดาวโจนส์ close 01:00/02:50) 
+    // ถ้าตอนนี้อยู่ระหว่าง open_time กับ เที่ยงคืน → ผลยังไม่ออก → แสดงงวดเมื่อวาน
+    if ($drawSchedule === 'daily' && !empty($l['close_time']) && !empty($l['open_time'])) {
+        $closeHour = intval(substr($l['close_time'], 0, 2));
+        $openHour = intval(substr($l['open_time'], 0, 2));
+        $nowHour = intval(date('H'));
+        // cross-midnight = close < open (เช่น close=01:00, open=06:00)
+        if ($closeHour < $openHour) {
+            if ($nowHour >= $openHour) {
+                // หลัง open_time แต่ก่อนเที่ยงคืน → ผลงวดนี้ยังไม่ออก → ลดงวด 1 วัน
+                $currentRoundDate = date('Y-m-d', strtotime($currentRoundDate . ' -1 day'));
+            } elseif ($nowHour < $closeHour) {
+                // หลังเที่ยงคืน แต่ก่อน close_time → ยังเป็นงวดเมื่อวาน
+                $currentRoundDate = date('Y-m-d', strtotime($currentRoundDate . ' -1 day'));
+            }
+        }
+    }
+    
     // เช็คว่าผลล่าสุดเป็นของงวดปัจจุบันหรือไม่
     $hasResultForCurrentRound = $hasAnyResult && $resultDate === $currentRoundDate;
     
