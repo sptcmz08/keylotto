@@ -8,41 +8,34 @@ $adminTitle = 'คาดคะเน ได้-เสีย';
 // Filters
 $selectedDate = $_GET['date'] ?? date('Y-m-d');
 $selectedLottery = $_GET['lottery'] ?? '';
-$sortBy = $_GET['sort'] ?? 'default'; // default, amount_desc, payout_desc
+$sortBy = $_GET['sort'] ?? 'default';
 $sortDir = $_GET['dir'] ?? 'desc';
 $showLimit = intval($_GET['limit'] ?? 50);
-$showMode = $_GET['mode'] ?? 'win_lose'; // win_lose, amount
+$showMode = $_GET['mode'] ?? 'win_lose';
 
 // Get lottery types grouped by category
-$lotteryTypes = $pdo->query("SELECT lt.id, lt.name, lc.name as cat_name, lc.id as cat_id FROM lottery_types lt JOIN lottery_categories lc ON lt.category_id = lc.id WHERE lt.is_active = 1 ORDER BY lt.category_id, lt.sort_order, lt.name")->fetchAll();
+$lotteryTypes = $pdo->query("SELECT lt.id, lt.name, lc.name as cat_name, lc.id as cat_id FROM lottery_types lt JOIN lottery_categories lc ON lt.category_id = lc.id WHERE lt.is_active = 1 ORDER BY lc.sort_order, lt.sort_order, lt.name")->fetchAll();
 
-// Get available draw dates for dropdown (last 30 days that have bets)
-$dateStmt = $pdo->query("SELECT DISTINCT draw_date FROM bets WHERE status != 'cancelled' AND draw_date >= DATE_SUB(CURDATE(), INTERVAL 60 DAY) ORDER BY draw_date DESC LIMIT 20");
+// Available draw dates
+$dateStmt = $pdo->query("SELECT DISTINCT draw_date FROM bets WHERE status != 'cancelled' AND draw_date >= DATE_SUB(CURDATE(), INTERVAL 60 DAY) ORDER BY draw_date DESC LIMIT 30");
 $availableDates = $dateStmt->fetchAll(PDO::FETCH_COLUMN);
 
-// Auto-select first lottery if none selected
+// Auto-select first lottery
 if (empty($selectedLottery) && !empty($lotteryTypes)) {
-    // Try to find the first lottery that has bets for this date
     $firstStmt = $pdo->prepare("SELECT DISTINCT b.lottery_type_id FROM bets b WHERE b.draw_date = ? AND b.status != 'cancelled' LIMIT 1");
     $firstStmt->execute([$selectedDate]);
     $firstLottery = $firstStmt->fetchColumn();
     $selectedLottery = $firstLottery ?: $lotteryTypes[0]['id'];
 }
 
-// Build WHERE clause
 $where = "WHERE b.draw_date = ? AND b.status != 'cancelled' AND b.lottery_type_id = ?";
 $params = [$selectedDate, $selectedLottery];
 
-// Get pay rates for this lottery
+// Pay rates
 $rates = [];
 $rateStmt = $pdo->prepare("SELECT bet_type, pay_rate FROM pay_rates WHERE lottery_type_id = ?");
 $rateStmt->execute([$selectedLottery]);
-foreach ($rateStmt->fetchAll() as $r) {
-    $rates[$r['bet_type']] = floatval($r['pay_rate']);
-}
-
-// Get discount rates
-$discountRate = 0; // TODO: if you have discount config, pull it here
+foreach ($rateStmt->fetchAll() as $r) $rates[$r['bet_type']] = floatval($r['pay_rate']);
 
 // Per-number breakdown
 $numberStmt = $pdo->prepare("
@@ -60,42 +53,30 @@ foreach ($numberStmt->fetchAll() as $r) {
 }
 
 $betTypes = ['3top', '3tod', '2top', '2bot', 'run_top', 'run_bot'];
-$betTypeLabels = ['3top' => '3 ตัวบน', '3tod' => '3 ตัวโต๊ด', '2top' => '2 ตัวบน', '2bot' => '2 ตัวล่าง', 'run_top' => 'วิ่งบน', 'run_bot' => 'วิ่งล่าง'];
+$betTypeLabels = ['3top'=>'3 ตัวบน','3tod'=>'3 ตัวโต๊ด','2top'=>'2 ตัวบน','2bot'=>'2 ตัวล่าง','run_top'=>'วิ่งบน','run_bot'=>'วิ่งล่าง'];
 
-// Calculate summary totals
+// Summary
 $summary = [];
-foreach ($betTypes as $bt) {
-    $summary[$bt] = ['buy' => 0, 'commission' => 0, 'net' => 0, 'payout' => 0];
-}
+foreach ($betTypes as $bt) $summary[$bt] = ['buy'=>0,'payout'=>0];
 foreach ($numberMap as $num => $types) {
     foreach ($betTypes as $bt) {
         if (isset($types[$bt])) {
-            $amt = $types[$bt]['amount'];
-            $rate = $rates[$bt] ?? 0;
-            $summary[$bt]['buy'] += $amt;
-            $summary[$bt]['payout'] += $amt * $rate;
+            $summary[$bt]['buy'] += $types[$bt]['amount'];
+            $summary[$bt]['payout'] += $types[$bt]['amount'] * ($rates[$bt] ?? 0);
         }
     }
 }
-
 $grandBuy = array_sum(array_column($summary, 'buy'));
-$grandCommission = 0;
-foreach ($betTypes as $bt) {
-    $summary[$bt]['commission'] = $summary[$bt]['buy'] * $discountRate;
-    $grandCommission += $summary[$bt]['commission'];
-}
-$grandNet = $grandBuy - abs($grandCommission);
 $grandPayout = array_sum(array_column($summary, 'payout'));
 
-// Build number rows for table
+// Number rows
 $numberRows = [];
 foreach ($numberMap as $num => $types) {
     $row = ['number' => $num, 'cols' => []];
     $rowPayout = 0;
     foreach ($betTypes as $bt) {
         $amt = $types[$bt]['amount'] ?? 0;
-        $rate = $rates[$bt] ?? 0;
-        $pay = $amt * $rate;
+        $pay = $amt * ($rates[$bt] ?? 0);
         $row['cols'][$bt] = ['buy' => $amt, 'payout' => $pay];
         $rowPayout += $pay;
     }
@@ -104,43 +85,110 @@ foreach ($numberMap as $num => $types) {
 }
 
 // Sort
-if ($sortBy === 'amount_desc') {
-    usort($numberRows, function($a, $b) {
-        $sumA = array_sum(array_column($a['cols'], 'buy'));
-        $sumB = array_sum(array_column($b['cols'], 'buy'));
-        return $sumB <=> $sumA;
-    });
-} elseif ($sortBy === 'payout_desc') {
-    usort($numberRows, fn($a, $b) => $b['total_payout'] <=> $a['total_payout']);
-}
+if ($sortBy === 'amount_desc') usort($numberRows, fn($a,$b) => array_sum(array_column($b['cols'],'buy')) <=> array_sum(array_column($a['cols'],'buy')));
+elseif ($sortBy === 'payout_desc') usort($numberRows, fn($a,$b) => $b['total_payout'] <=> $a['total_payout']);
 
-// Total count
 $totalBetCount = 0;
-foreach ($numberMap as $types) {
-    foreach ($types as $t) $totalBetCount += $t['count'];
-}
+foreach ($numberMap as $types) foreach ($types as $t) $totalBetCount += $t['count'];
 
 // Selected lottery info
-$selLotteryName = '';
-$selCatName = '';
+$selLotteryName = ''; $selCatName = '';
 foreach ($lotteryTypes as $lt) {
-    if ($lt['id'] == $selectedLottery) {
-        $selLotteryName = $lt['name'];
-        $selCatName = $lt['cat_name'];
-        break;
-    }
+    if ($lt['id'] == $selectedLottery) { $selLotteryName = $lt['name']; $selCatName = $lt['cat_name']; break; }
 }
 
-// Group lottery types by category for the selector
+// Group by category
 $lotteryByCategory = [];
-foreach ($lotteryTypes as $lt) {
-    $lotteryByCategory[$lt['cat_name']][] = $lt;
+foreach ($lotteryTypes as $lt) $lotteryByCategory[$lt['cat_name']][] = $lt;
+
+// Flag mapping
+$flagMap = [
+    'ไทย'=>'🇹🇭','รัฐบาล'=>'🇹🇭','ออมสิน'=>'🇹🇭','ธกส'=>'🇹🇭',
+    'ฮานอย'=>'🇻🇳','เวียดนาม'=>'🇻🇳',
+    'ลาว'=>'🇱🇦',
+    'มาเลย์'=>'🇲🇾','มาเลเซีย'=>'🇲🇾',
+    'จีน'=>'🇨🇳',
+    'เกาหลี'=>'🇰🇷',
+    'ญี่ปุ่น'=>'🇯🇵','นิเคอิ'=>'🇯🇵',
+    'ฮั่งเส็ง'=>'🇭🇰','ฮ่องกง'=>'🇭🇰',
+    'ไต้หวัน'=>'🇹🇼',
+    'สิงคโปร์'=>'🇸🇬',
+    'อินเดีย'=>'🇮🇳',
+    'อียิปต์'=>'🇪🇬',
+    'อังกฤษ'=>'🇬🇧',
+    'เยอรมัน'=>'🇩🇪',
+    'ดาวโจนส์'=>'🇺🇸','อเมริกา'=>'🇺🇸',
+    'รัสเซีย'=>'🇷🇺',
+    'หุ้น'=>'📈',
+    'VIP'=>'',
+    'One'=>'',
+    'JACKPOT'=>'',
+    '12 ราศี'=>'♈','ราศี'=>'♈',
+];
+
+function getFlag($name) {
+    global $flagMap;
+    foreach ($flagMap as $key => $flag) {
+        if (mb_strpos($name, $key) !== false && !empty($flag)) return $flag;
+    }
+    return '🎰';
+}
+
+// Category color mapping
+$catColors = [
+    'หวยชุด' => '#8B0000',
+    'หวยไทย' => '#1565C0',
+    'หวยต่างประเทศ' => '#2E7D32',
+    'หวยรายวัน' => '#C62828',
+    'หุ้นหลัก' => '#4A148C',
+    'หวย One' => '#E65100',
+];
+
+// Date status mapping
+$dateStatusMap = [];
+foreach ($availableDates as $d) {
+    $stChk = $pdo->prepare("SELECT 
+        SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END) as pending,
+        SUM(CASE WHEN status IN ('won','lost') THEN 1 ELSE 0 END) as done
+        FROM bets WHERE draw_date = ? AND lottery_type_id = ? AND status != 'cancelled'");
+    $stChk->execute([$d, $selectedLottery]);
+    $stInfo = $stChk->fetch();
+    if ($stInfo['done'] > 0 && $stInfo['pending'] == 0) $dateStatusMap[$d] = 'จ่ายแล้ว';
+    elseif ($stInfo['pending'] > 0) $dateStatusMap[$d] = 'กำลังดำเนินการ';
+    else $dateStatusMap[$d] = 'กำลังดำเนินการ';
 }
 
 require_once 'includes/header.php';
 ?>
 
 <style>
+    .wl-page { font-family: Tahoma, Arial, sans-serif; font-size: 11px; }
+    /* Header bar */
+    .wl-header-bar { background: #00a65a; padding: 6px 12px; display: flex; align-items: center; gap: 12px; border-radius: 4px 4px 0 0; position: relative; }
+    .wl-header-bar .selector-btn { background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3); color: #fff; padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold; display: flex; align-items: center; gap: 6px; }
+    .wl-header-bar .selector-btn:hover { background: rgba(255,255,255,0.25); }
+    
+    /* Dropdown panel */
+    .dropdown-panel { display: none; position: absolute; top: 100%; left: 0; z-index: 100; background: #fff; border: 2px solid #00a65a; border-radius: 0 0 6px 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); min-width: 700px; max-height: 500px; overflow-y: auto; }
+    .dropdown-panel.show { display: block; }
+    .dropdown-panel .cat-header { background: #00a65a; color: #fff; font-weight: bold; font-size: 12px; text-align: center; padding: 4px 8px; margin: 0; }
+    .dropdown-panel .cat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; padding: 4px; }
+    .dropdown-panel .lot-item { display: flex; align-items: center; gap: 4px; padding: 4px 8px; font-size: 11px; cursor: pointer; border-radius: 3px; white-space: nowrap; text-decoration: none; color: #333; }
+    .dropdown-panel .lot-item:hover { background: #e8f5e9; }
+    .dropdown-panel .lot-item.active { background: #c8e6c9; font-weight: bold; color: #1b5e20; }
+    
+    /* Date dropdown */
+    .date-dropdown { display: none; position: absolute; top: 100%; z-index: 100; background: #fff; border: 2px solid #00a65a; border-radius: 0 0 6px 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); min-width: 220px; }
+    .date-dropdown.show { display: block; }
+    .date-dropdown a { display: flex; justify-content: space-between; align-items: center; padding: 6px 12px; font-size: 11px; color: #333; text-decoration: none; border-bottom: 1px solid #eee; }
+    .date-dropdown a:hover { background: #e8f5e9; }
+    .date-dropdown a.active { background: #c8e6c9; font-weight: bold; }
+    .date-dropdown .status-badge { font-size: 9px; padding: 1px 6px; border-radius: 8px; }
+    .status-paid { background: #c8e6c9; color: #2e7d32; }
+    .status-pending { background: #fff3cd; color: #856404; }
+    .status-open { background: #bbdefb; color: #1565c0; }
+    
+    /* Table */
     .wl-table { border-collapse: collapse; width: 100%; font-size: 11px; font-family: Tahoma, Arial, sans-serif; }
     .wl-table th, .wl-table td { border: 1px solid #a5d6a7; padding: 2px 4px; }
     .wl-table thead th { background: #00a65a; color: #fff; font-weight: bold; text-align: center; padding: 4px 4px; white-space: nowrap; }
@@ -149,52 +197,101 @@ require_once 'includes/header.php';
     .wl-summary .label-cell { background: #e8f5e9; text-align: left; padding-left: 8px; font-size: 12px; color: #2e7d32; }
     .wl-row-even { background: #fff; }
     .wl-row-odd { background: #f9fff9; }
-    .wl-row-highlight { background: #fff9c4 !important; }
     .neg { color: #d32f2f; }
     .pos { color: #1b5e20; }
     .num-cell { text-align: right; font-family: 'Courier New', monospace; font-size: 11px; }
     .number-badge { display: inline-block; background: #e8f5e9; border: 1px solid #c8e6c9; border-radius: 2px; padding: 0 4px; font-family: monospace; font-weight: bold; font-size: 12px; min-width: 28px; text-align: center; }
     .filter-bar { background: #f5f5f5; border: 1px solid #ddd; border-radius: 4px; padding: 4px 8px; margin-bottom: 6px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 11px; }
-    .filter-bar select, .filter-bar input { border: 1px solid #ccc; border-radius: 3px; padding: 2px 4px; font-size: 11px; outline: none; }
+    .filter-bar select { border: 1px solid #ccc; border-radius: 3px; padding: 2px 4px; font-size: 11px; }
     .filter-bar label { color: #666; white-space: nowrap; }
     .btn-refresh { background: #fff; border: 1px solid #00a65a; color: #00a65a; padding: 2px 10px; border-radius: 3px; font-size: 11px; cursor: pointer; }
     .btn-refresh:hover { background: #e8f5e9; }
-    .color-legend { display: inline-flex; align-items: center; gap: 3px; font-size: 10px; padding: 2px 6px; border-radius: 2px; cursor: pointer; }
+    .color-legend { display: inline-flex; align-items: center; gap: 3px; font-size: 10px; padding: 2px 6px; border-radius: 2px; }
     .fight-input { width: 60px; text-align: center; border: 1px solid #ccc; border-radius: 2px; padding: 1px 2px; font-size: 11px; }
     .btn-save-fight { background: #00a65a; color: #fff; border: none; padding: 2px 10px; border-radius: 2px; font-size: 11px; cursor: pointer; font-weight: bold; }
 </style>
 
-<div class="mb-1">
-    <!-- Title + Alert -->
-    <div style="font-size:14px; font-weight:bold; color:#333; margin-bottom:4px;">คาดคะเน ได้-เสีย</div>
-    
-    <div style="background:#fff3cd; border:1px solid #ffc107; border-radius:4px; padding:6px 12px; margin-bottom:6px; font-size:12px; display:flex; justify-content:space-between; align-items:center;">
-        <span><span style="color:#d32f2f;">⚠</span> <b>เฉพาะงวด</b> [<?= htmlspecialchars($selCatName) ?>] <b><?= htmlspecialchars($selLotteryName) ?></b> วันที่ <b><?= date('d/m/', strtotime($selectedDate)) . (intval(date('Y', strtotime($selectedDate))) + 543) ?></b> <span style="color:#999;">(เปลี่ยนได้ที่แถบเมนูด้านบน)</span></span>
-        <button class="btn-refresh" onclick="location.reload()"><i class="fas fa-sync-alt"></i> Refresh (<?= $totalBetCount ?>)</button>
+<div class="wl-page">
+    <!-- ===== GREEN HEADER BAR ===== -->
+    <div class="wl-header-bar" id="wlHeaderBar">
+        <!-- Lottery Selector -->
+        <div style="position:relative;">
+            <button class="selector-btn" onclick="togglePanel('lotteryPanel')">
+                <?= getFlag($selLotteryName) ?> <span><?= htmlspecialchars($selLotteryName) ?></span> <i class="fas fa-caret-down"></i>
+            </button>
+            <div class="dropdown-panel" id="lotteryPanel">
+                <?php foreach ($lotteryByCategory as $catName => $lts): 
+                    $catColor = $catColors[$catName] ?? '#00a65a';
+                ?>
+                <div class="cat-header" style="background:<?= $catColor ?>"><?= htmlspecialchars($catName) ?></div>
+                <div class="cat-grid">
+                    <?php foreach ($lts as $lt): ?>
+                    <a href="?date=<?= $selectedDate ?>&lottery=<?= $lt['id'] ?>&sort=<?= $sortBy ?>&limit=<?= $showLimit ?>"
+                       class="lot-item <?= $lt['id'] == $selectedLottery ? 'active' : '' ?>">
+                        <?= getFlag($lt['name']) ?> <?= htmlspecialchars($lt['name']) ?>
+                    </a>
+                    <?php endforeach; ?>
+                </div>
+                <?php endforeach; ?>
+            </div>
+        </div>
+        
+        <!-- Date Selector -->
+        <div style="position:relative;">
+            <button class="selector-btn" onclick="togglePanel('datePanel')">
+                📅 <span>งวดวันที่ <?= date('d-m-', strtotime($selectedDate)) . (intval(date('Y', strtotime($selectedDate))) + 543) ?></span> <i class="fas fa-caret-down"></i>
+            </button>
+            <div class="date-dropdown" id="datePanel">
+                <?php foreach ($availableDates as $d): 
+                    $dFmt = date('d-m-', strtotime($d)) . (intval(date('Y', strtotime($d))) + 543);
+                    $status = $dateStatusMap[$d] ?? 'กำลังดำเนินการ';
+                    $statusClass = $status === 'จ่ายแล้ว' ? 'status-paid' : ($status === 'เปิดรับ' ? 'status-open' : 'status-pending');
+                ?>
+                <a href="?date=<?= $d ?>&lottery=<?= $selectedLottery ?>&sort=<?= $sortBy ?>&limit=<?= $showLimit ?>"
+                   class="<?= $d === $selectedDate ? 'active' : '' ?>">
+                    <span><?= $dFmt ?></span>
+                    <span class="status-badge <?= $statusClass ?>"><?= $status ?></span>
+                </a>
+                <?php endforeach; ?>
+            </div>
+        </div>
+        
+        <!-- Right side: Refresh -->
+        <div style="margin-left:auto;">
+            <button class="btn-refresh" style="background:rgba(255,255,255,0.9); border-color:#fff;" onclick="location.reload()">Refresh (<?= $totalBetCount ?>)</button>
+        </div>
     </div>
 
-    <!-- Filter Bar -->
+    <!-- ===== TITLE + ALERT ===== -->
+    <div style="padding:6px 0;">
+        <div style="font-size:14px; font-weight:bold; color:#333; margin-bottom:4px;">คาดคะเน ได้-เสีย</div>
+        <div style="background:#fff3cd; border:1px solid #ffc107; border-radius:4px; padding:5px 12px; font-size:11px;">
+            <span style="color:#d32f2f;">⚠</span> <b>เฉพาะงวด</b> [<?= htmlspecialchars($selCatName) ?>] <b><?= htmlspecialchars($selLotteryName) ?></b> วันที่ <b><?= date('d/m/', strtotime($selectedDate)) . (intval(date('Y', strtotime($selectedDate))) + 543) ?></b> <span style="color:#999;">(เปลี่ยนได้ที่แถบเมนูด้านบน)</span>
+        </div>
+    </div>
+
+    <!-- ===== FILTER BAR ===== -->
     <form method="GET" class="filter-bar">
         <label>แสดง</label>
         <select name="mode">
-            <option value="win_lose" <?= $showMode === 'win_lose' ? 'selected' : '' ?>>คาดคะเน ได้-เสีย ▼</option>
-            <option value="amount" <?= $showMode === 'amount' ? 'selected' : '' ?>>ยอดแทง ▼</option>
+            <option value="win_lose" <?= $showMode === 'win_lose' ? 'selected' : '' ?>>คาดคะเน ได้-เสีย</option>
+            <option value="amount" <?= $showMode === 'amount' ? 'selected' : '' ?>>ยอดแทง</option>
         </select>
         <label>เรียงลำดับ</label>
         <select name="sort">
-            <option value="default" <?= $sortBy === 'default' ? 'selected' : '' ?>>คาดคะเน ยอดแล้ว ▼</option>
-            <option value="amount_desc" <?= $sortBy === 'amount_desc' ? 'selected' : '' ?>>ยอดซื้อ ▼</option>
-            <option value="payout_desc" <?= $sortBy === 'payout_desc' ? 'selected' : '' ?>>ยอดจ่าย ▼</option>
+            <option value="default" <?= $sortBy === 'default' ? 'selected' : '' ?>>คาดคะเน ยอดแล้ว</option>
+            <option value="amount_desc" <?= $sortBy === 'amount_desc' ? 'selected' : '' ?>>ยอดซื้อ</option>
+            <option value="payout_desc" <?= $sortBy === 'payout_desc' ? 'selected' : '' ?>>ยอดจ่าย</option>
         </select>
         <label>เรียงจาก</label>
         <select name="dir">
-            <option value="desc" <?= $sortDir === 'desc' ? 'selected' : '' ?>>มาก > น้อย ▼</option>
-            <option value="asc" <?= $sortDir === 'asc' ? 'selected' : '' ?>>น้อย > มาก ▼</option>
+            <option value="desc" <?= $sortDir === 'desc' ? 'selected' : '' ?>>มาก > น้อย</option>
+            <option value="asc" <?= $sortDir === 'asc' ? 'selected' : '' ?>>น้อย > มาก</option>
         </select>
         <label>จำนวนแสดง</label>
         <select name="limit">
-            <?php foreach ([50, 100, 200, 500, 9999] as $lv): ?>
-            <option value="<?= $lv ?>" <?= $showLimit == $lv ? 'selected' : '' ?>><?= $lv == 9999 ? 'ทั้งหมด' : $lv ?> ▼</option>
+            <?php foreach ([50,100,200,500,9999] as $lv): ?>
+            <option value="<?= $lv ?>" <?= $showLimit == $lv ? 'selected' : '' ?>><?= $lv == 9999 ? 'ทั้งหมด' : $lv ?></option>
             <?php endforeach; ?>
         </select>
         <input type="hidden" name="date" value="<?= $selectedDate ?>">
@@ -202,55 +299,27 @@ require_once 'includes/header.php';
         <button type="submit" style="background:#00a65a; color:#fff; border:none; padding:3px 10px; border-radius:3px; font-size:11px; cursor:pointer;"><i class="fas fa-search"></i></button>
     </form>
 
-    <!-- Color Legend -->
+    <!-- ===== COLOR LEGEND ===== -->
     <div style="margin-bottom:6px; display:flex; gap:6px; flex-wrap:wrap;">
         <span class="color-legend" style="background:#c8e6c9; border:1px solid #a5d6a7;">พื้นหลังสีเขียว = เติมแต้ม</span>
         <span class="color-legend" style="background:#fff9c4; border:1px solid #fdd835;">พื้นหลังสีเหลือง = คุณจดหลังอ = ดูคาดะเอิ้ง</span>
         <span class="color-legend" style="background:#eee; border:1px solid #ccc;">☐ Ctrl+F (ค้นหาเลข)</span>
     </div>
 
-    <!-- Lottery Selector (horizontal tabs) -->
-    <div style="background:#fff; border:1px solid #ddd; border-radius:4px; padding:6px; margin-bottom:6px;">
-        <div style="display:flex; flex-wrap:wrap; gap:4px; margin-bottom:4px;">
-            <?php 
-            $dateOptions = '';
-            foreach ($availableDates as $d) {
-                $sel = ($d === $selectedDate) ? 'selected' : '';
-                $dFmt = date('d-m-', strtotime($d)) . (intval(date('Y', strtotime($d))) + 543);
-                $dateOptions .= "<option value='{$d}' {$sel}>{$dFmt}</option>";
-            }
-            ?>
-            <select onchange="location.href='?date='+this.value+'&lottery=<?= $selectedLottery ?>'" style="border:1px solid #00a65a; border-radius:3px; padding:3px 8px; font-size:11px; background:#e8f5e9; font-weight:bold; color:#2e7d32;">
-                <?= $dateOptions ?>
-            </select>
-        </div>
-        <div style="display:flex; flex-wrap:wrap; gap:3px;">
-            <?php foreach ($lotteryByCategory as $catName => $lts): ?>
-                <?php foreach ($lts as $lt): ?>
-                <a href="?date=<?= $selectedDate ?>&lottery=<?= $lt['id'] ?>&sort=<?= $sortBy ?>&limit=<?= $showLimit ?>" 
-                   style="display:inline-block; padding:2px 6px; font-size:10px; border-radius:2px; text-decoration:none; white-space:nowrap;
-                   <?= $lt['id'] == $selectedLottery ? 'background:#00a65a; color:#fff; font-weight:bold;' : 'background:#f5f5f5; color:#333; border:1px solid #ddd;' ?>">
-                    <?= htmlspecialchars($lt['name']) ?>
-                </a>
-                <?php endforeach; ?>
-            <?php endforeach; ?>
-        </div>
-    </div>
-
-    <!-- Main Data Table -->
+    <!-- ===== MAIN DATA TABLE ===== -->
     <div style="overflow-x:auto;">
         <table class="wl-table">
             <thead>
                 <tr>
-                    <th rowspan="2" style="width:30px;"></th>
-                    <th rowspan="2" style="min-width:40px;">รวม</th>
+                    <th style="width:30px;"></th>
+                    <th style="min-width:45px;">รวม</th>
                     <?php foreach ($betTypes as $bt): ?>
                     <th colspan="2"><?= $betTypeLabels[$bt] ?></th>
                     <?php endforeach; ?>
                 </tr>
             </thead>
             <tbody>
-                <!-- ซื้อ (Buy) -->
+                <!-- ซื้อ -->
                 <tr class="wl-summary">
                     <td class="label-cell">ซื้อ</td>
                     <td class="num-cell pos" style="font-size:12px;"><?= number_format($grandBuy, 2) ?></td>
@@ -258,23 +327,23 @@ require_once 'includes/header.php';
                     <td class="num-cell" colspan="2"><?= number_format($summary[$bt]['buy'], 2) ?></td>
                     <?php endforeach; ?>
                 </tr>
-                <!-- คอมฯ (Commission) -->
+                <!-- คอมฯ -->
                 <tr class="wl-summary">
                     <td class="label-cell">คอมฯ</td>
-                    <td class="num-cell neg"><?= $grandCommission != 0 ? number_format(-abs($grandCommission), 2) : '0.00' ?></td>
+                    <td class="num-cell">0.00</td>
                     <?php foreach ($betTypes as $bt): ?>
-                    <td class="num-cell" colspan="2"><?= $summary[$bt]['commission'] != 0 ? number_format(-abs($summary[$bt]['commission']), 2) : '0.00' ?></td>
+                    <td class="num-cell" colspan="2">0.00</td>
                     <?php endforeach; ?>
                 </tr>
-                <!-- รับ (Net Received) -->
+                <!-- รับ -->
                 <tr class="wl-summary">
                     <td class="label-cell">รับ</td>
-                    <td class="num-cell pos" style="font-size:12px;"><?= number_format($grandNet, 2) ?></td>
+                    <td class="num-cell pos" style="font-size:12px;"><?= number_format($grandBuy, 2) ?></td>
                     <?php foreach ($betTypes as $bt): ?>
-                    <td class="num-cell" colspan="2"><?= number_format($summary[$bt]['buy'] - abs($summary[$bt]['commission']), 2) ?></td>
+                    <td class="num-cell" colspan="2"><?= number_format($summary[$bt]['buy'], 2) ?></td>
                     <?php endforeach; ?>
                 </tr>
-                <!-- จ่าย (Max Payout) -->
+                <!-- จ่าย -->
                 <tr class="wl-summary">
                     <td class="label-cell" style="color:#d32f2f;">จ่าย</td>
                     <td class="num-cell neg" style="font-size:12px;"><?= number_format(-$grandPayout, 2) ?></td>
@@ -282,30 +351,28 @@ require_once 'includes/header.php';
                     <td class="num-cell neg" colspan="2"><?= $summary[$bt]['payout'] > 0 ? number_format(-$summary[$bt]['payout'], 2) : '0.00' ?></td>
                     <?php endforeach; ?>
                 </tr>
-                <!-- ตั้งสู้ (Fight Limits) -->
+                <!-- ตั้งสู้ -->
                 <tr class="wl-summary" style="background:#e8f5e9;">
                     <td class="label-cell">ตั้งสู้</td>
-                    <td class="num-cell"><button class="btn-save-fight" onclick="alert('บันทึกแล้ว')">บันทึก</button></td>
+                    <td class="num-cell"><button class="btn-save-fight">บันทึก</button></td>
                     <?php foreach ($betTypes as $i => $bt): ?>
-                    <td colspan="2" style="text-align:center;"><input type="text" class="fight-input" value="<?= [0, 500, 1000, 1000, 2000, 2000][$i] ?? 0 ?>" id="fight_<?= $bt ?>"></td>
+                    <td colspan="2" style="text-align:center;"><input type="text" class="fight-input" value="<?= [0,500,1000,1000,2000,2000][$i] ?? 0 ?>"></td>
                     <?php endforeach; ?>
                 </tr>
                 
-                <!-- Separator -->
-                <tr style="height:4px; background:#00a65a;"><td colspan="<?= 2 + count($betTypes) * 2 ?>"></td></tr>
+                <tr style="height:3px; background:#00a65a;"><td colspan="<?= 2 + count($betTypes)*2 ?>"></td></tr>
 
                 <!-- Per-number rows -->
                 <?php if (empty($numberRows)): ?>
-                <tr><td colspan="<?= 2 + count($betTypes) * 2 ?>" style="padding:20px; text-align:center; color:#999;">ไม่มีข้อมูลในงวดนี้</td></tr>
-                <?php else: 
+                <tr><td colspan="<?= 2 + count($betTypes)*2 ?>" style="padding:20px; text-align:center; color:#999;">ไม่มีข้อมูลในงวดนี้</td></tr>
+                <?php else:
                     $displayed = 0;
                     foreach ($numberRows as $i => $row):
                         if ($displayed >= $showLimit) break;
                         $displayed++;
                         $rowClass = $i % 2 === 0 ? 'wl-row-even' : 'wl-row-odd';
-                        $rowBuy = array_sum(array_column($row['cols'], 'buy'));
                 ?>
-                <tr class="<?= $rowClass ?>" style="cursor:pointer;" onmouseover="this.style.background='#e3f2fd'" onmouseout="this.style.background=''">
+                <tr class="<?= $rowClass ?>" onmouseover="this.style.background='#e3f2fd'" onmouseout="this.style.background=''">
                     <td style="text-align:center; color:#999; font-size:10px;"><?= $displayed ?></td>
                     <td style="text-align:center;"><span class="number-badge"><?= htmlspecialchars($row['number']) ?></span></td>
                     <?php foreach ($betTypes as $bt):
@@ -328,5 +395,22 @@ require_once 'includes/header.php';
     </div>
     <?php endif; ?>
 </div>
+
+<script>
+function togglePanel(id) {
+    // Close all panels first
+    document.querySelectorAll('.dropdown-panel, .date-dropdown').forEach(p => {
+        if (p.id !== id) p.classList.remove('show');
+    });
+    document.getElementById(id).classList.toggle('show');
+}
+
+// Close dropdowns when clicking outside
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('.wl-header-bar')) {
+        document.querySelectorAll('.dropdown-panel, .date-dropdown').forEach(p => p.classList.remove('show'));
+    }
+});
+</script>
 
 <?php require_once 'includes/footer.php'; ?>
