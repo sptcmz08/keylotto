@@ -143,11 +143,11 @@ $adminTitle = $adminTitle ?? 'Admin';
                 <div class="bg-white/90 text-green-800 px-3 py-0.5 rounded-full text-xs font-bold shadow-inner">
                     <i class="fas fa-users text-green-500 mr-1"></i> สมาชิก <?= $topMemberCount ?>
                 </div>
-                <a href="?logout=1" class="flex items-center cursor-pointer hover:opacity-80 transition">
-                    <div class="w-8 h-8 rounded-full bg-green-700 flex items-center justify-center mr-2 border border-green-500">
-                        <i class="fas fa-user text-white text-xs"></i>
+                <a href="logout.php" id="adminLogoutBtn" class="flex items-center cursor-pointer hover:opacity-80 transition" onclick="event.preventDefault(); Swal.fire({title:'ออกจากระบบ?',text:'คุณต้องการออกจากระบบผู้ดูแลหรือไม่',icon:'question',showCancelButton:true,confirmButtonColor:'#d33',cancelButtonColor:'#aaa',confirmButtonText:'ออกจากระบบ',cancelButtonText:'ยกเลิก'}).then((r)=>{if(r.isConfirmed) window.location='logout.php';});">
+                    <div class="w-8 h-8 rounded-full bg-red-600 flex items-center justify-center mr-2 border border-red-400">
+                        <i class="fas fa-sign-out-alt text-white text-xs"></i>
                     </div>
-                    <span class="text-sm font-medium text-white/90">Admin <i class="fas fa-caret-down text-[10px] ml-1"></i></span>
+                    <span class="text-sm font-medium text-white/90">ออกระบบ</span>
                 </a>
             </div>
         </header>
