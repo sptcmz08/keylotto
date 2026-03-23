@@ -136,6 +136,7 @@ CREATE TABLE IF NOT EXISTS `bets` (
   `note` TEXT DEFAULT NULL,
   `status` ENUM('pending','won','lost','cancelled') DEFAULT 'pending',
   `win_amount` DECIMAL(12,2) DEFAULT 0,
+  `paid_at` DATETIME DEFAULT NULL,
   `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
   `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),

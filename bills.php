@@ -76,6 +76,20 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'cancel_request' && isset($_GET['b
     exit;
 }
 
+// ==========================================
+// Handle AJAX: mark as paid
+// ==========================================
+if (isset($_GET['ajax']) && $_GET['ajax'] === 'mark_paid' && isset($_GET['bet_id'])) {
+    header('Content-Type: application/json; charset=utf-8');
+    $betId = intval($_GET['bet_id']);
+    
+    $stmt = $pdo->prepare("UPDATE bets SET paid_at = NOW() WHERE id = ? AND status = 'won' AND paid_at IS NULL");
+    $stmt->execute([$betId]);
+    
+    echo json_encode(['success' => $stmt->rowCount() > 0]);
+    exit;
+}
+
 function sorted_str($s) { $a = str_split($s); sort($a); return implode('', $a); }
 
 // ==========================================
@@ -133,7 +147,7 @@ $offset = ($page - 1) * $perPage;
 
 // Fetch page
 $stmt = $pdo->prepare("
-    SELECT b.*, lt.name as lottery_name, lc.name as category_name
+    SELECT b.*, b.paid_at, lt.name as lottery_name, lc.name as category_name
     FROM bets b
     JOIN lottery_types lt ON b.lottery_type_id = lt.id
     JOIN lottery_categories lc ON lt.category_id = lc.id
@@ -156,7 +170,9 @@ $statsStmt = $pdo->prepare("
         SUM(CASE WHEN status='won' THEN 1 ELSE 0 END) as won_count,
         SUM(CASE WHEN status='lost' THEN 1 ELSE 0 END) as lost_count,
         SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END) as pending_count,
-        SUM(CASE WHEN status='cancelled' THEN 1 ELSE 0 END) as cancelled_count
+        SUM(CASE WHEN status='cancelled' THEN 1 ELSE 0 END) as cancelled_count,
+        SUM(CASE WHEN status='won' AND paid_at IS NOT NULL THEN 1 ELSE 0 END) as paid_count,
+        SUM(CASE WHEN status='won' AND paid_at IS NOT NULL THEN win_amount ELSE 0 END) as total_paid
     FROM bets b WHERE {$where}
 ");
 $statsStmt->execute($params);
@@ -282,11 +298,21 @@ require_once 'includes/header.php';
                 <div class="text-xl font-bold <?= $profitColor ?>"><?= $profit >= 0 ? '+' : '' ?><?= formatMoney($profit) ?></div>
             </div>
             <div class="text-center">
-                <div class="text-xs text-gray-500">สถานะ</div>
-                <?php if (($stats['pending_count'] ?? 0) == 0 && ($stats['won_count'] ?? 0) + ($stats['lost_count'] ?? 0) > 0): ?>
-                <div class="mt-1"><span class="bg-green-500 text-white px-3 py-1 rounded-full text-sm font-bold"><i class="fas fa-check-circle mr-1"></i>จ่ายเงินแล้ว</span></div>
-                <?php elseif (($stats['pending_count'] ?? 0) > 0): ?>
+                <div class="text-xs text-gray-500">สถานะการจ่ายเงิน</div>
+                <?php 
+                    $paidCount = intval($stats['paid_count'] ?? 0);
+                    $wonCount = intval($stats['won_count'] ?? 0);
+                    $unpaidWon = $wonCount - $paidCount;
+                    $totalPaidAmount = floatval($stats['total_paid'] ?? 0);
+                ?>
+                <?php if ($wonCount == 0 && ($stats['pending_count'] ?? 0) > 0): ?>
                 <div class="mt-1"><span class="bg-yellow-500 text-white px-3 py-1 rounded-full text-sm font-bold"><i class="fas fa-clock mr-1"></i>รอผล <?= $stats['pending_count'] ?> บิล</span></div>
+                <?php elseif ($unpaidWon > 0): ?>
+                <div class="mt-1"><span class="bg-orange-500 text-white px-3 py-1 rounded-full text-sm font-bold"><i class="fas fa-wallet mr-1"></i>รอจ่าย <?= $unpaidWon ?> บิล (<?= formatMoney($totalPayout - $totalPaidAmount) ?>)</span></div>
+                <?php elseif ($wonCount > 0 && $unpaidWon == 0): ?>
+                <div class="mt-1"><span class="bg-green-500 text-white px-3 py-1 rounded-full text-sm font-bold"><i class="fas fa-check-circle mr-1"></i>จ่ายเงินครบแล้ว (<?= formatMoney($totalPaidAmount) ?>)</span></div>
+                <?php elseif ($wonCount == 0 && ($stats['lost_count'] ?? 0) > 0): ?>
+                <div class="mt-1"><span class="bg-gray-500 text-white px-3 py-1 rounded-full text-sm font-bold">ไม่มีรายการจ่าย</span></div>
                 <?php else: ?>
                 <div class="mt-1"><span class="bg-gray-400 text-white px-3 py-1 rounded-full text-sm font-bold">ยังไม่มีข้อมูล</span></div>
                 <?php endif; ?>
@@ -337,13 +363,14 @@ require_once 'includes/header.php';
 
                     <th class="px-2 py-2 text-center font-bold text-gray-700 border">รวม</th>
                     <th class="px-2 py-2 text-center font-bold text-gray-700 border">ถูกรางวัล</th>
+                    <th class="px-2 py-2 text-center font-bold text-gray-700 border">สถานะจ่าย</th>
                     <th class="px-2 py-2 text-center font-bold text-gray-700 border">หมายเหตุ</th>
-                    <th class="px-2 py-2 text-center font-bold text-gray-700 border w-20">จัดการ</th>
+                    <th class="px-2 py-2 text-center font-bold text-gray-700 border w-24">จัดการ</th>
                 </tr>
             </thead>
             <tbody>
                 <?php if (empty($bets)): ?>
-                <tr><td colspan="11" class="px-3 py-12 text-center text-gray-400"><i class="fas fa-inbox text-3xl mb-3 block"></i>ยังไม่มีรายการโพย</td></tr>
+                <tr><td colspan="12" class="px-3 py-12 text-center text-gray-400"><i class="fas fa-inbox text-3xl mb-3 block"></i>ยังไม่มีรายการโพย</td></tr>
                 <?php else: foreach ($bets as $i => $b):
                     $isCancelled = $b['status'] === 'cancelled';
                     $cancelRequested = !empty($b['cancel_requested']);
@@ -371,12 +398,24 @@ require_once 'includes/header.php';
 
                     <td class="px-2 py-2 text-center border text-[#2196f3]"><?= formatMoney($b['net_amount']) ?></td>
                     <td class="px-2 py-2 text-center border"><?= $winBadge ?></td>
+                    <td class="px-2 py-2 text-center border">
+                        <?php if ($b['status'] === 'won' && empty($b['paid_at'])): ?>
+                        <span class="bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full text-[11px] font-bold"><i class="fas fa-wallet mr-0.5"></i>รอจ่ายเงิน</span>
+                        <?php elseif ($b['status'] === 'won' && !empty($b['paid_at'])): ?>
+                        <span class="bg-green-100 text-green-700 px-2 py-0.5 rounded-full text-[11px] font-bold"><i class="fas fa-check-circle mr-0.5"></i>จ่ายเงินแล้ว</span>
+                        <?php endif; ?>
+                    </td>
                     <td class="px-2 py-2 text-center border text-xs"><?= htmlspecialchars($b['note'] ?? '') ?></td>
                     <td class="px-2 py-2 text-center border">
                         <div class="flex gap-1 justify-center">
                             <button onclick="viewBillDetail(<?= $b['id'] ?>)" class="w-7 h-7 bg-gray-100 hover:bg-gray-200 rounded border text-gray-500 transition" title="ดูรายละเอียด">
                                 <i class="fas fa-list-ul text-xs"></i>
                             </button>
+                            <?php if ($b['status'] === 'won' && empty($b['paid_at'])): ?>
+                            <button onclick="markPaid(<?= $b['id'] ?>, '<?= htmlspecialchars($b['bet_number']) ?>', <?= $b['win_amount'] ?>)" class="w-7 h-7 bg-green-50 hover:bg-green-100 rounded border border-green-300 text-green-600 transition" title="จ่ายเงิน">
+                                <i class="fas fa-money-bill-wave text-xs"></i>
+                            </button>
+                            <?php endif; ?>
                             <?php if (!$isCancelled && !$cancelRequested): ?>
                             <button onclick="requestCancel(<?= $b['id'] ?>, '<?= htmlspecialchars($b['bet_number']) ?>')" class="w-7 h-7 bg-red-50 hover:bg-red-100 rounded border border-red-200 text-red-400 transition" title="ขอยกเลิก">
                                 <i class="fas fa-ban text-xs"></i>
@@ -559,6 +598,31 @@ function requestCancel(betId, betNumber) {
     });
 }
 
+function markPaid(betId, betNumber, winAmount) {
+    Swal.fire({
+        title: 'จ่ายเงินโพย #' + betNumber,
+        html: '<div class="text-lg font-bold text-green-600 mb-2">💰 ' + fmt(winAmount) + ' บาท</div><div class="text-sm text-gray-500">ยืนยันว่าจ่ายเงินรางวัลแล้ว?</div>',
+        showCancelButton: true,
+        cancelButtonText: 'ยกเลิก',
+        confirmButtonText: '<i class="fas fa-check-circle mr-1"></i> ยืนยันจ่ายเงิน',
+        confirmButtonColor: '#4caf50',
+        icon: 'question',
+    }).then(result => {
+        if (result.isConfirmed) {
+            fetch('bills.php?ajax=mark_paid&bet_id=' + betId)
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        Swal.fire({ icon: 'success', title: 'จ่ายเงินเรียบร้อย!', text: 'โพย #' + betNumber + ' จำนวน ' + fmt(winAmount) + ' บาท', timer: 2000, showConfirmButton: false });
+                        setTimeout(() => location.reload(), 2000);
+                    } else {
+                        Swal.fire({ icon: 'error', title: 'เกิดข้อผิดพลาด', text: 'อาจจ่ายเงินไปแล้ว', confirmButtonColor: '#e53935' });
+                    }
+                });
+        }
+    });
+}
+
 function viewBillDetail(betId) {
     const modal = document.getElementById('billModal');
     const content = document.getElementById('billModalContent');
@@ -576,7 +640,8 @@ function viewBillDetail(betId) {
             const isCancelled = bet.status === 'cancelled';
             
             let statusBadge = '';
-            if (bet.status === 'won') statusBadge = '<span class="bg-green-100 text-green-700 px-2 py-0.5 rounded-full text-xs font-bold">ถูกรางวัล</span>';
+            if (bet.status === 'won' && bet.paid_at) statusBadge = '<span class="bg-green-100 text-green-700 px-2 py-0.5 rounded-full text-xs font-bold"><i class="fas fa-check-circle mr-1"></i>จ่ายเงินแล้ว</span>';
+            else if (bet.status === 'won' && !bet.paid_at) statusBadge = '<span class="bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full text-xs font-bold"><i class="fas fa-wallet mr-1"></i>รอจ่ายเงิน</span>';
             else if (bet.status === 'lost') statusBadge = '<span class="bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-xs font-bold">ไม่ถูกรางวัล</span>';
             else if (bet.status === 'cancelled') statusBadge = '<span class="bg-red-100 text-red-700 px-2 py-0.5 rounded-full text-xs font-bold">ยกเลิก</span>';
             else statusBadge = '<span class="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full text-xs font-bold">รอผล</span>';
@@ -587,9 +652,15 @@ function viewBillDetail(betId) {
             // Determine per-item status text
             let itemStatusText = '';
             let itemStatusClass = '';
-            if (bet.status === 'won' || bet.status === 'lost') {
+            if (bet.status === 'won' && bet.paid_at) {
                 itemStatusText = 'จ่ายเงินแล้ว';
                 itemStatusClass = 'text-green-600 font-bold';
+            } else if (bet.status === 'won' && !bet.paid_at) {
+                itemStatusText = 'รอจ่ายเงิน';
+                itemStatusClass = 'text-orange-600 font-bold';
+            } else if (bet.status === 'lost') {
+                itemStatusText = 'ไม่ถูกรางวัล';
+                itemStatusClass = 'text-gray-500';
             } else if (bet.status === 'cancelled') {
                 itemStatusText = 'ยกเลิก';
                 itemStatusClass = 'text-red-500 font-bold';
