@@ -151,7 +151,8 @@ $statsStmt = $pdo->prepare("
         SUM(total_amount) as total_amount,
         SUM(net_amount) as total_net,
         SUM(CASE WHEN status != 'cancelled' THEN net_amount ELSE 0 END) as active_net,
-        SUM(win_amount) as total_win,
+        SUM(CASE WHEN status = 'won' THEN win_amount ELSE 0 END) as total_win,
+        SUM(CASE WHEN status = 'won' THEN net_amount ELSE 0 END) as won_bet_amount,
         SUM(CASE WHEN status='won' THEN 1 ELSE 0 END) as won_count,
         SUM(CASE WHEN status='lost' THEN 1 ELSE 0 END) as lost_count,
         SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END) as pending_count,
@@ -160,6 +161,7 @@ $statsStmt = $pdo->prepare("
 ");
 $statsStmt->execute($params);
 $stats = $statsStmt->fetch(PDO::FETCH_ASSOC);
+
 
 // Group by lottery for tab 2
 $allBetsStmt = $pdo->prepare("
