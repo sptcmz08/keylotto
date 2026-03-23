@@ -396,19 +396,22 @@ if (!$lotteryId) {
         return String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
     }
 
-    // เช็คเที่ยงคืน → reload หน้าใหม่ เพื่อรีเซ็ตงวด
-    let lastDay = new Date().getDate();
-    function checkMidnight() {
-        const nowDay = new Date().getDate();
-        if (nowDay !== lastDay) {
+    // เช็คตี 2 → reload หน้าใหม่ เพื่อรีเซ็ตงวด (ไม่ใช้เที่ยงคืน เพราะดาวโจนส์ยังไม่ปิดรับ)
+    let hasReloaded = false;
+    function checkReset() {
+        const now = new Date();
+        const hour = now.getHours();
+        if (hour === 2 && !hasReloaded) {
+            hasReloaded = true;
             location.reload();
         }
+        if (hour !== 2) hasReloaded = false;
     }
 
     // อัพเดททุก 1 วินาที
     setInterval(() => {
         sortAndDistribute();
-        checkMidnight();
+        checkReset();
     }, 1000);
     sortAndDistribute();
     </script>
