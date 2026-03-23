@@ -56,7 +56,7 @@ $bets = $stmt->fetchAll();
 
 // Summary
 $totalBets = count($bets);
-$totalAmount = array_sum(array_column($bets, 'net_amount'));
+$totalAmount = array_sum(array_map(fn($b) => $b['status'] !== 'cancelled' ? floatval($b['net_amount']) : 0, $bets));
 
 require_once 'includes/header.php';
 ?>
