@@ -250,6 +250,16 @@ require_once 'includes/header.php';
         display: inline-block;
         white-space: nowrap;
     }
+    .status-next {
+        background: linear-gradient(135deg, #7e57c2 0%, #5e35b1 100%);
+        color: white;
+        font-size: 11px;
+        font-weight: 600;
+        padding: 4px 10px;
+        border-radius: 20px;
+        display: inline-block;
+        white-space: nowrap;
+    }
     .status-waiting {
         background: linear-gradient(135deg, #42a5f5 0%, #1e88e5 100%);
         color: white;
@@ -429,11 +439,11 @@ require_once 'includes/header.php';
                     
                     // === สถานะ ===
                     if ($hasResultForRound && !$todayIsDrawDay) {
-                        // วันนี้ไม่ใช่วันออกผล + มีผลงวดล่าสุดแล้ว → จ่ายเงินแล้ว
-                        $statusClass = 'status-paid'; $statusLabel = 'จ่ายเงินแล้ว';
+                        // วันนี้ไม่ใช่วันออกผล + มีผลงวดล่าสุดแล้ว → รอออกผลงวดต่อไป
+                        $statusClass = 'status-next'; $statusLabel = 'รอออกผลงวดต่อไป';
                     } elseif (!$hasResultForRound && !$todayIsDrawDay && $hasAnyResult) {
-                        // วันนี้ไม่ใช่วันออกผล + ไม่มีผลงวดนี้ แต่มีผลเก่า → แสดงผลเก่า + จ่ายแล้ว
-                        $statusClass = 'status-paid'; $statusLabel = 'จ่ายเงินแล้ว';
+                        // วันนี้ไม่ใช่วันออกผล + ไม่มีผลงวดนี้ แต่มีผลเก่า → รอออกผลงวดต่อไป
+                        $statusClass = 'status-next'; $statusLabel = 'รอออกผลงวดต่อไป';
                     } elseif ($isBetClosed && !$hasResultForRound) {
                         $statusClass = 'status-closed'; $statusLabel = 'ปิดรับแทง';
                     } elseif ($hasResultForRound && !$hasPending) {
@@ -459,12 +469,12 @@ require_once 'includes/header.php';
                     </td>
                     <td class="text-center text-gray-600 text-[12px]"><?= $displayDate ?></td>
                     <td class="text-center">
-                        <?php if ($hasResultForRound): ?>
+                        <?php if ($hasAnyResult): ?>
                             <span class="num-box"><?= htmlspecialchars($lt['three_top']) ?></span>
                         <?php endif; ?>
                     </td>
                     <td class="text-center">
-                        <?php if ($hasResultForRound && !empty($lt['two_bot'])): ?>
+                        <?php if ($hasAnyResult && !empty($lt['two_bot'])): ?>
                             <span class="num-box"><?= htmlspecialchars($lt['two_bot']) ?></span>
                         <?php endif; ?>
                     </td>
