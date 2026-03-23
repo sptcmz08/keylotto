@@ -149,8 +149,8 @@ $statsStmt = $pdo->prepare("
     SELECT 
         COUNT(*) as total_count,
         SUM(total_amount) as total_amount,
-
         SUM(net_amount) as total_net,
+        SUM(CASE WHEN status != 'cancelled' THEN net_amount ELSE 0 END) as active_net,
         SUM(win_amount) as total_win,
         SUM(CASE WHEN status='won' THEN 1 ELSE 0 END) as won_count,
         SUM(CASE WHEN status='lost' THEN 1 ELSE 0 END) as lost_count,
@@ -251,8 +251,8 @@ require_once 'includes/header.php';
             <div class="text-lg font-bold text-red-500"><?= $stats['lost_count'] ?? 0 ?></div>
         </div>
         <div class="bg-orange-50 rounded border border-orange-200 p-2 text-center">
-            <div class="text-xs text-orange-500">ยอดรวม</div>
-            <div class="text-lg font-bold text-orange-600"><?= formatMoney($stats['total_net'] ?? 0) ?></div>
+            <div class="text-xs text-orange-500">ยอดรวม (ไม่รวมยกเลิก)</div>
+            <div class="text-lg font-bold text-orange-600"><?= formatMoney($stats['active_net'] ?? 0) ?></div>
         </div>
     </div>
 
