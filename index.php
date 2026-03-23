@@ -341,8 +341,7 @@ require_once 'includes/header.php';
             </thead>
             <tbody>
                 <?php foreach ($LOTTERY_GROUPS as $group): 
-                    // Filter out recently-resulted lotteries from main display
-                    $mainNames = array_filter($group['names'], fn($n) => !in_array($n, $recentlyResulted));
+                    $mainNames = $group['names'];
                     if (empty($mainNames)) continue;
                 ?>
                 <!-- Category Header -->
