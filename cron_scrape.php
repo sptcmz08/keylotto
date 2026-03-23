@@ -141,16 +141,32 @@ function countMissingResults($pdo, $expectedCount = 62) {
 
 // =============================================
 // Lookup: lottery name → lottery_types.id (cached)
+// Smart matching: exact → normalized fuzzy
 // =============================================
 $LOTTERY_ID_CACHE = [];
+$ALL_LOTTERY_NAMES = null; // lazy loaded
+
+/**
+ * Normalize ชื่อหวยให้เหลือแค่แก่นคำ
+ * 'หุ้นนิเคอิเช้า' → 'นิเคอิเช้า'
+ * 'นิเคอิ - เช้า'  → 'นิเคอิเช้า'
+ * 'หุ้นจีน - บ่าย' → 'จีนบ่าย'
+ */
+function normalizeLotteryName($name) {
+    $n = $name;
+    $n = str_replace(['หุ้น', ' ', '-', '–', '—'], '', $n);
+    $n = mb_strtolower($n, 'UTF-8');
+    return $n;
+}
 
 function getLotteryTypeId($pdo, $lotteryName) {
-    global $LOTTERY_ID_CACHE;
+    global $LOTTERY_ID_CACHE, $ALL_LOTTERY_NAMES;
 
     if (isset($LOTTERY_ID_CACHE[$lotteryName])) {
         return $LOTTERY_ID_CACHE[$lotteryName];
     }
 
+    // 1) Exact match
     $stmt = $pdo->prepare("SELECT id FROM lottery_types WHERE name = ? AND is_active = 1 LIMIT 1");
     $stmt->execute([$lotteryName]);
     $row = $stmt->fetch();
@@ -158,6 +174,24 @@ function getLotteryTypeId($pdo, $lotteryName) {
     if ($row) {
         $LOTTERY_ID_CACHE[$lotteryName] = (int)$row['id'];
         return (int)$row['id'];
+    }
+
+    // 2) Fuzzy match — normalize แล้วเทียบ
+    if ($ALL_LOTTERY_NAMES === null) {
+        $ALL_LOTTERY_NAMES = [];
+        $all = $pdo->query("SELECT id, name FROM lottery_types WHERE is_active = 1")->fetchAll();
+        foreach ($all as $lt) {
+            $ALL_LOTTERY_NAMES[] = ['id' => (int)$lt['id'], 'name' => $lt['name'], 'norm' => normalizeLotteryName($lt['name'])];
+        }
+    }
+
+    $inputNorm = normalizeLotteryName($lotteryName);
+    foreach ($ALL_LOTTERY_NAMES as $lt) {
+        if ($lt['norm'] === $inputNorm) {
+            $LOTTERY_ID_CACHE[$lotteryName] = $lt['id'];
+            echo "  ℹ️  Fuzzy matched: \"{$lotteryName}\" → \"{$lt['name']}\" (id:{$lt['id']})\n";
+            return $lt['id'];
+        }
     }
 
     return null;
