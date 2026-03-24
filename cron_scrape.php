@@ -345,6 +345,14 @@ function processResults($pdo, $results, $source) {
     $skippedCount = 0;
     $failedCount = 0;
     $today = date('Y-m-d', time() - 4 * 3600);
+    $todayReal = date('Y-m-d'); // วันที่จริง (ไม่ shift)
+
+    // หวยข้ามเที่ยงคืน (close < open) → ใช้วันที่จริงไม่ shift
+    $crossMidnightIds = [];
+    $cmStmt = $pdo->query("SELECT id FROM lottery_types WHERE CAST(SUBSTRING(close_time,1,2) AS UNSIGNED) < CAST(SUBSTRING(open_time,1,2) AS UNSIGNED) AND CAST(SUBSTRING(close_time,1,2) AS UNSIGNED) < 5");
+    while ($row = $cmStmt->fetch()) {
+        $crossMidnightIds[$row['id']] = true;
+    }
 
     foreach ($results as $r) {
         // Get slug from result
@@ -390,8 +398,14 @@ function processResults($pdo, $results, $source) {
             continue;
         }
 
+        // หวยข้ามเที่ยงคืน → ใช้วันที่จริง (ไม่ shift 4 ชม.)
+        if (isset($crossMidnightIds[$lotteryTypeId])) {
+            $drawDate = $todayReal;
+        }
+
         // Reject future dates
-        if ($drawDate > $today) {
+        $maxDate = max($today, $todayReal);
+        if ($drawDate > $maxDate) {
             echo "⚠️  {$keyLotteryName}: วันที่ {$drawDate} เป็นอนาคต → ข้าม\n";
             $skippedCount++;
             continue;
