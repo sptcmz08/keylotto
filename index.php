@@ -260,7 +260,7 @@ require_once 'includes/header.php';
         white-space: nowrap;
     }
     .status-next {
-        background: linear-gradient(135deg, #7e57c2 0%, #5e35b1 100%);
+        background: linear-gradient(135deg, #ffa726 0%, #f57f17 100%);
         color: white;
         font-size: 11px;
         font-weight: 600;
@@ -337,6 +337,44 @@ require_once 'includes/header.php';
         align-items: center;
         gap: 8px;
     }
+    /* Tab navigation */
+    .tab-nav {
+        display: flex;
+        gap: 0;
+        background: #f5f5f5;
+        border-bottom: 2px solid #1aa34a;
+        overflow-x: auto;
+    }
+    .tab-btn {
+        padding: 8px 16px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        border: none;
+        background: #f5f5f5;
+        color: #666;
+        white-space: nowrap;
+        border-bottom: 3px solid transparent;
+        transition: all 0.2s;
+    }
+    .tab-btn:hover { background: #e8f5e9; color: #2e7d32; }
+    .tab-btn.active {
+        background: #fff;
+        color: #1aa34a;
+        border-bottom-color: #1aa34a;
+        font-weight: 700;
+    }
+    /* Row states */
+    .row-closed {
+        background: #f5f5f5 !important;
+        opacity: 0.55;
+    }
+    .row-closed .lottery-name { color: #999 !important; }
+    .row-closed .num-box { background: #bdbdbd !important; box-shadow: none !important; }
+    .row-upcoming {
+        background: #fffde7 !important;
+    }
+    .row-upcoming .lottery-name { color: #f57f17 !important; }
 </style>
 
 <div class="card-outline">
@@ -344,6 +382,14 @@ require_once 'includes/header.php';
     <div class="section-title">
         <i class="fas fa-trophy"></i>
         ผลหวยล่าสุด
+    </div>
+
+    <!-- Tab Navigation -->
+    <div class="tab-nav">
+        <button class="tab-btn active" onclick="switchTab('all', this)">ทั้งหมด</button>
+        <?php foreach ($LOTTERY_GROUPS as $gi => $group): ?>
+        <button class="tab-btn" onclick="switchTab('group-<?= $gi ?>', this)"><?= $group['label'] ?></button>
+        <?php endforeach; ?>
     </div>
 
     <!-- Table -->
@@ -359,12 +405,12 @@ require_once 'includes/header.php';
                 </tr>
             </thead>
             <tbody>
-                <?php foreach ($LOTTERY_GROUPS as $group): 
+                <?php foreach ($LOTTERY_GROUPS as $gi => $group): 
                     $mainNames = $group['names'];
                     if (empty($mainNames)) continue;
                 ?>
                 <!-- Category Header -->
-                <tr>
+                <tr class="cat-row" data-group="group-<?= $gi ?>">
                     <td colspan="5" class="cat-header" style="background: <?= $group['bg'] ?>; color: <?= $group['color'] ?>;">
                         <?= $group['label'] ?>
                     </td>
@@ -448,40 +494,35 @@ require_once 'includes/header.php';
                     }
                     
                     // =============================================
-                    // สถานะใหม่ตาม User Request (วงจร 4 สถานะ):
-                    // 1. รอออกผลงวดต่อไป (ก่อน close_time)
-                    // 2. รอออกผล (หลัง close_time ก่อน result_time)
-                    // 3. กำลังประมวลผล (หลัง result_time แต่ยังไม่มีผล)
-                    // 4. จ่ายเงินแล้ว (มีผลแล้ว)
+                    // สถานะแบบ 2 สถานะ (ตาม User Feedback):
+                    // 1. จ่ายเงินแล้ว (เขียว) = มีผลงวดนี้แล้ว
+                    // 2. รอออกผล (ฟ้า) = ยังไม่มีผลงวดนี้
                     // =============================================
-                    if ($isBetClosed && !$hasResultForRound) {
-                        $statusClass = 'status-closed'; $statusLabel = 'ปิดรับแทง';
-                    } elseif ($hasResultForRound) {
-                        if ($hasPending) {
-                            $statusClass = 'status-processing'; $statusLabel = '<i class="fas fa-spinner fa-spin mr-1"></i> กำลังประมวลผล';
-                        } else {
-                            $statusClass = 'status-paid'; $statusLabel = 'จ่ายเงินแล้ว';
-                        }
+                    if ($hasResultForRound) {
+                        $statusClass = 'status-paid'; $statusLabel = 'จ่ายเงินแล้ว';
                     } else {
-                        if (!$todayIsDrawDay || !$closeTime) {
-                            $statusClass = 'status-next'; $statusLabel = 'รอออกผลงวดต่อไป';
-                        } else {
-                            if ($now < $closeTime) {
-                                $statusClass = 'status-next'; $statusLabel = 'รอออกผลงวดต่อไป';
-                            } elseif ($now >= $closeTime && $now < $resultTime) {
-                                $statusClass = 'status-waiting'; $statusLabel = 'รอออกผล';
-                            } else {
-                                // เลยเวลา result_time แล้ว
-                                if ($isResultStale && $hoursPastClose > 3) {
-                                    $statusClass = 'status-suspended'; $statusLabel = 'งดออกผล';
-                                } else {
-                                    $statusClass = 'status-processing'; $statusLabel = '<i class="fas fa-spinner fa-spin mr-1"></i> กำลังประมวลผล';
-                                }
-                            }
+                        $statusClass = 'status-waiting'; $statusLabel = 'รอออกผล';
+                    }
+                    
+                    // =============================================
+                    // Row color: สีเทา (ปิดรับ ≤10 นาที) / สีเหลือง (รอเปิด ≤2 ชม.)
+                    // =============================================
+                    $rowClass = '';
+                    if ($pastCloseTime && $hoursPastClose <= (10/60) && !$hasResultForRound) {
+                        // เพิ่งปิดรับไม่เกิน 10 นาที → สีเทา
+                        $rowClass = 'row-closed';
+                    } elseif (!$pastCloseTime && $closeTime && ($closeTime - $now) > 0) {
+                        // ยังไม่ปิด → เช็คว่าเพิ่งเปิดรับหรือยัง
+                        $openTimeForCheck = $openTimeForRound;
+                        $timeUntilOpen = $openTimeForCheck - $now;
+                        if ($timeUntilOpen > 0 && $timeUntilOpen <= 7200) {
+                            // ยังไม่เปิดรับ แต่อีก ≤2 ชม.จะเปิด → สีเหลือง
+                            $rowClass = 'row-upcoming';
+                            $statusClass = 'status-next'; $statusLabel = 'รอเปิดรับ';
                         }
                     }
                 ?>
-                <tr>
+                <tr class="<?= $rowClass ?>" data-group="group-<?= $gi ?>">
                     <td>
                         <a href="bet.php?id=<?= $lt['id'] ?>" class="flex items-center space-x-2 hover:opacity-80">
                             <img src="<?= $flagUrl ?>" alt="flag" class="flag-img">
@@ -551,26 +592,34 @@ require_once 'includes/header.php';
 </div>
 
 <script>
-// Auto-refresh ทุก 30 วินาที เพื่ออัพเดทสถานะ real-time
-// จะ refresh เฉพาะตอนที่ tab เปิดอยู่
 let refreshInterval;
 function startAutoRefresh() {
     refreshInterval = setInterval(() => {
-        if (!document.hidden) {
-            location.reload();
-        }
-    }, 30000); // 30 วินาที
+        if (!document.hidden) location.reload();
+    }, 30000);
 }
 startAutoRefresh();
-
-// หยุด refresh เมื่อ tab ไม่ได้ focus
 document.addEventListener('visibilitychange', () => {
-    if (document.hidden) {
-        clearInterval(refreshInterval);
-    } else {
-        startAutoRefresh();
-    }
+    if (document.hidden) clearInterval(refreshInterval);
+    else startAutoRefresh();
 });
+
+// Tab switching
+function switchTab(group, btn) {
+    // Update active tab
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    
+    // Show/hide rows
+    const rows = document.querySelectorAll('tr[data-group], tr.cat-row');
+    rows.forEach(row => {
+        if (group === 'all') {
+            row.style.display = '';
+        } else {
+            row.style.display = row.dataset.group === group ? '' : 'none';
+        }
+    });
+}
 </script>
 
 <?php require_once 'includes/footer.php'; ?>

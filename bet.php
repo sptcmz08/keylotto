@@ -613,11 +613,11 @@ require_once 'includes/header.php';
                             <button onclick="reverseNumber()" id="btn-reverse" class="w-full bg-[#ffca28] text-yellow-900 py-2 rounded text-[13px] font-bold hover:bg-yellow-400 transition h-[40px]">กลับเลข</button>
                         </div>
                         <div class="col-span-6 sm:col-span-3">
-                            <label class="text-[11px] text-gray-500 block mb-0.5 text-center">บน</label>
+                            <label class="text-[11px] text-gray-500 block mb-0.5 text-center" id="topLabel">บน</label>
                             <input type="number" id="topAmount" class="w-full border border-gray-300 rounded px-3 py-2 text-sm text-center focus:border-blue-500 outline-none h-[40px]">
                         </div>
-                        <div class="col-span-6 sm:col-span-3">
-                            <label class="text-[11px] text-gray-500 block mb-0.5 text-center">ล่าง</label>
+                        <div class="col-span-6 sm:col-span-3" id="botAmountWrap">
+                            <label class="text-[11px] text-gray-500 block mb-0.5 text-center" id="botLabel">ล่าง</label>
                             <input type="number" id="botAmount" class="w-full border border-gray-300 rounded px-3 py-2 text-sm text-center focus:border-blue-500 outline-none h-[40px]">
                         </div>
                         <div class="col-span-12 sm:col-span-2">
@@ -1006,6 +1006,30 @@ function setBetType(type) {
         if (normalInput) normalInput.style.display = '';
     }
     
+    // Update label บน/ล่าง → บน/โต๊ด for 3ตัว & 6กลับ
+    const topLabel = document.getElementById('topLabel');
+    const botLabel = document.getElementById('botLabel');
+    const botWrap = document.getElementById('botAmountWrap');
+    
+    if (type === '3') {
+        if (topLabel) topLabel.textContent = 'บน';
+        if (botLabel) botLabel.textContent = 'โต๊ด';
+        if (botWrap) botWrap.style.display = '';
+    } else if (type === '6') {
+        // 6 กลับ: only บน, hide ล่าง/โต๊ด
+        if (topLabel) topLabel.textContent = 'บน';
+        if (botWrap) botWrap.style.display = 'none';
+        document.getElementById('botAmount').value = '';
+    } else if (type === 'run') {
+        if (topLabel) topLabel.textContent = 'บน';
+        if (botLabel) botLabel.textContent = 'ล่าง';
+        if (botWrap) botWrap.style.display = '';
+    } else {
+        if (topLabel) topLabel.textContent = 'บน';
+        if (botLabel) botLabel.textContent = 'ล่าง';
+        if (botWrap) botWrap.style.display = '';
+    }
+    
     const numInput = document.getElementById('numInput');
     if (type === '3' || type === '6') numInput.maxLength = 3;
     else if (type === 'run') numInput.maxLength = 1;
@@ -1033,7 +1057,8 @@ function addSingleNumber(val) {
         return true;
     } else if (type === '19' && /^\d$/.test(val)) {
         const nums = get19Door(val);
-        nums.forEach(n => { if (!selectedNums.includes(n)) selectedNums.push(n); });
+        // ไม่ตัดซ้ำ: เพิ่มทุกตัวเสมอ (แยกรุด)
+        nums.forEach(n => selectedNums.push(n));
         return true;
     } else if ((type === 'run' || type === 'win') && /^\d$/.test(val)) {
         if (!selectedNums.includes(val)) selectedNums.push(val);
@@ -1071,9 +1096,12 @@ function reverseNumber() {
 }
 
 function handleNumInput(e) {
-    const val = e.target.value.trim();
-    // ตรวจว่ามีช่องว่าง/เครื่องหมาย = วางหลายตัว
-    if (/[\s,\/\-]/.test(val)) {
+    let val = e.target.value;
+    // ตัดอักขระพิเศษก่อน: / , . - newline tab => space
+    val = val.replace(/[^\d\s]/g, ' ').trim();
+    if (!val) return;
+    // ตรวจว่ามีช่องว่าง = วางหลายตัว
+    if (/\s/.test(val)) {
         handleMultiPaste(val);
         e.target.value = '';
         return;
@@ -1280,11 +1308,8 @@ function addBetItem() {
     let typeLabel3 = (top>0 && bot>0) ? `${top} x ${bot}` : (top>0 ? top : bot);
     if (currentBetType === '3' || currentBetType === '6') typeLabel2 = (top>0 && bot>0) ? 'บน x โต๊ด' : (top>0 ? 'บน' : 'โต๊ด');
 
-    let group = betGroups.find(g => g.typeCategory === currentBetType && g.amountTop === top && g.amountBot === bot);
-    
-    if (group) {
-        numbers.forEach(n => { if(!group.numbers.includes(n)) group.numbers.push(n); });
-    } else {
+    // 19ประตู: ห้าม merge group → แยกบรรทัดแต่ละรุด
+    if (currentBetType === '19') {
         betGroups.push({
             id: Date.now(),
             typeCategory: currentBetType,
@@ -1292,6 +1317,19 @@ function addBetItem() {
             numbers: [...numbers],
             amountTop: top, amountBot: bot
         });
+    } else {
+        let group = betGroups.find(g => g.typeCategory === currentBetType && g.amountTop === top && g.amountBot === bot);
+        if (group) {
+            numbers.forEach(n => { if(!group.numbers.includes(n)) group.numbers.push(n); });
+        } else {
+            betGroups.push({
+                id: Date.now(),
+                typeCategory: currentBetType,
+                typeLabel1, typeLabel2, typeLabel3,
+                numbers: [...numbers],
+                amountTop: top, amountBot: bot
+            });
+        }
     }
     
     renderBetItems();
@@ -1413,14 +1451,21 @@ function removeWinResult(el, num) {
 }
 
 function reverseWinNumbers() {
-    // กลับเลขวิน: เพิ่ม permutations ของ selectedNums ที่มาจากวิน
+    // กลับเลขวิน: เพิ่ม reversed ของ selectedNums
     const current = [...selectedNums];
     let added = 0;
     current.forEach(num => {
-        const perms = getPermutations(num);
-        perms.forEach(p => {
-            if (!selectedNums.includes(p)) { selectedNums.push(p); added++; }
-        });
+        if (num.length === 2) {
+            // 2 ตัว: กลับ AB → BA
+            const rev = num[1] + num[0];
+            if (rev !== num && !selectedNums.includes(rev)) { selectedNums.push(rev); added++; }
+        } else if (num.length === 3) {
+            // 3 ตัว: สร้าง permutations ทั้งหมด
+            const perms = getPermutations(num);
+            perms.forEach(p => {
+                if (!selectedNums.includes(p)) { selectedNums.push(p); added++; }
+            });
+        }
     });
     renderSelectedNumbers();
     saveState();
@@ -1604,12 +1649,28 @@ async function doSaveBet(items, note, onSuccess) {
     // Store items in window scope for delete access
     window._confirmItems = [...items];
     
+    // คำนวณ over-limit rates สำหรับแต่ละประเภท (recalculate ทุกครั้งที่ render)
+    function getOverLimitTypes() {
+        const tc = {};
+        window._confirmItems.forEach(i => { tc[i.type] = (tc[i.type] || 0) + 1; });
+        const th = OVER_LIMIT.threshold || 50;
+        const olt = {};
+        Object.entries(tc).forEach(([type, count]) => {
+            if (count >= th && OVER_LIMIT[type]) olt[type] = OVER_LIMIT[type];
+        });
+        return olt;
+    }
+
     function buildConfirmHtml() {
+        const overLimitTypes = getOverLimitTypes();
         let totalAmount = 0;
         let totalDiscount = 0;
         let rows = window._confirmItems.map((item, idx) => {
             const label = typeLabels[item.type] || item.type;
-            const rate = PAY_RATES[item.type] || '-';
+            // แสดงเรทลดเมื่อเกิน threshold
+            const rate = overLimitTypes[item.type] || PAY_RATES[item.type] || '-';
+            const isReduced = !!overLimitTypes[item.type];
+            const rateColor = isReduced ? '#e53935' : '#1565c0';
             const discount = item.discount || 0;
             totalAmount += item.amount;
             totalDiscount += discount;
@@ -1617,7 +1678,7 @@ async function doSaveBet(items, note, onSuccess) {
                 <td style="padding:5px 8px;font-size:13px;">${label}</td>
                 <td style="padding:5px 8px;text-align:center;font-weight:bold;font-size:14px;">${item.number}</td>
                 <td style="padding:5px 8px;text-align:right;font-size:13px;">${item.amount.toFixed(2)}</td>
-                <td style="padding:5px 8px;text-align:right;font-size:13px;color:#1565c0;">${rate}</td>
+                <td style="padding:5px 8px;text-align:right;font-size:13px;color:${rateColor};font-weight:${isReduced ? 'bold' : 'normal'};">${rate}</td>
                 <td style="padding:5px 8px;text-align:right;font-size:13px;color:#e53935;">${discount.toFixed(2)}</td>
                 <td style="padding:2px 4px;text-align:center;">
                     <button type="button" onclick="window._removeConfirmItem(${idx})" style="background:#fee2e2;border:none;color:#e53935;cursor:pointer;border-radius:4px;padding:4px 6px;font-size:12px;" title="ลบ">

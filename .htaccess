@@ -1,0 +1,45 @@
+# ============================================
+# .htaccess — Subdomain routing for IMZ Shop 97
+# ============================================
+# วิธีตั้งค่า:
+# 1. ไปที่ Plesk > DNS Settings
+# 2. เพิ่ม A Record: agent.imzshop97.com → IP เดิม
+# 3. เพิ่ม A Record: member.imzshop97.com → IP เดิม
+# 4. วาง .htaccess นี้ไว้ที่ root (/var/www/vhosts/imzshop97.com/httpdocs)
+# ============================================
+
+RewriteEngine On
+
+# ============================================
+# agent.imzshop97.com → /admin/
+# ============================================
+RewriteCond %{HTTP_HOST} ^agent\. [NC]
+RewriteCond %{REQUEST_URI} !^/admin/ [NC]
+RewriteCond %{REQUEST_URI} !^/api\.php [NC]
+RewriteCond %{REQUEST_URI} !^/config\.php [NC]
+RewriteCond %{REQUEST_URI} !^/auth\.php [NC]
+RewriteCond %{REQUEST_URI} !^/includes/ [NC]
+RewriteCond %{REQUEST_URI} !^/assets/ [NC]
+RewriteCond %{REQUEST_URI} !^/flags/ [NC]
+RewriteRule ^login\.php$ /admin/login.php [L]
+RewriteRule ^(.*)$ /admin/$1 [L]
+
+# ============================================
+# member.imzshop97.com → / (root, member pages)
+# ============================================
+RewriteCond %{HTTP_HOST} ^member\. [NC]
+RewriteCond %{REQUEST_URI} ^/admin/ [NC]
+RewriteRule ^admin/(.*)$ / [R=302,L]
+
+# ============================================
+# Redirect: member เข้า agent URL → ไปหน้า member 
+# admin เข้า member URL → ไปหน้า agent
+# ============================================
+# (optional — uncomment if needed)
+#RewriteCond %{HTTP_HOST} ^agent\. [NC]
+#RewriteCond %{REQUEST_URI} ^/$ [NC]
+#RewriteRule ^$ /admin/index.php [L]
+
+# ============================================
+# Default: main domain works normally (both admin & member)
+# ============================================
