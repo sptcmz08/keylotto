@@ -1,8 +1,14 @@
 <?php
 require_once __DIR__ . '/auth.php';
 
+// agent subdomain → redirect to admin login
+if (getSubdomain() === 'agent') {
+    header('Location: admin/login.php');
+    exit;
+}
+
 if (isLoggedIn()) {
-    if (($_SESSION['role'] ?? '') === 'admin') {
+    if (($_SESSION['role'] ?? '') === 'admin' && getSubdomain() !== 'member') {
         header('Location: admin/index.php');
     } else {
         header('Location: index.php');
