@@ -100,23 +100,33 @@ $allLotteries = $stmt->fetchAll();
 
 // =============================================
 // คำนวณสถานะ โดยอิงจากงวด (round lifecycle)
+// หลักการ: ตรวจสอบว่าหวยนี้มีงวดวันนี้จริงหรือไม่
+//   - ถ้ามีผลหรือมีคนแทงวันนี้ → งวดวันนี้
+//   - ถ้าไม่มี → ใช้วันที่ผลล่าสุดเป็นงวดปัจจุบัน
+//   - สำหรับหวยที่ไม่ได้ออกทุกวัน (เช่น หวยไทย 1/16)
 // =============================================
 $now = time();
-
-// =============================================
-// Shift System Day by 4 hours
-// รีเซ็ตวันใหม่ตอน 04:00 AM
-// =============================================
-$systemTime = $now - (4 * 3600);
-$today = date('Y-m-d', $systemTime);
-$yesterday = date('Y-m-d', strtotime('-1 day', $systemTime));
+$today = date('Y-m-d');
+$yesterday = date('Y-m-d', strtotime('-1 day'));
 
 $lotteryMap = [];
 $recentlyResulted = [];
 foreach ($allLotteries as &$l) {
+    $openTime = !empty($l['open_time']) ? strtotime($today . ' ' . $l['open_time']) : strtotime($today . ' 06:00:00');
+    $isPastOpenTime = $now >= $openTime;
+    
     // ผลล่าสุดจาก DB
     $resultDate = $l['result_date'] ?? null;
     $hasAnyResult = !empty($l['three_top']);
+    
+    // =============================================
+    // 1. Shift System Day by 4 hours
+    // รีเซ็ตวันใหม่ตอน 04:00 AM (ตามที่ user ต้องการ)
+    // ทำให้หวยข้ามคืน (Dow Jones 03:20) ถือเป็นของ "เมื่อวาน" โดยอัตโนมัติ
+    // ลอจิก cross-midnight ไม่จำเป็นอีกต่อไป
+    // =============================================
+    $systemTime = $now - (4 * 3600); 
+    $today = date('Y-m-d', $systemTime);
     
     // === Current Round Date จาก draw_schedule ===
     $drawSchedule = $l['draw_schedule'] ?? 'daily';
@@ -125,22 +135,9 @@ foreach ($allLotteries as &$l) {
     // เช็คว่าผลล่าสุดเป็นของงวดปัจจุบันหรือไม่
     $hasResultForCurrentRound = $hasAnyResult && $resultDate === $currentRoundDate;
     
-    // === เวลาเปิด/ปิด ===
-    $openTimeStr = $currentRoundDate . ' ' . ($l['open_time'] ?? '05:00:00');
-    $closeTimeStr = $currentRoundDate . ' ' . ($l['close_time'] ?? '23:59:00');
-    $openTime = strtotime($openTimeStr);
-    $closeTime = strtotime($closeTimeStr);
-    
-    // ถ้า close_time < open_time → ข้ามเที่ยงคืน
-    if ($closeTime < $openTime) {
-        $closeTime += 86400;
-    }
-    
-    $isPastCloseTime = $now >= $closeTime;
-    $isPastOpenTime = $now >= $openTime;
-    $hoursPastClose = $isPastCloseTime ? ($now - $closeTime) / 3600 : 0;
-    
     // === Grace Period 1 ชม. ===
+    // ถ้าผลล่าสุดออกไม่เกิน 1 ชม. แม้จะเป็นงวดเก่า → ยังแสดงผลเก่าอยู่
+    // หลัง 1 ชม. → reset เป็นงวดใหม่
     $resultCreatedAt = !empty($l['result_created_at']) ? strtotime($l['result_created_at']) : 0;
     $timeSinceResult = $resultCreatedAt ? ($now - $resultCreatedAt) : PHP_INT_MAX;
     
@@ -148,13 +145,29 @@ foreach ($allLotteries as &$l) {
         // ผลเพิ่งออกไม่เกิน 1 ชม. → ยังแสดงผลงวดเก่า (grace period)
         $hasResultForCurrentRound = true;
         $currentRoundDate = $resultDate;
+    }
+    
+    // คำนวณอายุผล (สำหรับ recently resulted section)
+    $resultAge = $hasResultForCurrentRound && $resultCreatedAt
+        ? $timeSinceResult 
+        : PHP_INT_MAX;
+    
+    if ($hasResultForCurrentRound && $resultAge < 3600) {
+        // ออกผลงวดนี้ไม่เกิน 1 ชม. → แสดง "เพิ่งออกผล"
         $recentlyResulted[] = $l['name'];
+        $l['smart_status'] = 'resulted';
+    } elseif ($hasResultForCurrentRound && $resultAge >= 3600) {
+        // ผลงวดนี้ออกเกิน 1 ชม.
+        $l['smart_status'] = 'resulted_old';
+    } else {
+        // ยังไม่มีผลของงวดนี้ → เปิดรับ
+        $l['smart_status'] = 'open';
     }
     
     // เก็บข้อมูลงวดปัจจุบันไว้ใช้ในส่วน display
     $l['current_round_date'] = $currentRoundDate;
     $l['has_result_current_round'] = $hasResultForCurrentRound;
-
+    
     $lotteryMap[$l['name']] = $l;
 }
 unset($l);
@@ -247,7 +260,7 @@ require_once 'includes/header.php';
         white-space: nowrap;
     }
     .status-next {
-        background: linear-gradient(135deg, #ffa726 0%, #f57f17 100%);
+        background: linear-gradient(135deg, #7e57c2 0%, #5e35b1 100%);
         color: white;
         font-size: 11px;
         font-weight: 600;
@@ -324,44 +337,6 @@ require_once 'includes/header.php';
         align-items: center;
         gap: 8px;
     }
-    /* Tab navigation */
-    .tab-nav {
-        display: flex;
-        gap: 0;
-        background: #f5f5f5;
-        border-bottom: 2px solid #1aa34a;
-        overflow-x: auto;
-    }
-    .tab-btn {
-        padding: 8px 16px;
-        font-size: 13px;
-        font-weight: 600;
-        cursor: pointer;
-        border: none;
-        background: #f5f5f5;
-        color: #666;
-        white-space: nowrap;
-        border-bottom: 3px solid transparent;
-        transition: all 0.2s;
-    }
-    .tab-btn:hover { background: #e8f5e9; color: #2e7d32; }
-    .tab-btn.active {
-        background: #fff;
-        color: #1aa34a;
-        border-bottom-color: #1aa34a;
-        font-weight: 700;
-    }
-    /* Row states */
-    .row-closed {
-        background: #f5f5f5 !important;
-        opacity: 0.55;
-    }
-    .row-closed .lottery-name { color: #999 !important; }
-    .row-closed .num-box { background: #bdbdbd !important; box-shadow: none !important; }
-    .row-upcoming {
-        background: #fffde7 !important;
-    }
-    .row-upcoming .lottery-name { color: #f57f17 !important; }
 </style>
 
 <div class="card-outline">
@@ -369,14 +344,6 @@ require_once 'includes/header.php';
     <div class="section-title">
         <i class="fas fa-trophy"></i>
         ผลหวยล่าสุด
-    </div>
-
-    <!-- Tab Navigation -->
-    <div class="tab-nav">
-        <button class="tab-btn active" onclick="switchTab('all', this)">ทั้งหมด</button>
-        <?php foreach ($LOTTERY_GROUPS as $gi => $group): ?>
-        <button class="tab-btn" onclick="switchTab('group-<?= $gi ?>', this)"><?= $group['label'] ?></button>
-        <?php endforeach; ?>
     </div>
 
     <!-- Table -->
@@ -392,12 +359,12 @@ require_once 'includes/header.php';
                 </tr>
             </thead>
             <tbody>
-                <?php foreach ($LOTTERY_GROUPS as $gi => $group): 
+                <?php foreach ($LOTTERY_GROUPS as $group): 
                     $mainNames = $group['names'];
                     if (empty($mainNames)) continue;
                 ?>
                 <!-- Category Header -->
-                <tr class="cat-row" data-group="group-<?= $gi ?>">
+                <tr>
                     <td colspan="5" class="cat-header" style="background: <?= $group['bg'] ?>; color: <?= $group['color'] ?>;">
                         <?= $group['label'] ?>
                     </td>
@@ -412,42 +379,107 @@ require_once 'includes/header.php';
                     
                     // แสดงวันที่งวดปัจจุบัน
                     $displayDate = date('d-m-Y', strtotime($lt['current_round_date']));
-                    $hasResultForRound = $lt['has_result_current_round'];
                     
-                    // === เวลาเปิด/ปิด (อิงจากงวดปัจจุบัน) ===
+                    // สถานะ realtime 5 ระดับ (อิงจากงวดปัจจุบัน):
+                    // 1. ปิดรับแทง (แดง) = Admin กดปิด
+                    // 2. จ่ายเงินแล้ว (เขียว) = มีผลงวดนี้ + ไม่มี pending
+                    // 3. กำลังประมวลผล (ส้ม) = เลย close_time ≤ 2 ชม. / หรือมีผลแต่ยัง pending
+                    // 4. งดออกผล (เทา) = เลย close_time > 2 ชม. ยังไม่มีผลงวดนี้
+                    // 5. รอออกผล (ฟ้า) = ยังไม่ถึงเวลาปิดรับ
+                    $betKey = $lt['id'] . '_' . $lt['current_round_date'];
+                    $hasPending = isset($pendingBets[$betKey]) && $pendingBets[$betKey] > 0;
+                    $hasPaid = isset($paidBets[$betKey]) && $paidBets[$betKey] > 0;
+                    $isBetClosed = !empty($lt['bet_closed']);
+                    
+                    // === สร้าง close_time และ result_time อิงจากวันที่งวดปัจจุบัน ===
                     $roundDate = $lt['current_round_date'];
-                    $openTimeStr = $roundDate . ' ' . ($lt['open_time'] ?? '05:00:00');
-                    $closeTimeStr = $roundDate . ' ' . ($lt['close_time'] ?? '23:59:00');
-                    $openTimeForRound = strtotime($openTimeStr);
-                    $closeTime = strtotime($closeTimeStr);
-                    if ($closeTime < $openTimeForRound) $closeTime += 86400;
-                    $pastCloseTime = $now >= $closeTime;
-                    $hoursPastClose = $pastCloseTime ? ($now - $closeTime) / 3600 : 0;
                     
-                    // =============================================
-                    // สถานะ 3 ระดับ:
-                    // 1. จ่ายเงินแล้ว (เขียว) = มีผลงวดนี้แล้ว
-                    // 2. รอออกผล (ฟ้า) = ปิดรับแล้ว ยังไม่มีผล
-                    // 3. เปิดรับแทง (เขียวอ่อน) = ยังไม่ปิดรับ
-                    // =============================================
-                    if ($hasResultForRound) {
-                        $statusClass = 'status-paid'; $statusLabel = 'จ่ายเงินแล้ว';
-                    } elseif ($pastCloseTime) {
-                        $statusClass = 'status-waiting'; $statusLabel = 'รอออกผล';
-                    } else {
-                        $statusClass = 'status-waiting'; $statusLabel = 'เปิดรับแทง';
+                    $closeTime = null;
+                    $resultTime = null;
+                    $pastCloseTime = false;
+                    $hoursPastClose = 0;
+                    
+                    $openTimeStr = $roundDate . ' ' . ($lt['open_time'] ?? '06:00:00');
+                    $openTimeForRound = strtotime($openTimeStr);
+                    
+                    if (!empty($lt['close_time'])) {
+                        $closeTime = strtotime($roundDate . ' ' . $lt['close_time']);
+                        if ($closeTime < $openTimeForRound) {
+                            $closeTime += 86400; // ข้ามเที่ยงคืน
+                        }
+                        $pastCloseTime = $now >= $closeTime;
+                        $hoursPastClose = ($now - $closeTime) / 3600;
                     }
                     
-                    // Row color: สีเทา (เพิ่งปิดรับ) / สีเหลือง (รอเปิด)
-                    $rowClass = '';
-                    if ($pastCloseTime && $hoursPastClose <= (10/60) && !$hasResultForRound) {
-                        $rowClass = 'row-closed';
-                    } elseif (!$pastCloseTime && ($openTimeForRound - $now) > 0 && ($openTimeForRound - $now) <= 7200) {
-                        $rowClass = 'row-upcoming';
-                        $statusClass = 'status-next'; $statusLabel = 'รอเปิดรับ';
+                    if (!empty($lt['result_time'])) {
+                        $resultTime = strtotime($roundDate . ' ' . $lt['result_time']);
+                        if ($resultTime < $openTimeForRound) {
+                            $resultTime += 86400; // ข้ามเที่ยงคืน
+                        }
+                    }
+                    if (!$resultTime && $closeTime) {
+                        $resultTime = $closeTime + 900; // default 15 mins after close
+                    }
+                    
+                    // เช็คว่าวันนี้เป็นวันออกผลหรือไม่
+                    $todayIsDrawDay = true;
+                    if ($drawSchedule !== 'daily') {
+                        $todayDrawDate = getCurrentDrawDate($drawSchedule, $today);
+                        $todayIsDrawDay = ($todayDrawDate === $today);
+                    }
+                    
+                    // คำนวณงวดก่อนหน้า เพื่อเช็คความเก่าของผล (Stale)
+                    $prevDrawDate = null;
+                    if ($resultDate && $drawSchedule !== 'daily') {
+                        $prevDay = date('Y-m-d', strtotime($currentRoundDate . ' -1 day'));
+                        $prevDrawDate = getCurrentDrawDate($drawSchedule, $prevDay);
+                    }
+                    
+                    $isResultStale = false;
+                    if (!$resultDate) {
+                        $isResultStale = !$todayIsDrawDay;
+                    } elseif ($drawSchedule === 'daily') {
+                        $lastResultAgeDays = (strtotime($today) - strtotime($resultDate)) / 86400;
+                        $isResultStale = $lastResultAgeDays > 3;
+                    } elseif ($prevDrawDate) {
+                        $isResultStale = $resultDate < $prevDrawDate;
+                    }
+                    
+                    // =============================================
+                    // สถานะใหม่ตาม User Request (วงจร 4 สถานะ):
+                    // 1. รอออกผลงวดต่อไป (ก่อน close_time)
+                    // 2. รอออกผล (หลัง close_time ก่อน result_time)
+                    // 3. กำลังประมวลผล (หลัง result_time แต่ยังไม่มีผล)
+                    // 4. จ่ายเงินแล้ว (มีผลแล้ว)
+                    // =============================================
+                    if ($isBetClosed && !$hasResultForRound) {
+                        $statusClass = 'status-closed'; $statusLabel = 'ปิดรับแทง';
+                    } elseif ($hasResultForRound) {
+                        if ($hasPending) {
+                            $statusClass = 'status-processing'; $statusLabel = '<i class="fas fa-spinner fa-spin mr-1"></i> กำลังประมวลผล';
+                        } else {
+                            $statusClass = 'status-paid'; $statusLabel = 'จ่ายเงินแล้ว';
+                        }
+                    } else {
+                        if (!$todayIsDrawDay || !$closeTime) {
+                            $statusClass = 'status-next'; $statusLabel = 'รอออกผลงวดต่อไป';
+                        } else {
+                            if ($now < $closeTime) {
+                                $statusClass = 'status-next'; $statusLabel = 'รอออกผลงวดต่อไป';
+                            } elseif ($now >= $closeTime && $now < $resultTime) {
+                                $statusClass = 'status-waiting'; $statusLabel = 'รอออกผล';
+                            } else {
+                                // เลยเวลา result_time แล้ว
+                                if ($isResultStale && $hoursPastClose > 3) {
+                                    $statusClass = 'status-suspended'; $statusLabel = 'งดออกผล';
+                                } else {
+                                    $statusClass = 'status-processing'; $statusLabel = '<i class="fas fa-spinner fa-spin mr-1"></i> กำลังประมวลผล';
+                                }
+                            }
+                        }
                     }
                 ?>
-                <tr class="<?= $rowClass ?>" data-group="group-<?= $gi ?>">
+                <tr>
                     <td>
                         <a href="bet.php?id=<?= $lt['id'] ?>" class="flex items-center space-x-2 hover:opacity-80">
                             <img src="<?= $flagUrl ?>" alt="flag" class="flag-img">
@@ -517,34 +549,26 @@ require_once 'includes/header.php';
 </div>
 
 <script>
+// Auto-refresh ทุก 30 วินาที เพื่ออัพเดทสถานะ real-time
+// จะ refresh เฉพาะตอนที่ tab เปิดอยู่
 let refreshInterval;
 function startAutoRefresh() {
     refreshInterval = setInterval(() => {
-        if (!document.hidden) location.reload();
-    }, 30000);
+        if (!document.hidden) {
+            location.reload();
+        }
+    }, 30000); // 30 วินาที
 }
 startAutoRefresh();
-document.addEventListener('visibilitychange', () => {
-    if (document.hidden) clearInterval(refreshInterval);
-    else startAutoRefresh();
-});
 
-// Tab switching
-function switchTab(group, btn) {
-    // Update active tab
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    
-    // Show/hide rows
-    const rows = document.querySelectorAll('tr[data-group], tr.cat-row');
-    rows.forEach(row => {
-        if (group === 'all') {
-            row.style.display = '';
-        } else {
-            row.style.display = row.dataset.group === group ? '' : 'none';
-        }
-    });
-}
+// หยุด refresh เมื่อ tab ไม่ได้ focus
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+        clearInterval(refreshInterval);
+    } else {
+        startAutoRefresh();
+    }
+});
 </script>
 
 <?php require_once 'includes/footer.php'; ?>

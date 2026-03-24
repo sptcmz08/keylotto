@@ -120,55 +120,6 @@ try {
                     exit;
                 }
             }            // =============================================
-            // ตรวจสอบตั้งสู้ (fight_limits) — ปิดรับอัตโนมัติเมื่อเกินจำนวน
-            // =============================================
-            try {
-                $stmtFight = $pdo->prepare("SELECT bet_type, max_amount FROM fight_limits WHERE lottery_type_id = ? AND max_amount > 0");
-                $stmtFight->execute([$lotteryId]);
-                $fightLimits = [];
-                foreach ($stmtFight->fetchAll() as $fl) {
-                    $fightLimits[$fl['bet_type']] = floatval($fl['max_amount']);
-                }
-                
-                if (!empty($fightLimits)) {
-                    $fightBlocked = [];
-                    $stmtFightCheck = $pdo->prepare("
-                        SELECT COALESCE(SUM(bi.amount), 0) as total_bet
-                        FROM bet_items bi
-                        JOIN bets b ON bi.bet_id = b.id
-                        WHERE b.lottery_type_id = ?
-                          AND b.draw_date = ?
-                          AND b.status != 'cancelled'
-                          AND bi.number = ?
-                          AND bi.bet_type = ?
-                    ");
-                    
-                    foreach ($items as $item) {
-                        $type = $item['type'] ?? '';
-                        $number = $item['number'] ?? '';
-                        $amount = floatval($item['amount'] ?? 0);
-                        
-                        if (isset($fightLimits[$type])) {
-                            $stmtFightCheck->execute([$lotteryId, $drawDate, $number, $type]);
-                            $existing = floatval($stmtFightCheck->fetchColumn());
-                            $maxAllowed = $fightLimits[$type];
-                            
-                            if (($existing + $amount) > $maxAllowed) {
-                                $remaining = max(0, $maxAllowed - $existing);
-                                $fightBlocked[] = "เลข {$number} ({$type}) เกินตั้งสู้ — สู้ได้ " . number_format($maxAllowed) . " แทงไปแล้ว " . number_format($existing) . " เหลือ " . number_format($remaining);
-                            }
-                        }
-                    }
-                    
-                    if (!empty($fightBlocked)) {
-                        echo json_encode(['error' => "❌ เกินตั้งสู้:\n" . implode("\n", $fightBlocked), 'fight_blocked' => true]);
-                        exit;
-                    }
-                }
-            } catch (Exception $e) {
-                // fight_limits table may not exist — skip silently
-            }
-            // =============================================
             // ตรวจสอบเลขอั้น / ปิดรับ
             // =============================================
             $stmtBlocked = $pdo->prepare("SELECT number, bet_type, is_blocked FROM blocked_numbers WHERE lottery_type_id = ?");

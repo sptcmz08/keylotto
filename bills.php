@@ -68,36 +68,11 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'cancel_request' && isset($_GET['b
     $betId = intval($_GET['bet_id']);
     $reason = $_GET['reason'] ?? 'ลูกค้าไม่จ่ายเงิน';
     
-    // Check if lottery is still open for betting (before close_time)
-    $stmt = $pdo->prepare("
-        SELECT b.lottery_type_id, b.draw_date, lt.close_time, lt.bet_closed
-        FROM bets b
-        JOIN lottery_types lt ON b.lottery_type_id = lt.id
-        WHERE b.id = ?
-    ");
-    $stmt->execute([$betId]);
-    $betInfo = $stmt->fetch(PDO::FETCH_ASSOC);
+    // Mark bet as pending_cancel (needs admin approval)
+    $stmt = $pdo->prepare("UPDATE bets SET cancel_requested = 1, cancel_reason = ?, cancel_requested_at = NOW() WHERE id = ? AND status != 'cancelled'");
+    $stmt->execute([$reason, $betId]);
     
-    $canInstantCancel = false;
-    if ($betInfo && !$betInfo['bet_closed']) {
-        $closeDateTime = $betInfo['draw_date'] . ' ' . ($betInfo['close_time'] ?? '23:59:59');
-        $closeTs = strtotime($closeDateTime);
-        if (time() < $closeTs) {
-            $canInstantCancel = true; // หวยยังเปิดรับอยู่ → ยกเลิกได้ทันที
-        }
-    }
-    
-    if ($canInstantCancel) {
-        // ยกเลิกทันที: เปลี่ยน status เป็น cancelled + คืนยอดเงิน
-        $stmt = $pdo->prepare("UPDATE bets SET status = 'cancelled', cancel_reason = ?, cancel_requested_at = NOW(), cancel_approved_at = NOW() WHERE id = ? AND status != 'cancelled'");
-        $stmt->execute([$reason, $betId]);
-        echo json_encode(['success' => $stmt->rowCount() > 0, 'instant' => true]);
-    } else {
-        // หวยปิดรับแล้ว: ส่งคำขอรออนุมัติ
-        $stmt = $pdo->prepare("UPDATE bets SET cancel_requested = 1, cancel_reason = ?, cancel_requested_at = NOW() WHERE id = ? AND status != 'cancelled'");
-        $stmt->execute([$reason, $betId]);
-        echo json_encode(['success' => $stmt->rowCount() > 0, 'instant' => false]);
-    }
+    echo json_encode(['success' => $stmt->rowCount() > 0]);
     exit;
 }
 
@@ -606,18 +581,14 @@ function requestCancel(betId, betNumber) {
         confirmButtonText: 'ส่งคำขอยกเลิก',
         confirmButtonColor: '#e53935',
         icon: 'warning',
-        html: '<div class="text-sm text-gray-500 mt-2"><i class="fas fa-info-circle"></i> หวยยังไม่ปิดรับ = ยกเลิกทันที / ปิดรับแล้ว = รออนุมัติ</div>'
+        html: '<div class="text-sm text-gray-500 mt-2"><i class="fas fa-info-circle"></i> คำขอจะถูกส่งถึงเจ้าของเพื่ออนุมัติ</div>'
     }).then(result => {
         if (result.isConfirmed) {
             fetch('bills.php?ajax=cancel_request&bet_id=' + betId + '&reason=' + encodeURIComponent(result.value || 'ลูกค้าไม่จ่ายเงิน'))
                 .then(r => r.json())
                 .then(data => {
                     if (data.success) {
-                        if (data.instant) {
-                            Swal.fire({ icon: 'success', title: 'ยกเลิกเรียบร้อยแล้ว!', text: 'ยกเลิกทันทีเพราะหวยยังไม่ปิดรับ', timer: 2000, showConfirmButton: false });
-                        } else {
-                            Swal.fire({ icon: 'success', title: 'ส่งคำขอยกเลิกแล้ว', text: 'รอเจ้าของอนุมัติ', timer: 2000, showConfirmButton: false });
-                        }
+                        Swal.fire({ icon: 'success', title: 'ส่งคำขอยกเลิกแล้ว', text: 'รอเจ้าของอนุมัติ', timer: 2000, showConfirmButton: false });
                         setTimeout(() => location.reload(), 2000);
                     } else {
                         Swal.fire({ icon: 'error', title: 'เกิดข้อผิดพลาด', confirmButtonColor: '#e53935' });
@@ -700,24 +671,12 @@ function viewBillDetail(betId) {
             
             items.forEach(item => {
                 const isWin = item.is_winner;
-                const isPending = (bet.status === 'pending');
                 const rowCls = isWin ? 'bg-green-50' : '';
-                // ถ้ายังรอผล (สถานะ pending) → แสดงช่องว่าง
-                let winText;
-                if (isPending) {
-                    winText = ''; // ยังรอผล → ช่องว่าง
-                } else if (isWin) {
-                    winText = '<span class="text-green-600 font-bold">' + fmt(item.win_amount) + '</span>';
-                } else {
-                    winText = '<span class="text-red-400">ไม่ถูกรางวัล</span>';
-                }
+                const winText = isWin ? '<span class="text-green-600 font-bold">' + fmt(item.win_amount) + '</span>' : '<span class="text-red-400">ไม่ถูกรางวัล</span>';
                 totalAmount += parseFloat(item.amount);
 
                 totalNet += parseFloat(item.net_amount);
                 totalWin += parseFloat(item.win_amount || 0);
-                
-                // สถานะแต่ละ item: ถ้า pending แสดงช่องว่าง
-                let thisStatus = isPending ? '' : '<span class="' + itemStatusClass + '">' + itemStatusText + '</span>';
                 
                 rows += '<tr class="border-b ' + rowCls + ' hover:bg-gray-50/50">';
                 rows += '<td class="px-2 py-1.5 text-center border">' + getBetTypeLabel(item.bet_type) + '</td>';
@@ -727,7 +686,7 @@ function viewBillDetail(betId) {
                 rows += '<td class="px-2 py-1.5 text-center border">' + fmt(item.net_amount) + '</td>';
                 rows += '<td class="px-2 py-1.5 text-center border">' + fmt(item.pay_multiplier) + '</td>';
                 rows += '<td class="px-2 py-1.5 text-center border">' + winText + '</td>';
-                rows += '<td class="px-2 py-1.5 text-center border">' + thisStatus + '</td>';
+                rows += '<td class="px-2 py-1.5 text-center border"><span class="' + itemStatusClass + '">' + itemStatusText + '</span></td>';
                 rows += '</tr>';
             });
             
