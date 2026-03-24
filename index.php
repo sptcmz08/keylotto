@@ -106,8 +106,10 @@ $allLotteries = $stmt->fetchAll();
 //   - สำหรับหวยที่ไม่ได้ออกทุกวัน (เช่น หวยไทย 1/16)
 // =============================================
 $now = time();
-$today = date('Y-m-d');
-$yesterday = date('Y-m-d', strtotime('-1 day'));
+// Reset วันใหม่ตอน 05:00 AM (shift 5 ชม.)
+$systemTime = $now - (5 * 3600);
+$today = date('Y-m-d', $systemTime);
+$yesterday = date('Y-m-d', strtotime('-1 day', $systemTime));
 
 $lotteryMap = [];
 $recentlyResulted = [];
@@ -471,12 +473,12 @@ require_once 'includes/header.php';
                     </td>
                     <td class="text-center text-gray-600 text-[12px]"><?= $displayDate ?></td>
                     <td class="text-center">
-                        <?php if ($hasAnyResult): ?>
+                        <?php if ($hasResultForRound): ?>
                             <span class="num-box"><?= htmlspecialchars($lt['three_top']) ?></span>
                         <?php endif; ?>
                     </td>
                     <td class="text-center">
-                        <?php if ($hasAnyResult && !empty($lt['two_bot'])): ?>
+                        <?php if ($hasResultForRound && !empty($lt['two_bot'])): ?>
                             <span class="num-box"><?= htmlspecialchars($lt['two_bot']) ?></span>
                         <?php endif; ?>
                     </td>
