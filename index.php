@@ -124,6 +124,12 @@ foreach ($allLotteries as &$l) {
     $drawSchedule = $l['draw_schedule'] ?? 'daily';
     $currentRoundDate = getCurrentDrawDate($drawSchedule);
     
+    // === ซ่อนหวยที่ไม่ออกวันนี้ ===
+    // เช่น หุ้น(จ-ศ) ซ่อนวันเสาร์-อาทิตย์, ลาวพัฒนา(จ/พ/ศ) ซ่อนวัน อ/พฤ/ส/อา
+    if ($drawSchedule !== 'daily' && $currentRoundDate !== $today) {
+        continue; // ข้ามหวยนี้ ไม่แสดงในหน้าหลัก
+    }
+    
     // เช็คว่าผลล่าสุดเป็นของงวดปัจจุบันหรือไม่
     $hasResultForCurrentRound = $hasAnyResult && $resultDate === $currentRoundDate;
     
