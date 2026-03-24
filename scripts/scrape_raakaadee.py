@@ -256,6 +256,13 @@ def parse_page_results(lines, found_slugs, today, yesterday, debug=False):
                 print(f'[Raakaadee]   ⚠️ No match: "{short}"', file=sys.stderr)
             continue
 
+        # === Skip lotteries handled by ExpHuay (more accurate source) ===
+        EXPHUAY_ONLY = {'germany'}  # หุ้นเยอรมัน — Raakaadee ดึงผลผิดวัน
+        if slug in EXPHUAY_ONLY:
+            if debug:
+                print(f'[Raakaadee]   ⏭️ {matched_name}: ข้ามไป ExpHuay', file=sys.stderr)
+            continue
+
         # === Date validation: skip stale results ===
         draw_date = parse_thai_date(line_stripped)
         if draw_date:
