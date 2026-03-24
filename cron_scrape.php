@@ -399,8 +399,33 @@ function processResults($pdo, $results, $source) {
         }
 
         // หวยข้ามเที่ยงคืน → ใช้วันที่จริง (ไม่ shift 4 ชม.)
-        if (isset($crossMidnightIds[$lotteryTypeId])) {
+        $isCrossMidnight = isset($crossMidnightIds[$lotteryTypeId]);
+        if ($isCrossMidnight) {
             $drawDate = $todayReal;
+        }
+
+        // === ⛔ SAFEGUARD: ห้ามบันทึกผลก่อนถึง result_time ===
+        // ป้องกันการดึงผลเก่ามาบันทึกเป็นของวันนี้
+        $ltStmt = $pdo->prepare("SELECT result_time FROM lottery_types WHERE id = ?");
+        $ltStmt->execute([$lotteryTypeId]);
+        $ltInfo = $ltStmt->fetch();
+        if ($ltInfo && !empty($ltInfo['result_time'])) {
+            $resultTimeStr = $drawDate . ' ' . $ltInfo['result_time'];
+            // หวยข้ามเที่ยงคืน: result_time เป็นของวันถัดไป (เช่น 03:20 ของพรุ่งนี้)
+            if ($isCrossMidnight) {
+                // ถ้า result_time < 05:00 แสดงว่าเป็นเวลาหลังเที่ยงคืน
+                $resultHour = intval(substr($ltInfo['result_time'], 0, 2));
+                if ($resultHour < 5) {
+                    // result_time เป็นของวันถัดไป (drawDate + 1 วัน)
+                    $resultTimeStr = date('Y-m-d', strtotime($drawDate . ' +1 day')) . ' ' . $ltInfo['result_time'];
+                }
+            }
+            $resultTimestamp = strtotime($resultTimeStr);
+            if ($resultTimestamp && time() < $resultTimestamp) {
+                echo "⏳ {$keyLotteryName}: ยังไม่ถึงเวลาออกผล (" . $ltInfo['result_time'] . ") → ข้าม\n";
+                $skippedCount++;
+                continue;
+            }
         }
 
         // Reject future dates
