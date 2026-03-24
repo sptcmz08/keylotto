@@ -372,7 +372,15 @@ require_once 'includes/header.php';
                     $hasAnyResult = !empty($lt['three_top']);
                     
                     // แสดงวันที่งวดปัจจุบัน
-                    $displayDate = date('d-m-Y', strtotime($lt['current_round_date']));
+                    // หวยข้ามเที่ยงคืน (ดาวโจนส์ฯ) → แสดงงวดเป็นวันก่อนหน้า (วันตลาดจริง)
+                    $closeH = intval(substr($lt['close_time'] ?? '23:00', 0, 2));
+                    $openH = intval(substr($lt['open_time'] ?? '05:00', 0, 2));
+                    $isCrossMidnight = ($closeH < $openH && $closeH < 5);
+                    if ($isCrossMidnight) {
+                        $displayDate = date('d-m-Y', strtotime($lt['current_round_date'] . ' -1 day'));
+                    } else {
+                        $displayDate = date('d-m-Y', strtotime($lt['current_round_date']));
+                    }
                     
                     // สถานะ realtime 5 ระดับ (อิงจากงวดปัจจุบัน):
                     // 1. ปิดรับแทง (แดง) = Admin กดปิด
