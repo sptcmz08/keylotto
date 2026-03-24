@@ -272,6 +272,11 @@ if (!$lotteryId) {
         if (openTime && now < openTime) {
             // ยังไม่ถึงเวลาเปิด
             const diff = openTime - now;
+            const hoursBeforeOpen = diff / 3600000;
+            // แสดงก่อนเปิด 2 ชม. เท่านั้น (ลดความรก)
+            if (hoursBeforeOpen > 2) {
+                return { status: 'waiting', label: 'รอเปิดรอบใหม่', hide: true };
+            }
             return { status: 'waiting', label: 'เปิดในอีก ' + formatDiff(diff), hide: false };
         }
         
