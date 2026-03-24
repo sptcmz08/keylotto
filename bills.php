@@ -700,9 +700,9 @@ function viewBillDetail(betId) {
             
             items.forEach(item => {
                 const isWin = item.is_winner;
-                const isPending = (bet.status === 'pending');
+                const isPending = (bet.status === 'pending') || !data.result;
                 const rowCls = isWin ? 'bg-green-50' : '';
-                // ถ้ายังรอผล (สถานะ pending) → แสดงช่องว่าง
+                // ถ้ายังรอผล (สถานะ pending หรือยังไม่มี result) → แสดงช่องว่าง
                 let winText;
                 if (isPending) {
                     winText = ''; // ยังรอผล → ช่องว่าง
@@ -717,7 +717,7 @@ function viewBillDetail(betId) {
                 totalWin += parseFloat(item.win_amount || 0);
                 
                 // สถานะแต่ละ item: ถ้า pending แสดงช่องว่าง
-                let thisStatus = isPending ? '' : '<span class="' + itemStatusClass + '">' + itemStatusText + '</span>';
+                let thisStatus = isPending ? '<span class="text-blue-400">รอผล</span>' : '<span class="' + itemStatusClass + '">' + itemStatusText + '</span>';
                 
                 rows += '<tr class="border-b ' + rowCls + ' hover:bg-gray-50/50">';
                 rows += '<td class="px-2 py-1.5 text-center border">' + getBetTypeLabel(item.bet_type) + '</td>';
