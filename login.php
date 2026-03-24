@@ -8,7 +8,16 @@ if (getSubdomain() === 'agent') {
 }
 
 if (isLoggedIn()) {
-    if (($_SESSION['role'] ?? '') === 'admin' && getSubdomain() !== 'member') {
+    $sub = getSubdomain();
+    if (($_SESSION['role'] ?? '') === 'admin') {
+        if ($sub === 'member') {
+            // admin อยู่บน member → ไล่ไป agent
+            $host = $_SERVER['HTTP_HOST'] ?? '';
+            $agentHost = preg_replace('/^member\./i', 'agent.', $host);
+            $proto = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+            header("Location: {$proto}://{$agentHost}/admin/index.php");
+            exit;
+        }
         header('Location: admin/index.php');
     } else {
         header('Location: index.php');
@@ -42,20 +51,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $user = $stmt->fetch();
 
         if ($user && password_verify($password, $user['password'])) {
-            // Reset attempts on success
-            unset($_SESSION['login_attempts'], $_SESSION['login_last_attempt']);
-            $_SESSION['user_id'] = $user['id'];
-            $_SESSION['username'] = $user['username'];
-            $_SESSION['user_name'] = $user['name'];
-            $_SESSION['role'] = $user['role'];
-            $_SESSION['logged_in'] = true;
-            
-            if ($user['role'] === 'admin') {
-                header('Location: admin/index.php');
+            // member subdomain → block admin accounts
+            if (getSubdomain() === 'member' && $user['role'] === 'admin') {
+                $error = 'บัญชีผู้ดูแลระบบไม่สามารถเข้าใช้งานผ่าน member ได้ กรุณาใช้ agent.imzshop97.com';
             } else {
-                header('Location: index.php');
+                // Reset attempts on success
+                unset($_SESSION['login_attempts'], $_SESSION['login_last_attempt']);
+                $_SESSION['user_id'] = $user['id'];
+                $_SESSION['username'] = $user['username'];
+                $_SESSION['user_name'] = $user['name'];
+                $_SESSION['role'] = $user['role'];
+                $_SESSION['logged_in'] = true;
+                
+                if ($user['role'] === 'admin') {
+                    header('Location: admin/index.php');
+                } else {
+                    header('Location: index.php');
+                }
+                exit;
             }
-            exit;
         } else {
             $_SESSION['login_attempts'] = ($attempts + 1);
             $_SESSION['login_last_attempt'] = time();
