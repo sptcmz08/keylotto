@@ -325,14 +325,24 @@ if (!$lotteryId) {
             
             if (info.status === 'open') {
                 card.className = 'lottery-card card-open';
+                card.dataset.sortOrder = '0';
                 textEl.className = 'status-text countdown-text status-open';
             } else if (info.status === 'closed') {
                 card.className = 'lottery-card card-closed';
+                card.dataset.sortOrder = '2';
                 textEl.className = 'status-text countdown-text status-closed';
             } else {
                 card.className = 'lottery-card card-waiting';
+                card.dataset.sortOrder = '1';
                 textEl.className = 'status-text countdown-text status-countdown';
             }
+        });
+        
+        // จัดเรียงในแต่ละหมวด: เขียว(0) → เหลือง(1) → เทา(2)
+        document.querySelectorAll('.category-section .grid').forEach(grid => {
+            const items = Array.from(grid.children);
+            items.sort((a, b) => (a.dataset.sortOrder || '1') - (b.dataset.sortOrder || '1'));
+            items.forEach(item => grid.appendChild(item));
         });
     }
 
