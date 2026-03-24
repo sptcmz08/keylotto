@@ -436,6 +436,20 @@ function processResults($pdo, $results, $source) {
             continue;
         }
 
+        // === ⛔ SAFEGUARD 2: ตรวจสอบว่าวันที่ตรงกับงวดที่ควรออก ===
+        // เช่น ลาวพัฒนา (จ/พ/ศ) จะไม่บันทึกผลในวันอังคาร
+        $scheduleStmt = $pdo->prepare("SELECT draw_schedule FROM lottery_types WHERE id = ?");
+        $scheduleStmt->execute([$lotteryTypeId]);
+        $scheduleInfo = $scheduleStmt->fetch();
+        if ($scheduleInfo && !empty($scheduleInfo['draw_schedule'])) {
+            $expectedDrawDate = getCurrentDrawDate($scheduleInfo['draw_schedule'], $drawDate);
+            if ($expectedDrawDate !== $drawDate) {
+                echo "📅 {$keyLotteryName}: วันที่ {$drawDate} ไม่ตรงงวด (ควรเป็น {$expectedDrawDate}) → ข้าม\n";
+                $skippedCount++;
+                continue;
+            }
+        }
+
         // Ensure three_top is max 3 digits (truncate from right if longer)
         if (strlen($threeTop) > 3) {
             $threeTop = substr($threeTop, -3);
