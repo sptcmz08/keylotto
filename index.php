@@ -122,19 +122,9 @@ foreach ($allLotteries as &$l) {
     $hasAnyResult = !empty($l['three_top']);
     
     // === Current Round Date จาก draw_schedule ===
+    // ใช้ $today (reset 05:00) สำหรับทุกหวย
     $drawSchedule = $l['draw_schedule'] ?? 'daily';
-    
-    // หวยข้ามคืน (ดาวโจนส์ close 01:00-02:50, open 05:00)
-    // งวดจริง = วันก่อนหน้า (วันตลาด US)
-    $closeH = intval(substr($l['close_time'] ?? '23:00', 0, 2));
-    $openH = intval(substr($l['open_time'] ?? '05:00', 0, 2));
-    $isCrossMidnight = ($closeH < $openH && $closeH < 5);
-    
-    if ($isCrossMidnight) {
-        $currentRoundDate = getCurrentDrawDate($drawSchedule, $yesterday);
-    } else {
-        $currentRoundDate = getCurrentDrawDate($drawSchedule, $today);
-    }
+    $currentRoundDate = getCurrentDrawDate($drawSchedule, $today);
     
     // เช็คว่าผลล่าสุดเป็นของงวดปัจจุบันหรือไม่
     $hasResultForCurrentRound = $hasAnyResult && $resultDate === $currentRoundDate;
