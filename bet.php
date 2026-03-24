@@ -620,15 +620,18 @@ require_once 'includes/header.php';
                     <div class="flex items-center mb-4">
                         <label class="text-[13px] text-gray-600 mr-2 whitespace-nowrap">หมายเหตุ:</label>
                         <input type="text" id="betNote" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:border-blue-500 outline-none">
-                        <img src="<?= $flagUrl ?>" alt="flag" class="w-8 h-5 object-cover ml-2 border border-gray-300 hidden sm:block">
                     </div>
                     
-                    <div class="text-center">
-                        <div class="text-[15px] text-[#37474f] font-medium mb-1">
+                    <div class="text-center relative">
+                        <div class="text-[15px] text-[#37474f] font-medium mb-1 flex items-center justify-center gap-2">
+                            <img src="<?= $flagUrl ?>" alt="flag" class="w-8 h-5 object-cover border border-gray-300">
                             [<?= htmlspecialchars($lottery['category_name']) ?>] <?= htmlspecialchars($lottery['name']) ?> - <?= $drawDate ?>
                         </div>
-                        <div class="text-[#1565c0] text-xl font-bold mb-4 underline">
+                        <div class="text-[#1565c0] text-xl font-bold mb-1 underline">
                             รวม <span id="totalAmount">0.00</span> บาท
+                        </div>
+                        <div class="text-[#c62828] text-sm font-bold mb-4">
+                            เหลือเวลา <span id="footerCountdown">00:00</span>
                         </div>
                         
                         <div class="flex justify-center gap-4">
@@ -920,13 +923,17 @@ function updateMainCountdown() {
     const now = new Date();
     const diff = close - now;
     const el1 = document.getElementById('mainCountdown');
+    const el2 = document.getElementById('footerCountdown');
     if (diff > 0) {
         const h = Math.floor(diff / 3600000);
         const m = Math.floor((diff % 3600000) / 60000);
         const s = Math.floor((diff % 60000) / 1000);
-        if (el1) el1.textContent = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+        const timeStr = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+        if (el1) el1.textContent = timeStr;
+        if (el2) el2.textContent = timeStr;
     } else {
         if (el1) el1.textContent = 'ปิดรับแล้ว';
+        if (el2) el2.textContent = 'ปิดรับแล้ว';
     }
 }
 setInterval(updateMainCountdown, 1000);
@@ -1035,10 +1042,13 @@ function addSingleNumber(val) {
         return true;
     } else if (type === '19' && /^\d$/.test(val)) {
         const nums = get19Door(val);
-        // ไม่ตัดซ้ำ: เพิ่มทุกตัวเสมอ (แยกรุด)
+        // ไม่ตัดซ้ำ: เพิ่มทุกตัวเสมอ (แยกรูด)
         nums.forEach(n => selectedNums.push(n));
         return true;
-    } else if ((type === 'run' || type === 'win') && /^\d$/.test(val)) {
+    } else if (type === 'run' && /^\d$/.test(val)) {
+        if (!selectedNums.includes(val)) selectedNums.push(val);
+        return true;
+    } else if (type === 'win' && /^\d$/.test(val)) {
         if (!selectedNums.includes(val)) selectedNums.push(val);
         return true;
     }
@@ -1286,29 +1296,14 @@ function addBetItem() {
     let typeLabel3 = (top>0 && bot>0) ? `${top} x ${bot}` : (top>0 ? top : bot);
     if (currentBetType === '3' || currentBetType === '6') typeLabel2 = (top>0 && bot>0) ? 'บน x โต๊ด' : (top>0 ? 'บน' : 'โต๊ด');
 
-    // 19ประตู: ห้าม merge group → แยกบรรทัดแต่ละรุด
-    if (currentBetType === '19') {
-        betGroups.push({
-            id: Date.now(),
-            typeCategory: currentBetType,
-            typeLabel1, typeLabel2, typeLabel3,
-            numbers: [...numbers],
-            amountTop: top, amountBot: bot
-        });
-    } else {
-        let group = betGroups.find(g => g.typeCategory === currentBetType && g.amountTop === top && g.amountBot === bot);
-        if (group) {
-            numbers.forEach(n => { if(!group.numbers.includes(n)) group.numbers.push(n); });
-        } else {
-            betGroups.push({
-                id: Date.now(),
-                typeCategory: currentBetType,
-                typeLabel1, typeLabel2, typeLabel3,
-                numbers: [...numbers],
-                amountTop: top, amountBot: bot
-            });
-        }
-    }
+    // เพิ่มบิลใหม่ทุกครั้ง → แยกบรรทัดเสมอ (ไม่ merge)
+    betGroups.push({
+        id: Date.now(),
+        typeCategory: currentBetType,
+        typeLabel1, typeLabel2, typeLabel3,
+        numbers: [...numbers],
+        amountTop: top, amountBot: bot
+    });
     
     renderBetItems();
     selectedNums = [];
@@ -1415,9 +1410,27 @@ function calculateWin() {
     renderSelectedNumbers();
     saveState();
     
-    // Update bet type based on digit count
+    // Update bet type based on digit count + show input fields
     if (numDigits === 2) currentBetType = '2';
     else currentBetType = '3';
+    
+    // Show normal input panel so user can enter amounts
+    const normalInput = document.getElementById('normalInputPanel');
+    if (normalInput) normalInput.style.display = '';
+    
+    // Update labels
+    const topLabel = document.getElementById('topLabel');
+    const botLabel = document.getElementById('botLabel');
+    const botWrap = document.getElementById('botAmountWrap');
+    if (numDigits === 2) {
+        if (topLabel) topLabel.textContent = 'บน';
+        if (botLabel) botLabel.textContent = 'ล่าง';
+        if (botWrap) botWrap.style.display = '';
+    } else {
+        if (topLabel) topLabel.textContent = 'บน';
+        if (botLabel) botLabel.textContent = 'โต๊ด';
+        if (botWrap) botWrap.style.display = '';
+    }
 }
 
 function removeWinResult(el, num) {
