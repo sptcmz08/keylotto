@@ -13,6 +13,23 @@ function getSubdomain() {
     return ''; // main domain
 }
 
+// =============================================
+// Main domain → redirect to member.xxx
+// =============================================
+$_currentSubdomain = getSubdomain();
+if ($_currentSubdomain === '') {
+    $host = $_SERVER['HTTP_HOST'] ?? '';
+    $script = $_SERVER['SCRIPT_NAME'] ?? '';
+    // ไม่ redirect สำหรับ api.php, cron, scripts
+    $skipRedirect = (strpos($script, 'api.php') !== false || strpos($script, 'cron') !== false);
+    if (!$skipRedirect && !empty($host)) {
+        $proto = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+        $uri = $_SERVER['REQUEST_URI'] ?? '/';
+        header("Location: {$proto}://member.{$host}{$uri}", true, 302);
+        exit;
+    }
+}
+
 function requireLogin() {
     $script = $_SERVER['SCRIPT_NAME'] ?? '';
     $isAdminDir = strpos($script, '/admin/') !== false;
