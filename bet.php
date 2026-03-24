@@ -206,57 +206,51 @@ if (!$lotteryId) {
         .status-section-title:first-child { margin-top: 0; }
     </style>
 
-    <!-- Section: เปิดรับแทง (เขียว) -->
-    <div id="section-open" style="display:none;">
-        <div class="status-section-title" style="color:#2e7d32; border-color:#43a047; background:#e8f5e9;">
-            <i class="fas fa-check-circle mr-1"></i> เปิดรับแทง
+    <!-- Category Sections -->
+    <?php foreach ($LOTTERY_GROUPS as $groupIdx => $group):
+        $groupCards = [];
+        foreach ($group['names'] as $n) {
+            foreach ($allCards as $card) {
+                if ($card['name'] === $n) {
+                    $groupCards[] = $card;
+                    break;
+                }
+            }
+        }
+        if (empty($groupCards)) continue;
+    ?>
+    <div class="category-section" style="margin-bottom: 16px;">
+        <div class="status-section-title" style="color:<?= $group['color'] ?>; border-color:<?= $group['color'] ?>; background:<?= $group['bg'] ?>;">
+            <?= htmlspecialchars($group['label']) ?>
         </div>
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3" id="grid-open"></div>
-    </div>
-
-    <!-- Section: รอเปิดรับ (เหลือง) -->
-    <div id="section-waiting" style="display:none;">
-        <div class="status-section-title" style="color:#e65100; border-color:#f9a825; background:#fffde7;">
-            <i class="fas fa-clock mr-1"></i> รอเปิดรับแทง
-        </div>
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3" id="grid-waiting"></div>
-    </div>
-
-    <!-- Section: ปิดรับแทง (เทา) -->
-    <div id="section-closed" style="display:none;">
-        <div class="status-section-title" style="color:#757575; border-color:#bdbdbd; background:#f5f5f5;">
-            <i class="fas fa-ban mr-1"></i> ปิดรับแทง
-        </div>
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3" id="grid-closed"></div>
-    </div>
-
-    <!-- ซ่อนการ์ดทั้งหมดไว้ก่อน แล้ว JS จะจัดเรียงใหม่ -->
-    <div id="all-cards-pool" style="display:none;">
-        <?php foreach ($allCards as $card):
-            $lt = $card['lt'];
-        ?>
-        <div class="lottery-card" onclick="handleCardClick(this)"
-           data-id="<?= $lt['id'] ?>"
-           data-open="<?= $card['openISO'] ?>"
-           data-close="<?= $card['closeISO'] ?>"
-           data-forced-closed="<?= $card['betClosed'] ?>"
-           data-name="<?= htmlspecialchars($card['name']) ?>">
-            <img src="<?= $card['flagUrl'] ?>" alt="flag" class="flag">
-            <div class="info">
-                <div class="lottery-title"><?= htmlspecialchars($card['name']) ?></div>
-                <div class="draw-date"><?= $card['drawDateDisplay'] ?></div>
-                <div class="time-row">
-                    <span class="time-label">เวลาเปิด</span>
-                    <span class="time-value"><?= $card['openDisplay'] ?: '-' ?></span>
-                </div>
-                <div class="time-row">
-                    <span class="status-text countdown-status">สถานะ</span>
-                    <span class="status-text countdown-text status-countdown">กำลังโหลด...</span>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <?php foreach ($groupCards as $card):
+                $lt = $card['lt'];
+            ?>
+            <div class="lottery-card card-waiting" onclick="handleCardClick(this)"
+               data-id="<?= $lt['id'] ?>"
+               data-open="<?= $card['openISO'] ?>"
+               data-close="<?= $card['closeISO'] ?>"
+               data-forced-closed="<?= $card['betClosed'] ?>"
+               data-name="<?= htmlspecialchars($card['name']) ?>">
+                <img src="<?= $card['flagUrl'] ?>" alt="flag" class="flag">
+                <div class="info">
+                    <div class="lottery-title"><?= htmlspecialchars($card['name']) ?></div>
+                    <div class="draw-date"><?= $card['drawDateDisplay'] ?></div>
+                    <div class="time-row">
+                        <span class="time-label">เวลาเปิด</span>
+                        <span class="time-value"><?= $card['openDisplay'] ?: '-' ?></span>
+                    </div>
+                    <div class="time-row">
+                        <span class="status-text countdown-status">สถานะ</span>
+                        <span class="status-text countdown-text status-countdown">กำลังโหลด...</span>
+                    </div>
                 </div>
             </div>
+            <?php endforeach; ?>
         </div>
-        <?php endforeach; ?>
     </div>
+    <?php endforeach; ?>
 
     <script>
     const CLOSE_GRACE_MINUTES = 10; // แสดง "ปิดรับ" สีเทานาน 10 นาที แล้วซ่อน
@@ -313,17 +307,7 @@ if (!$lotteryId) {
     }
 
     function sortAndDistribute() {
-        const pool = document.getElementById('all-cards-pool');
-        const cards = Array.from(pool.querySelectorAll('.lottery-card'));
-        
-        const gridOpen = document.getElementById('grid-open');
-        const gridWaiting = document.getElementById('grid-waiting');
-        const gridClosed = document.getElementById('grid-closed');
-        
-        // เก็บ arrays
-        const openCards = [];
-        const waitingCards = [];
-        const closedCards = [];
+        const cards = document.querySelectorAll('.lottery-card');
         
         cards.forEach(card => {
             const info = getCardStatusDetailed(card);
@@ -331,46 +315,25 @@ if (!$lotteryId) {
             const textEl = card.querySelector('.countdown-text');
             
             if (info.hide) {
-                // ซ่อนการ์ด (ไม่แสดงเลย)
+                card.style.display = 'none';
                 return;
             }
             
+            card.style.display = '';
             statusEl.textContent = 'สถานะ';
             textEl.textContent = info.label;
             
-            // Clone card เพื่อย้ายไปแสดง
-            const clone = card.cloneNode(true);
-            clone.onclick = function() { handleCardClick(this); };
-            
             if (info.status === 'open') {
-                clone.className = 'lottery-card card-open';
-                clone.querySelector('.countdown-text').className = 'status-text countdown-text status-open';
-                openCards.push(clone);
+                card.className = 'lottery-card card-open';
+                textEl.className = 'status-text countdown-text status-open';
             } else if (info.status === 'closed') {
-                clone.className = 'lottery-card card-closed';
-                clone.querySelector('.countdown-text').className = 'status-text countdown-text status-closed';
-                closedCards.push(clone);
+                card.className = 'lottery-card card-closed';
+                textEl.className = 'status-text countdown-text status-closed';
             } else {
-                clone.className = 'lottery-card card-waiting';
-                clone.querySelector('.countdown-text').className = 'status-text countdown-text status-countdown';
-                waitingCards.push(clone);
+                card.className = 'lottery-card card-waiting';
+                textEl.className = 'status-text countdown-text status-countdown';
             }
         });
-        
-        // เคลียร์ grids
-        gridOpen.innerHTML = '';
-        gridWaiting.innerHTML = '';
-        gridClosed.innerHTML = '';
-        
-        // จัดเรียงเข้า grid
-        openCards.forEach(c => gridOpen.appendChild(c));
-        waitingCards.forEach(c => gridWaiting.appendChild(c));
-        closedCards.forEach(c => gridClosed.appendChild(c));
-        
-        // แสดง/ซ่อน sections ตามว่ามีการ์ดไหม
-        document.getElementById('section-open').style.display = openCards.length ? '' : 'none';
-        document.getElementById('section-waiting').style.display = waitingCards.length ? '' : 'none';
-        document.getElementById('section-closed').style.display = closedCards.length ? '' : 'none';
     }
 
     function formatDiff(ms) {
