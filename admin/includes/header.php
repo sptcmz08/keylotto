@@ -91,10 +91,11 @@ $adminTitle = $adminTitle ?? 'Admin';
                     <div class="flex items-center"><i class="fas fa-cogs w-6 text-center"></i> ตั้งค่างวดหวย</div>
                     <i class="fas fa-chevron-down text-xs"></i>
                 </button>
-                <div id="settingMenu" class="sidebar-submenu <?= in_array($adminPage, ['lottery', 'rates', 'results', 'links', 'rate_settings']) ? 'block' : 'hidden' ?>">
+                <div id="settingMenu" class="sidebar-submenu <?= in_array($adminPage, ['lottery', 'rates', 'results', 'links', 'rate_settings', 'fight_limits']) ? 'block' : 'hidden' ?>">
                     <a href="lottery_types.php" class="<?= $adminPage === 'lottery' ? 'active' : '' ?>"><i class="fas fa-chevron-right text-[10px] w-5 text-gray-500"></i> จัดการหวย</a>
                     <a href="pay_rates.php" class="<?= $adminPage === 'rates' ? 'active' : '' ?>"><i class="fas fa-chevron-right text-[10px] w-5 text-gray-500"></i> อัตราจ่าย</a>
                     <a href="rate_settings.php" class="<?= $adminPage === 'rate_settings' ? 'active' : '' ?>"><i class="fas fa-chevron-right text-[10px] w-5 text-gray-500"></i> ตั้งค่าอัตราเกิน</a>
+                    <a href="fight_limits.php" class="<?= $adminPage === 'fight_limits' ? 'active' : '' ?>"><i class="fas fa-chevron-right text-[10px] w-5 text-gray-500"></i> ตั้งค่ารับของ (ตั้งสู้)</a>
                     <a href="results_manage.php" class="<?= $adminPage === 'results' ? 'active' : '' ?>"><i class="fas fa-chevron-right text-[10px] w-5 text-gray-500"></i> ผลรางวัล</a>
                     <a href="result_links.php" class="<?= $adminPage === 'links' ? 'active' : '' ?>"><i class="fas fa-chevron-right text-[10px] w-5 text-gray-500"></i> ลิงค์ดูผล</a>
                 </div>
