@@ -122,9 +122,19 @@ foreach ($allLotteries as &$l) {
     $hasAnyResult = !empty($l['three_top']);
     
     // === Current Round Date จาก draw_schedule ===
-    // ใช้ $today (shift 5 ชม. = reset 05:00) เป็นฐาน
     $drawSchedule = $l['draw_schedule'] ?? 'daily';
-    $currentRoundDate = getCurrentDrawDate($drawSchedule, $today);
+    
+    // หวยข้ามคืน (ดาวโจนส์ close 01:00-02:50, open 05:00)
+    // งวดจริง = วันก่อนหน้า (วันตลาด US)
+    $closeH = intval(substr($l['close_time'] ?? '23:00', 0, 2));
+    $openH = intval(substr($l['open_time'] ?? '05:00', 0, 2));
+    $isCrossMidnight = ($closeH < $openH && $closeH < 5);
+    
+    if ($isCrossMidnight) {
+        $currentRoundDate = getCurrentDrawDate($drawSchedule, $yesterday);
+    } else {
+        $currentRoundDate = getCurrentDrawDate($drawSchedule, $today);
+    }
     
     // เช็คว่าผลล่าสุดเป็นของงวดปัจจุบันหรือไม่
     $hasResultForCurrentRound = $hasAnyResult && $resultDate === $currentRoundDate;
@@ -371,16 +381,8 @@ require_once 'includes/header.php';
                     $hasResultForRound = $lt['has_result_current_round'];
                     $hasAnyResult = !empty($lt['three_top']);
                     
-                    // แสดงวันที่งวดปัจจุบัน
-                    // หวยข้ามเที่ยงคืน (ดาวโจนส์ฯ) → แสดงงวดเป็นวันก่อนหน้า (วันตลาดจริง)
-                    $closeH = intval(substr($lt['close_time'] ?? '23:00', 0, 2));
-                    $openH = intval(substr($lt['open_time'] ?? '05:00', 0, 2));
-                    $isCrossMidnight = ($closeH < $openH && $closeH < 5);
-                    if ($isCrossMidnight) {
-                        $displayDate = date('d-m-Y', strtotime($lt['current_round_date'] . ' -1 day'));
-                    } else {
-                        $displayDate = date('d-m-Y', strtotime($lt['current_round_date']));
-                    }
+                    // แสดงวันที่งวด (ใช้ currentRoundDate ที่คำนวณไว้แล้ว)
+                    $displayDate = date('d-m-Y', strtotime($lt['current_round_date']));
                     
                     // สถานะ realtime 5 ระดับ (อิงจากงวดปัจจุบัน):
                     // 1. ปิดรับแทง (แดง) = Admin กดปิด
