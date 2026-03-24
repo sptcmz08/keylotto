@@ -233,6 +233,54 @@ try {
             
             $autoRateAdjusted = !empty($overLimitTypes);
 
+            // =============================================
+            // ตั้งสู้ (Fight Limits) — ปิดรับถ้าเกินงบ
+            // =============================================
+            $betTypeLabelsMap = ['3top'=>'3ตัวบน','3tod'=>'3ตัวโต๊ด','2top'=>'2ตัวบน','2bot'=>'2ตัวล่าง','run_top'=>'วิ่งบน','run_bot'=>'วิ่งล่าง'];
+            // =============================================
+            try {
+                $flStmt = $pdo->prepare("SELECT bet_type, max_amount FROM fight_limits WHERE lottery_type_id = ? AND max_amount > 0");
+                $flStmt->execute([$lotteryId]);
+                $fightLimits = [];
+                foreach ($flStmt->fetchAll() as $fl) $fightLimits[$fl['bet_type']] = floatval($fl['max_amount']);
+                
+                if (!empty($fightLimits)) {
+                    // ดึงยอดรวมปัจจุบันของแต่ละเลข+ประเภท
+                    $existingStmt = $pdo->prepare("
+                        SELECT bi.number, bi.bet_type, SUM(bi.amount) as total
+                        FROM bet_items bi JOIN bets b ON bi.bet_id = b.id
+                        WHERE b.lottery_type_id = ? AND b.draw_date = ? AND b.status != 'cancelled'
+                        GROUP BY bi.number, bi.bet_type
+                    ");
+                    $existingStmt->execute([$lotteryId, $drawDate]);
+                    $existingTotals = [];
+                    foreach ($existingStmt->fetchAll() as $e) {
+                        $existingTotals[$e['bet_type'] . '_' . $e['number']] = floatval($e['total']);
+                    }
+                    
+                    $fightRejected = [];
+                    foreach ($items as $item) {
+                        $bt = $item['type'];
+                        $num = $item['number'];
+                        if (!isset($fightLimits[$bt])) continue;
+                        
+                        $key = $bt . '_' . $num;
+                        $existing = $existingTotals[$key] ?? 0;
+                        $newTotal = $existing + floatval($item['amount']);
+                        
+                        if ($newTotal > $fightLimits[$bt]) {
+                            $remaining = max(0, $fightLimits[$bt] - $existing);
+                            $fightRejected[] = $num . " (" . $betTypeLabelsMap[$bt] . ") เกินตั้งสู้ " . number_format($fightLimits[$bt]) . " แทงได้อีก " . number_format($remaining);
+                        }
+                    }
+                    
+                    if (!empty($fightRejected)) {
+                        echo json_encode(['error' => "⚠️ เกินตั้งสู้:\n" . implode("\n", $fightRejected)]);
+                        exit;
+                    }
+                }
+            } catch (Exception $e) {} // table may not exist yet
+
             $pdo->beginTransaction();
 
             $stmt = $pdo->prepare("
