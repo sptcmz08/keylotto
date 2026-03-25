@@ -8,57 +8,32 @@ $lotteryId = intval($_GET['id'] ?? 0);
 
 // If no lottery selected, show card listing page
 if (!$lotteryId) {
-    // Same group definitions as index.php
-    $LOTTERY_GROUPS = [
-        [
-            'label' => 'หวยต่างประเทศ',
-            'color' => '#2e7d32',
-            'bg'    => '#e8f5e9',
-            'names' => [
-                'ลาวประตูชัย', 'ลาวสันติภาพ', 'ประชาชนลาว', 'ลาว EXTRA',
-                'ลาว TV', 'ลาว HD', 'ลาวสตาร์', 'ลาวใต้',
-                'ลาวสามัคคี', 'ลาวอาเซียน', 'ลาว VIP', 'ลาวสามัคคี VIP',
-                'ลาวสตาร์ VIP', 'ลาวกาชาด', 'ลาวพัฒนา',
-                'ฮานอยอาเซียน', 'ฮานอย HD', 'ฮานอยสตาร์', 'ฮานอย TV',
-                'ฮานอยกาชาด', 'ฮานอยพิเศษ', 'ฮานอยสามัคคี', 'ฮานอยปกติ',
-                'ฮานอยตรุษจีน', 'ฮานอย VIP', 'ฮานอยพัฒนา', 'ฮานอย EXTRA',
-            ],
-        ],
-        [
-            'label' => 'หวยรายวัน',
-            'color' => '#1565c0',
-            'bg'    => '#e3f2fd',
-            'names' => [
-                'นิเคอิเช้า VIP', 'นิเคอิบ่าย VIP',
-                'จีนเช้า VIP', 'จีนบ่าย VIP',
-                'ฮั่งเส็งเช้า VIP', 'ฮั่งเส็งบ่าย VIP',
-                'ไต้หวัน VIP', 'เกาหลี VIP', 'สิงคโปร์ VIP',
-                'อังกฤษ VIP', 'เยอรมัน VIP', 'รัสเซีย VIP', 'ดาวโจนส์ VIP',
-            ],
-        ],
-        [
-            'label' => 'หวยหุ้น',
-            'color' => '#f57f17',
-            'bg'    => '#fffde7',
-            'names' => [
-                'หุ้นนิเคอิเช้า', 'หุ้นนิเคอิบ่าย',
-                'หุ้นจีนเช้า', 'หุ้นจีนบ่าย',
-                'หุ้นฮั่งเส็งเช้า', 'หุ้นฮั่งเส็งบ่าย',
-                'หุ้นไต้หวัน', 'หุ้นเกาหลี', 'หุ้นสิงคโปร์',
-                'หุ้นไทย', 'หุ้นอินเดีย', 'หุ้นอียิปต์', 'หวย 12 ราศี',
-                'หุ้นอังกฤษ', 'หุ้นเยอรมัน', 'หุ้นรัสเซีย',
-                'ดาวโจนส์อเมริกา', 'ดาวโจนส์ STAR', 'หุ้นดาวโจนส์',
-            ],
-        ],
-        [
-            'label' => 'หวยไทย',
-            'color' => '#c62828',
-            'bg'    => '#ffebee',
-            'names' => [
-                'รัฐบาลไทย', 'ออมสิน', 'ธกส',
-            ],
-        ],
+    // ดึงหมวดหวยจาก DB แทนการ hardcode
+    $catColors = [
+        'หวยต่างประเทศ' => ['color' => '#2e7d32', 'bg' => '#e8f5e9'],
+        'หวยรายวัน'     => ['color' => '#1565c0', 'bg' => '#e3f2fd'],
+        'หวยหุ้น'       => ['color' => '#f57f17', 'bg' => '#fffde7'],
+        'หวยไทย'       => ['color' => '#c62828', 'bg' => '#ffebee'],
     ];
+    $defaultColor = ['color' => '#2e7d32', 'bg' => '#e8f5e9'];
+
+    $catStmt = $pdo->query("SELECT * FROM lottery_categories WHERE is_active = 1 ORDER BY sort_order");
+    $dbCategories = $catStmt->fetchAll();
+    
+    $LOTTERY_GROUPS = [];
+    foreach ($dbCategories as $cat) {
+        $colors = $catColors[$cat['name']] ?? $defaultColor;
+        $ltStmt = $pdo->prepare("SELECT name FROM lottery_types WHERE category_id = ? AND is_active = 1 ORDER BY sort_order");
+        $ltStmt->execute([$cat['id']]);
+        $names = array_column($ltStmt->fetchAll(), 'name');
+        if (empty($names)) continue;
+        $LOTTERY_GROUPS[] = [
+            'label' => $cat['name'],
+            'color' => $colors['color'],
+            'bg'    => $colors['bg'],
+            'names' => $names,
+        ];
+    }
 
     // Fetch all active lottery types with open/close times
     $stmt = $pdo->query("
