@@ -439,9 +439,22 @@ require_once 'includes/header.php';
                         <?php if ($cancelRequested && !$isCancelled): ?><span class="text-yellow-500 mr-1">⏳</span><?php endif; ?>
                         <span class="<?= $isCancelled ? 'text-red-500 line-through' : '' ?>"><?= htmlspecialchars($b['bet_number']) ?></span>
                     </td>
-                    <td class="px-2 py-2 text-center text-xs border"><?= date('d/m/Y H:i:s', strtotime($b['created_at'])) ?></td>
+                    <td class="px-2 py-2 text-center text-xs border">
+                        <?php 
+                            $localTime = strtotime($b['created_at']) + (7 * 3600); 
+                            echo date('d/m/Y H:i:s', $localTime); 
+                        ?>
+                    </td>
                     <td class="px-2 py-2 text-left border text-xs">[<?= htmlspecialchars($b['category_name']) ?>] - <?= htmlspecialchars($b['lottery_name']) ?></td>
-                    <td class="px-2 py-2 text-center border"><?= date('Y-m-d', strtotime($b['draw_date'])) ?></td>
+                    <td class="px-2 py-2 text-center border">
+                        <?php 
+                            if (empty($b['draw_date']) || strpos($b['draw_date'], '0000') !== false) {
+                                echo date('Y-m-d', $localTime);
+                            } else {
+                                echo date('Y-m-d', strtotime($b['draw_date']));
+                            }
+                        ?>
+                    </td>
                     <td class="px-2 py-2 text-center border"><?= $b['total_items'] ?></td>
                     <td class="px-2 py-2 text-center border"><?= formatMoney($b['total_amount']) ?></td>
 
@@ -554,7 +567,7 @@ require_once 'includes/header.php';
                     ?>
                     <tr class="<?= $rowClass ?> border-b hover:bg-blue-50/50 transition">
                         <td class="px-2 py-1.5 text-center border"><?= htmlspecialchars($b['bet_number']) ?></td>
-                        <td class="px-2 py-1.5 text-center text-xs border"><?= date('d/m/Y H:i', strtotime($b['created_at'])) ?></td>
+                        <td class="px-2 py-1.5 text-center text-xs border"><?= date('d/m/Y H:i', strtotime($b['created_at']) + (7 * 3600)) ?></td>
                         <td class="px-2 py-1.5 text-center border"><?= $b['total_items'] ?></td>
                         <td class="px-2 py-1.5 text-center border"><?= formatMoney($b['total_amount']) ?></td>
 
