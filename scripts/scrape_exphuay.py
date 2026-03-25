@@ -278,6 +278,22 @@ def scrape_exphuay(target_date=None, debug=False):
     today = date.today().strftime('%Y-%m-%d')
     results = []
     
+    def match_slug(text):
+        text_clean = re.sub(r'\s+', ' ', text.strip())
+        text_lower = text_clean.lower()
+        
+        if 'vip' in text_lower:
+            for key in sorted([k for k in EXPHUAY_LOTTERIES.keys() if 'vip' in k.lower()], key=len, reverse=True):
+                if key in text_clean:
+                    return EXPHUAY_LOTTERIES[key], key
+                    
+        for key in sorted(EXPHUAY_LOTTERIES.keys(), key=len, reverse=True):
+            if key in text_clean:
+                if 'vip' in text_lower and 'vip' not in key.lower() and key in text_clean:
+                    continue
+                return EXPHUAY_LOTTERIES[key], key
+        return None, None
+
     # === Strategy 1: /result page (fast, 1 request, today only) ===
     if target_date == today:
         results = scrape_result_page(target_date, debug)
