@@ -24,18 +24,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $resultTime = $_POST['result_time'] ?? null;
         $resultUrl = trim($_POST['result_url'] ?? '');
         $resultLabel = trim($_POST['result_label'] ?? '');
-        $drawDate = $_POST['draw_date'] ?? date('Y-m-d');
+        $drawSchedule = trim($_POST['draw_schedule'] ?? 'daily');
         $isActive = isset($_POST['is_active']) ? 1 : 0;
         $sortOrder = intval($_POST['sort_order'] ?? 0);
 
         if ($action === 'add') {
-            $stmt = $pdo->prepare("INSERT INTO lottery_types (category_id, name, flag_emoji, close_time, open_time, result_time, result_url, result_label, draw_date, is_active, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-            $stmt->execute([$categoryId, $name, $flagEmoji, $closeTime, $openTime, $resultTime, $resultUrl, $resultLabel, $drawDate, $isActive, $sortOrder]);
+            $stmt = $pdo->prepare("INSERT INTO lottery_types (category_id, name, flag_emoji, close_time, open_time, result_time, result_url, result_label, draw_schedule, is_active, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt->execute([$categoryId, $name, $flagEmoji, $closeTime, $openTime, $resultTime, $resultUrl, $resultLabel, $drawSchedule, $isActive, $sortOrder]);
             $msg = 'เพิ่มหวยสำเร็จ';
             $msgType = 'success';
         } else {
-            $stmt = $pdo->prepare("UPDATE lottery_types SET category_id=?, name=?, flag_emoji=?, close_time=?, open_time=?, result_time=?, result_url=?, result_label=?, draw_date=?, is_active=?, sort_order=? WHERE id=?");
-            $stmt->execute([$categoryId, $name, $flagEmoji, $closeTime, $openTime, $resultTime, $resultUrl, $resultLabel, $drawDate, $isActive, $sortOrder, $id]);
+            $stmt = $pdo->prepare("UPDATE lottery_types SET category_id=?, name=?, flag_emoji=?, close_time=?, open_time=?, result_time=?, result_url=?, result_label=?, draw_schedule=?, is_active=?, sort_order=? WHERE id=?");
+            $stmt->execute([$categoryId, $name, $flagEmoji, $closeTime, $openTime, $resultTime, $resultUrl, $resultLabel, $drawSchedule, $isActive, $sortOrder, $id]);
             $msg = 'แก้ไขสำเร็จ';
             $msgType = 'success';
         }
@@ -119,7 +119,7 @@ require_once 'includes/header.php';
                     <th class="px-3 py-2 text-center text-xs text-gray-500">เปิดรับ</th>
                     <th class="px-3 py-2 text-center text-xs text-gray-500">ปิดรับ</th>
                     <th class="px-3 py-2 text-center text-xs text-gray-500">ผลออก</th>
-                    <th class="px-3 py-2 text-center text-xs text-gray-500">งวด</th>
+                    <th class="px-3 py-2 text-center text-xs text-gray-500">ตารางออก</th>
                     <th class="px-3 py-2 text-center text-xs text-gray-500">สถานะ</th>
                     <th class="px-3 py-2 text-center text-xs text-gray-500">รับแทง</th>
                     <th class="px-3 py-2 text-center text-xs text-gray-500">จัดการ</th>
@@ -137,7 +137,13 @@ require_once 'includes/header.php';
                     <td class="px-3 py-2 text-center text-xs"><?= $l['open_time'] ? date('H:i', strtotime($l['open_time'])) : '-' ?></td>
                     <td class="px-3 py-2 text-center text-xs"><?= $l['close_time'] ? date('H:i', strtotime($l['close_time'])) : '-' ?></td>
                     <td class="px-3 py-2 text-center text-xs"><?= $l['result_time'] ? date('H:i', strtotime($l['result_time'])) : '-' ?></td>
-                    <td class="px-3 py-2 text-center text-xs"><?= $l['draw_date'] ? date('d/m/Y', strtotime($l['draw_date'])) : '-' ?></td>
+                    <td class="px-3 py-2 text-center text-xs">
+                        <?php
+                        $schedLabels = ['daily'=>'ทุกวัน','weekday'=>'จ-ศ','mon_wed_fri'=>'จ/พ/ศ','1st_16th'=>'1,16','16th'=>'16'];
+                        $sch = $l['draw_schedule'] ?? 'daily';
+                        echo $schedLabels[$sch] ?? $sch;
+                        ?>
+                    </td>
                     <td class="px-3 py-2 text-center">
                         <form method="POST" class="inline">
                             <input type="hidden" name="form_action" value="toggle">
@@ -215,8 +221,14 @@ require_once 'includes/header.php';
                     <input type="time" name="result_time" id="resultTime" class="w-full border rounded-lg px-3 py-2 text-sm focus:border-green-500 outline-none" step="1">
                 </div>
                 <div>
-                    <label class="text-xs text-gray-500 block mb-1">วันที่งวด</label>
-                    <input type="date" name="draw_date" id="drawDate" class="w-full border rounded-lg px-3 py-2 text-sm focus:border-green-500 outline-none" value="<?= date('Y-m-d') ?>">
+                    <label class="text-xs text-gray-500 block mb-1">ตารางออกผล</label>
+                    <select name="draw_schedule" id="drawSchedule" class="w-full border rounded-lg px-3 py-2 text-sm focus:border-green-500 outline-none">
+                        <option value="daily">ทุกวัน</option>
+                        <option value="weekday">จันทร์-ศุกร์</option>
+                        <option value="mon_wed_fri">จันทร์/พุธ/ศุกร์</option>
+                        <option value="1st_16th">วันที่ 1, 16</option>
+                        <option value="16th">วันที่ 16</option>
+                    </select>
                 </div>
                 <div>
                     <label class="text-xs text-gray-500 block mb-1">URL ดูผล</label>
@@ -269,7 +281,7 @@ function editLottery(data) {
     document.getElementById('closeTime').value = data.close_time || '';
     document.getElementById('openTime').value = data.open_time || '';
     document.getElementById('resultTime').value = data.result_time || '';
-    document.getElementById('drawDate').value = data.draw_date || '';
+    document.getElementById('drawSchedule').value = data.draw_schedule || 'daily';
     document.getElementById('resultUrl').value = data.result_url || '';
     document.getElementById('resultLabel').value = data.result_label || '';
     document.getElementById('sortOrder').value = data.sort_order || 0;
@@ -286,7 +298,7 @@ function resetForm() {
     document.getElementById('closeTime').value = '';
     document.getElementById('openTime').value = '';
     document.getElementById('resultTime').value = '';
-    document.getElementById('drawDate').value = '<?= date('Y-m-d') ?>';
+    document.getElementById('drawSchedule').value = 'daily';
     document.getElementById('resultUrl').value = '';
     document.getElementById('resultLabel').value = '';
     document.getElementById('sortOrder').value = '0';
