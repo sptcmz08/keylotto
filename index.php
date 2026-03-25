@@ -84,14 +84,27 @@ foreach ($allLotteries as &$l) {
     $resultDate = $l['result_date'] ?? null;
     $hasAnyResult = !empty($l['three_top']);
     
-    // === Current Round Date จาก draw_schedule ===
-    // ทุกหวยใช้วันที่จริง (reset ตอนเที่ยงคืน)
+    // === Current Round Date จาก draw_schedule + cross-midnight check ===
     $drawSchedule = $l['draw_schedule'] ?? 'daily';
     $currentRoundDate = getCurrentDrawDate($drawSchedule);
     
+    // หวยข้ามเที่ยงคืน (เช่น ดาวโจนส์ VIP close=00:10, open=23:59)
+    // ถ้าตอนนี้ 00:00-05:59 → งวดปัจจุบันเป็นของเมื่อวาน
+    $lCloseTime = $l['close_time'] ?? '';
+    $lOpenTime = $l['open_time'] ?? '';
+    $lCloseHour = intval(substr($lCloseTime, 0, 2));
+    $lOpenHour = intval(substr($lOpenTime, 0, 2));
+    $nowHour = intval(date('H'));
+    $isCrossMidnightLottery = ($lCloseHour < 6 && $lOpenHour >= 18);
+    
+    if ($isCrossMidnightLottery && $nowHour < 6) {
+        $currentRoundDate = $yesterday;
+    }
+    
     // === ซ่อนหวยที่ไม่ออกวันนี้ ===
     // เช่น หุ้น(จ-ศ) ซ่อนวันเสาร์-อาทิตย์, ลาวพัฒนา(จ/พ/ศ) ซ่อนวัน อ/พฤ/ส/อา
-    if ($drawSchedule !== 'daily' && $currentRoundDate !== $today) {
+    $showAlways = $isCrossMidnightLottery && $nowHour < 6; // หวยข้ามเที่ยงคืนช่วงตี → แสดงเสมอ
+    if (!$showAlways && $drawSchedule !== 'daily' && $currentRoundDate !== $today && $currentRoundDate !== $yesterday) {
         continue; // ข้ามหวยนี้ ไม่แสดงในหน้าหลัก
     }
     

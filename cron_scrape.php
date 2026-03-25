@@ -404,10 +404,18 @@ function processResults($pdo, $results, $source) {
             continue;
         }
 
-        // หวยข้ามเที่ยงคืน → ใช้วันที่จริง (ไม่ shift 4 ชม.)
+        // หวยข้ามเที่ยงคืน (เช่น ดาวโจนส์ VIP ปิด 00:10, STAR ปิด 01:05)
+        // draw_date ของหวยพวกนี้เป็นของ "เมื่อวาน" เสมอ (เช่น ดาวโจนส์วันที่ 25 ออกผลหลัง 00:00 วันที่ 26)
         $isCrossMidnight = isset($crossMidnightIds[$lotteryTypeId]);
         if ($isCrossMidnight) {
-            $drawDate = $todayReal;
+            // ถ้า scraper ส่ง draw_date มาตรงกับเมื่อวาน (shift -4h) → ใช้ตามนั้น (ถูกแล้ว)
+            // ถ้าไม่ → ใช้เมื่อวาน (วันซื้อขาย/ออกผลจริง)
+            $yesterday = date('Y-m-d', strtotime('-1 day'));
+            if ($drawDate === $todayReal) {
+                // scraper ไม่มี draw_date หรือใส่วันนี้ (ผิด) → แก้เป็นเมื่อวาน
+                $drawDate = $yesterday;
+            }
+            // ถ้า scraper ใส่ $today (shift -4h) = เมื่อวาน → ถูกแล้ว ไม่ต้องแก้
         }
 
         // === ⛔ SAFEGUARD: ห้ามบันทึกผลก่อนถึง result_time ===

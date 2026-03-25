@@ -439,31 +439,49 @@ $flagUrl = getFlagForCountry($lottery['flag_emoji'], $lottery['name']);
 
 // คำนวณ drawDate + closeDateTime จาก open_time/close_time (เหมือน card listing)
 $today = date('Y-m-d');
+$yesterday = date('Y-m-d', strtotime('-1 day'));
 $tomorrow = date('Y-m-d', strtotime('+1 day'));
 $now = new DateTime();
 $openTime = $lottery['open_time'] ?? null;
 $closeTime = $lottery['close_time'] ?? null;
 
 if ($openTime && $closeTime) {
-    $openDT = new DateTime($today . ' ' . $openTime);
-    $closeDT = new DateTime($today . ' ' . $closeTime);
+    $closeHour = intval(substr($closeTime, 0, 2));
+    $openHour = intval(substr($openTime, 0, 2));
+    $nowHour = intval(date('H'));
     
-    if ($closeDT <= $openDT) {
-        // ข้ามวัน (เช่น เปิด 17:00 ปิด 00:05)
-        if ($now < $closeDT) {
-            $calcDrawDate = $today;
-            $openDT->modify('-1 day');
+    // กรณีหวยข้ามเที่ยงคืน: open >= 20:00, close <= 05:00
+    if ($closeHour < 6 && $openHour >= 18) {
+        if ($nowHour < 6) {
+            $calcDrawDate = $yesterday;
+            // openDT = เมื่อวาน open_time, closeDT = วันนี้ close_time
+            $openDT = new DateTime($yesterday . ' ' . $openTime);
+            $closeDT = new DateTime($today . ' ' . $closeTime);
         } else {
-            $calcDrawDate = $tomorrow;
-            $closeDT->modify('+1 day');
+            $calcDrawDate = $today;
+            $openDT = new DateTime($today . ' ' . $openTime);
+            $closeDT = new DateTime($tomorrow . ' ' . $closeTime);
         }
     } else {
-        if ($now > $closeDT) {
-            $calcDrawDate = $tomorrow;
-            $openDT->modify('+1 day');
-            $closeDT->modify('+1 day');
+        $openDT = new DateTime($today . ' ' . $openTime);
+        $closeDT = new DateTime($today . ' ' . $closeTime);
+        
+        if ($closeDT <= $openDT) {
+            if ($now < $closeDT) {
+                $calcDrawDate = $today;
+                $openDT->modify('-1 day');
+            } else {
+                $calcDrawDate = $tomorrow;
+                $closeDT->modify('+1 day');
+            }
         } else {
-            $calcDrawDate = $today;
+            if ($now > $closeDT) {
+                $calcDrawDate = $tomorrow;
+                $openDT->modify('+1 day');
+                $closeDT->modify('+1 day');
+            } else {
+                $calcDrawDate = $today;
+            }
         }
     }
     $closeDateTime = $closeDT->format('Y-m-d H:i:s');

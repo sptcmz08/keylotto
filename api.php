@@ -99,27 +99,45 @@ try {
             
             // คำนวณ drawDate จาก open_time/close_time (ไม่ใช้ lottery_types.draw_date ที่อาจ stale)
             $today = date('Y-m-d');
+            $yesterday = date('Y-m-d', strtotime('-1 day'));
             $tomorrow = date('Y-m-d', strtotime('+1 day'));
             $now = new DateTime();
             $openTime = $lottery['open_time'] ?? null;
             $closeTime = $lottery['close_time'] ?? null;
             
             if ($openTime && $closeTime) {
-                $openDT = new DateTime($today . ' ' . $openTime);
-                $closeDT = new DateTime($today . ' ' . $closeTime);
+                $closeHour = intval(substr($closeTime, 0, 2));
+                $openHour = intval(substr($openTime, 0, 2));
+                $nowHour = intval(date('H'));
                 
-                if ($closeDT <= $openDT) {
-                    // ข้ามวัน (เช่น เปิด 17:00 ปิด 00:05)
-                    if ($now < $closeDT) {
-                        $drawDate = $today;
+                // กรณีหวยข้ามเที่ยงคืน: open >= 20:00, close <= 05:00
+                // เช่น ดาวโจนส์ VIP open=23:59 close=00:10
+                if ($closeHour < 6 && $openHour >= 18) {
+                    // หวยข้ามเที่ยงคืน → draw_date เป็นของเมื่อวานเสมอ
+                    // (เปิดรับก่อนเที่ยงคืน ปิดหลังเที่ยงคืน → งวดเดียวกัน = วันเมื่อวาน)
+                    if ($nowHour < 6) {
+                        // ตอนนี้ 00:00-05:59 → งวดเป็นของเมื่อวาน
+                        $drawDate = $yesterday;
                     } else {
-                        $drawDate = $tomorrow;
+                        // ตอนนี้ 06:00+ → งวดเป็นของวันนี้ (จะเปิดรับตอน 20:00+)
+                        $drawDate = $today;
                     }
                 } else {
-                    if ($now > $closeDT) {
-                        $drawDate = $tomorrow;
+                    $openDT = new DateTime($today . ' ' . $openTime);
+                    $closeDT = new DateTime($today . ' ' . $closeTime);
+                    
+                    if ($closeDT <= $openDT) {
+                        if ($now < $closeDT) {
+                            $drawDate = $today;
+                        } else {
+                            $drawDate = $tomorrow;
+                        }
                     } else {
-                        $drawDate = $today;
+                        if ($now > $closeDT) {
+                            $drawDate = $tomorrow;
+                        } else {
+                            $drawDate = $today;
+                        }
                     }
                 }
             } else {
