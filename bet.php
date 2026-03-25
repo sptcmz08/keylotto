@@ -218,6 +218,20 @@ if (!$lotteryId) {
             }
         }
         if (empty($groupCards)) continue;
+        
+        // เรียงตามเวลาปิด — ใกล้ปิดขึ้นก่อน (ยังเปิดอยู่ก่อน, ปิดแล้วไปท้าย)
+        usort($groupCards, function($a, $b) {
+            $nowTS = time();
+            $aClose = !empty($a['closeISO']) ? strtotime($a['closeISO']) : PHP_INT_MAX;
+            $bClose = !empty($b['closeISO']) ? strtotime($b['closeISO']) : PHP_INT_MAX;
+            $aOpen = $aClose > $nowTS ? 1 : 0; // 1 = ยังเปิด, 0 = ปิดแล้ว
+            $bOpen = $bClose > $nowTS ? 1 : 0;
+            
+            // ยังเปิดอยู่ขึ้นก่อน
+            if ($aOpen !== $bOpen) return $bOpen - $aOpen;
+            // ถ้าเปิดเหมือนกัน → ใกล้ปิดขึ้นก่อน
+            return $aClose - $bClose;
+        });
     ?>
     <div class="category-section" style="margin-bottom: 16px;">
         <div class="status-section-title" style="color:<?= $group['color'] ?>; border-color:<?= $group['color'] ?>; background:<?= $group['bg'] ?>;">
