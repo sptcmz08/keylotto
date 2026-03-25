@@ -36,7 +36,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             $msg = 'ยกเลิกโพยสำเร็จ - ยอดจะถูกหักออกจากรายการรวม';
         } elseif ($action === 'delete_bet') {
-            // Soft delete: cancel instead of hard delete
             $id = intval($_POST['id']);
             try {
                 $pdo->prepare("UPDATE bets SET status = 'cancelled', win_amount = 0, cancel_approved_by = 'admin', cancel_approved_at = NOW() WHERE id = ?")->execute([$id]);
@@ -44,25 +43,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $pdo->prepare("UPDATE bets SET status = 'cancelled' WHERE id = ?")->execute([$id]);
             }
             $msg = 'ยกเลิกบิลสำเร็จ (ข้อมูลยังเก็บไว้ในระบบ)';
+        } elseif ($action === 'bulk_cancel') {
+            $lotteryTypeId = intval($_POST['lottery_type_id'] ?? 0);
+            $drawDate = $_POST['draw_date'] ?? '';
+            if ($lotteryTypeId && $drawDate) {
+                $stmt = $pdo->prepare("UPDATE bets SET status = 'cancelled', win_amount = 0, cancel_approved_by = 'admin', cancel_approved_at = NOW() WHERE lottery_type_id = ? AND draw_date = ? AND status = 'pending'");
+                $stmt->execute([$lotteryTypeId, $drawDate]);
+                $cancelCount = $stmt->rowCount();
+                $lnStmt = $pdo->prepare("SELECT name FROM lottery_types WHERE id = ?");
+                $lnStmt->execute([$lotteryTypeId]);
+                $ln = $lnStmt->fetchColumn();
+                $msg = "ยกเลิกโพยทั้งหมดของ {$ln} งวด {$drawDate} สำเร็จ ({$cancelCount} โพย)";
+            }
         }
     }
 }
 
 // Fetch bets
 $selectedDate = $_GET['date'] ?? date('Y-m-d');
-$stmt = $pdo->prepare("
-    SELECT b.*, lt.name as lottery_name, lt.flag_emoji, lc.name as category_name
+$selectedLottery = $_GET['lottery'] ?? '';
+
+$sql = "SELECT b.*, lt.name as lottery_name, lt.flag_emoji, lc.name as category_name
     FROM bets b
     JOIN lottery_types lt ON b.lottery_type_id = lt.id
     JOIN lottery_categories lc ON lt.category_id = lc.id
-    WHERE b.draw_date = ?
-    ORDER BY b.created_at DESC
-");
-$stmt->execute([$selectedDate]);
+    WHERE b.draw_date = ?";
+$params = [$selectedDate];
+if ($selectedLottery) {
+    $sql .= " AND b.lottery_type_id = ?";
+    $params[] = intval($selectedLottery);
+}
+$sql .= " ORDER BY b.created_at DESC";
+$stmt = $pdo->prepare($sql);
+$stmt->execute($params);
 $bets = $stmt->fetchAll();
+
+// Lottery list for filter
+$lotteryList = $pdo->query("SELECT id, name FROM lottery_types WHERE is_active = 1 ORDER BY name")->fetchAll();
 
 // Summary
 $totalBets = count($bets);
+$pendingBets = count(array_filter($bets, fn($b) => $b['status'] === 'pending'));
 $totalAmount = array_sum(array_map(fn($b) => $b['status'] !== 'cancelled' ? floatval($b['net_amount']) : 0, $bets));
 
 require_once 'includes/header.php';
@@ -73,25 +94,53 @@ require_once 'includes/header.php';
 <?php endif; ?>
 
 <!-- Filter + Summary -->
-<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-    <div class="bg-white rounded-xl shadow-sm border p-4">
-        <form method="GET" class="flex gap-2 items-end">
-            <div class="flex-1">
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="bg-white rounded-xl shadow-sm border p-4 md:col-span-2">
+        <form method="GET" class="flex gap-2 items-end flex-wrap">
+            <div>
                 <label class="text-xs text-gray-500 block mb-1">วันที่งวด</label>
-                <input type="date" name="date" value="<?= $selectedDate ?>" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+                <input type="date" name="date" value="<?= $selectedDate ?>" class="border rounded-lg px-3 py-2 text-sm outline-none">
+            </div>
+            <div class="flex-1 min-w-[140px]">
+                <label class="text-xs text-gray-500 block mb-1">หวย</label>
+                <select name="lottery" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+                    <option value="">ทั้งหมด</option>
+                    <?php foreach ($lotteryList as $lt): ?>
+                    <option value="<?= $lt['id'] ?>" <?= $selectedLottery == $lt['id'] ? 'selected' : '' ?>><?= htmlspecialchars($lt['name']) ?></option>
+                    <?php endforeach; ?>
+                </select>
             </div>
             <button type="submit" class="bg-green-500 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-600"><i class="fas fa-search"></i></button>
         </form>
     </div>
     <div class="bg-white rounded-xl shadow-sm border p-4 text-center">
-        <p class="text-xs text-gray-400">จำนวนบิล</p>
-        <p class="text-2xl font-bold text-gray-800"><?= $totalBets ?></p>
+        <p class="text-xs text-gray-400">บิล (รอผล)</p>
+        <p class="text-2xl font-bold text-gray-800"><?= $totalBets ?> <span class="text-sm text-orange-500">(<?= $pendingBets ?>)</span></p>
     </div>
     <div class="bg-white rounded-xl shadow-sm border p-4 text-center">
         <p class="text-xs text-gray-400">ยอดรวม</p>
         <p class="text-2xl font-bold text-green-600">฿<?= number_format($totalAmount, 2) ?></p>
     </div>
 </div>
+
+<?php if ($pendingBets > 0 && $selectedLottery): ?>
+<!-- Bulk Cancel Button -->
+<div class="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl flex items-center justify-between">
+    <div class="text-sm text-red-700">
+        <i class="fas fa-exclamation-triangle mr-1"></i>
+        พบ <strong><?= $pendingBets ?></strong> โพยที่รอผลอยู่
+    </div>
+    <form method="POST" id="bulkCancelForm">
+        <?= csrfField() ?>
+        <input type="hidden" name="form_action" value="bulk_cancel">
+        <input type="hidden" name="lottery_type_id" value="<?= intval($selectedLottery) ?>">
+        <input type="hidden" name="draw_date" value="<?= $selectedDate ?>">
+        <button type="button" onclick="confirmBulkCancel()" class="bg-red-500 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-red-600">
+            <i class="fas fa-ban mr-1"></i>ยกเลิกทั้งหมด (<?= $pendingBets ?> โพย)
+        </button>
+    </form>
+</div>
+<?php endif; ?>
 
 <!-- Bets Table -->
 <div class="bg-white rounded-xl shadow-sm border overflow-hidden">
@@ -235,6 +284,23 @@ function confirmDelete(id, betNumber) {
     }).then((result) => {
         if (result.isConfirmed) {
             document.getElementById('deleteForm_' + id).submit();
+        }
+    });
+}
+function confirmBulkCancel() {
+    Swal.fire({
+        title: 'ยกเลิกโพยทั้งหมด?',
+        html: '<p class="text-red-500 font-bold">⚠️ โพยที่รอผลทั้งหมดจะถูกยกเลิก</p><p class="text-sm text-gray-500 mt-2">การกระทำนี้ไม่สามารถย้อนกลับได้</p>',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#ef4444',
+        cancelButtonColor: '#6b7280',
+        confirmButtonText: '<i class="fas fa-ban mr-1"></i>ยืนยันยกเลิกทั้งหมด',
+        cancelButtonText: 'ไม่ใช่',
+        reverseButtons: true,
+    }).then((result) => {
+        if (result.isConfirmed) {
+            document.getElementById('bulkCancelForm').submit();
         }
     });
 }

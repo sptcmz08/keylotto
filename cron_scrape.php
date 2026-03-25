@@ -915,6 +915,67 @@ function scrapeSmart($pdo) {
     echo "📊 Smart Summary: ✅ {$totalNew} ใหม่";
     if ($totalConflict > 0) echo ", ⚠️ {$totalConflict} conflict";
     echo "\n";
+
+    // =============================================
+    // Auto-cancel: หวยที่เลย result_time > 2 ชม. ยังไม่มีผล → ยกเลิกโพย pending
+    // =============================================
+    $now = time();
+    $overdueStmt = $pdo->prepare("
+        SELECT lt.id, lt.name, lt.result_time, lt.close_time, lt.open_time, lt.draw_schedule
+        FROM lottery_types lt
+        WHERE lt.is_active = 1
+        AND lt.result_time IS NOT NULL
+        AND EXISTS (
+            SELECT 1 FROM bets b 
+            WHERE b.lottery_type_id = lt.id 
+            AND (b.draw_date = ? OR b.draw_date = ?)
+            AND b.status = 'pending'
+        )
+        AND NOT EXISTS (
+            SELECT 1 FROM results r 
+            WHERE r.lottery_type_id = lt.id 
+            AND (r.draw_date = ? OR r.draw_date = ?)
+        )
+    ");
+    $overdueStmt->execute([$today, $todayReal, $today, $todayReal]);
+    $overdueLotteries = $overdueStmt->fetchAll(PDO::FETCH_ASSOC);
+
+    $autoCancelCount = 0;
+    foreach ($overdueLotteries as $ol) {
+        // คำนวณ result_time สำหรับวันนี้
+        $resultTimeStr = $todayReal . ' ' . $ol['result_time'];
+        $resultTimestamp = strtotime($resultTimeStr);
+        
+        // หวยข้ามเที่ยงคืน: result_time < open_time → result เป็นของวันถัดไป
+        $openHour = intval(substr($ol['open_time'] ?? '06:00:00', 0, 2));
+        $resultHour = intval(substr($ol['result_time'], 0, 2));
+        if ($resultHour < $openHour && $resultHour < 6) {
+            // result_time หลังเที่ยงคืน → ใช้วันที่ของ draw_date + 1
+            $resultTimeStr = date('Y-m-d', strtotime($today . ' +1 day')) . ' ' . $ol['result_time'];
+            $resultTimestamp = strtotime($resultTimeStr);
+        }
+        
+        $hoursPast = ($now - $resultTimestamp) / 3600;
+        
+        if ($hoursPast > 2) {
+            // เลย 2 ชม.แล้ว → ยกเลิกโพย pending
+            $cancelStmt = $pdo->prepare("
+                UPDATE bets SET status = 'cancelled', win_amount = 0, 
+                cancel_approved_by = 'auto_timeout', cancel_approved_at = NOW()
+                WHERE lottery_type_id = ? AND (draw_date = ? OR draw_date = ?) AND status = 'pending'
+            ");
+            $cancelStmt->execute([$ol['id'], $today, $todayReal]);
+            $cancelled = $cancelStmt->rowCount();
+            if ($cancelled > 0) {
+                echo "🚫 Auto-cancel: {$ol['name']} — ยกเลิก {$cancelled} โพย (เลย result_time > 2 ชม.)\n";
+                logScrape($pdo, $ol['name'], 'auto_cancel', 'success', "Cancelled {$cancelled} bets (overdue > 2hrs)", $today);
+                $autoCancelCount += $cancelled;
+            }
+        }
+    }
+    if ($autoCancelCount > 0) {
+        echo "🚫 Auto-cancel รวม: {$autoCancelCount} โพย\n";
+    }
 }
 
 function runSmartSource($pdo, $source) {
