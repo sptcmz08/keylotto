@@ -104,7 +104,7 @@ foreach ($allLotteries as &$l) {
     // === ซ่อนหวยที่ไม่ออกวันนี้ ===
     // เช่น หุ้น(จ-ศ) ซ่อนวันเสาร์-อาทิตย์, ลาวพัฒนา(จ/พ/ศ) ซ่อนวัน อ/พฤ/ส/อา
     $showAlways = $isCrossMidnightLottery && $nowHour < 6; // หวยข้ามเที่ยงคืนช่วงตี → แสดงเสมอ
-    if (!$showAlways && $drawSchedule !== 'daily' && $currentRoundDate !== $today && $currentRoundDate !== $yesterday) {
+    if (!$showAlways && $drawSchedule !== 'daily' && $currentRoundDate !== $today) {
         continue; // ข้ามหวยนี้ ไม่แสดงในหน้าหลัก
     }
     
