@@ -13,6 +13,78 @@ try {
     if (isset($_POST['reject_cancel'])) {
         $betId = intval($_POST['bet_id']);
         $pdo->prepare("UPDATE bets SET cancel_requested = 0, cancel_reason = NULL, cancel_requested_at = NULL WHERE id = ?")->execute([$betId]);
+        
+        // Re-check if results already exist → recalculate correct status
+        $betRow = $pdo->prepare("SELECT id, lottery_type_id, draw_date, status FROM bets WHERE id = ?");
+        $betRow->execute([$betId]);
+        $theBet = $betRow->fetch();
+        
+        if ($theBet && $theBet['status'] === 'pending') {
+            // Try to find results for this lottery + draw_date
+            $drawDate = $theBet['draw_date'];
+            $ltId = $theBet['lottery_type_id'];
+            
+            // If draw_date is empty/invalid, try today's date
+            if (empty($drawDate) || strpos($drawDate, '0000') !== false) {
+                $drawDate = date('Y-m-d');
+            }
+            
+            $resStmt = $pdo->prepare("SELECT * FROM results WHERE lottery_type_id = ? AND draw_date = ?");
+            $resStmt->execute([$ltId, $drawDate]);
+            $result = $resStmt->fetch();
+            
+            if ($result && !empty($result['three_top'])) {
+                // Results exist — recalculate this bet's win/loss
+                $rateStmt = $pdo->prepare("SELECT bet_type, pay_rate FROM pay_rates WHERE lottery_type_id = ?");
+                $rateStmt->execute([$ltId]);
+                $rateMap = [];
+                foreach ($rateStmt->fetchAll() as $r) {
+                    $rateMap[$r['bet_type']] = floatval($r['pay_rate']);
+                }
+                
+                $itemStmt = $pdo->prepare("SELECT * FROM bet_items WHERE bet_id = ?");
+                $itemStmt->execute([$betId]);
+                $items = $itemStmt->fetchAll();
+                
+                $sortStr = function($s) { $a = str_split($s); sort($a); return implode('', $a); };
+                $totalWin = 0;
+                $hasWin = false;
+                
+                foreach ($items as $item) {
+                    $num = $item['number'];
+                    $type = $item['bet_type'];
+                    $amount = floatval($item['amount']);
+                    $isWinner = false;
+                    
+                    switch ($type) {
+                        case '3top': $isWinner = ($result['three_top'] === $num); break;
+                        case '3tod':
+                            if ($result['three_top'] && strlen($num) === 3) {
+                                $isWinner = ($sortStr($num) === $sortStr($result['three_top'])) && ($num !== $result['three_top']);
+                            }
+                            break;
+                        case '2top': $isWinner = ($result['two_top'] === $num); break;
+                        case '2bot': $isWinner = ($result['two_bot'] === $num); break;
+                        case 'run_top': $isWinner = ($result['run_top'] !== null && strpos($result['three_top'], $num) !== false); break;
+                        case 'run_bot': $isWinner = ($result['run_bot'] !== null && strpos($result['two_bot'], $num) !== false); break;
+                    }
+                    
+                    if ($isWinner) {
+                        $hasWin = true;
+                        if (!empty($item['pay_rate']) && floatval($item['pay_rate']) > 0) {
+                            $payRate = floatval($item['pay_rate']);
+                        } else {
+                            $payRate = $rateMap[$type] ?? 0;
+                        }
+                        $totalWin += $amount * $payRate;
+                    }
+                }
+                
+                $newStatus = $hasWin ? 'won' : 'lost';
+                $pdo->prepare("UPDATE bets SET status = ?, win_amount = ? WHERE id = ?")->execute([$newStatus, $totalWin, $betId]);
+            }
+        }
+        
         header('Location: index.php?msg=cancel_rejected');
         exit;
     }
