@@ -93,19 +93,21 @@ if (empty($selectedLottery) && !empty($lotteryTypes)) {
     $selectedLottery = $firstLottery ?: $lotteryTypes[0]['id'];
 }
 
-// Available draw dates — รวมวันที่ของทุกหวย + วันนี้เสมอ
-$availableDates = $pdo->query("
+// Available draw dates — เฉพาะหวยที่เลือก + วันนี้เสมอ (เริ่มตั้งแต่ 25/03/2026)
+$availableDatesStmt = $pdo->prepare("
     SELECT DISTINCT draw_date FROM (
-        SELECT draw_date FROM results WHERE draw_date IS NOT NULL AND draw_date >= '2025-01-01'
+        SELECT draw_date FROM results WHERE lottery_type_id = ? AND draw_date >= '2026-03-25'
         UNION
-        SELECT draw_date FROM bets WHERE status != 'cancelled' AND draw_date IS NOT NULL AND draw_date >= '2025-01-01'
+        SELECT draw_date FROM bets WHERE lottery_type_id = ? AND status != 'cancelled' AND draw_date >= '2026-03-25'
         UNION
         SELECT CURDATE()
     ) combined
     WHERE draw_date IS NOT NULL AND draw_date > '0000-00-00'
     ORDER BY draw_date DESC
-    LIMIT 50
-")->fetchAll(PDO::FETCH_COLUMN);
+    LIMIT 30
+");
+$availableDatesStmt->execute([$selectedLottery, $selectedLottery]);
+$availableDates = $availableDatesStmt->fetchAll(PDO::FETCH_COLUMN);
 
 if (!in_array($selectedDate, $availableDates)) {
     $selectedDate = $availableDates[0] ?? date('Y-m-d');
@@ -209,7 +211,8 @@ $selFlagUrl = getFlagForCountry($selFlagEmoji, $selLotteryName);
 $lotteryByCategory = [];
 foreach ($lotteryTypes as $lt) $lotteryByCategory[$lt['cat_name']][] = $lt;
 
-// Date status — simplified 2 levels
+// Date status — 3 ระดับ: ผลออกแล้ว / รอออกผล / ไม่มีข้อมูล
+$today = date('Y-m-d');
 $dateStatusMap = [];
 foreach ($availableDates as $drawDate) {
     $resChk = $pdo->prepare("SELECT three_top FROM results WHERE lottery_type_id = ? AND draw_date = ? LIMIT 1");
@@ -217,10 +220,20 @@ foreach ($availableDates as $drawDate) {
     $resRow = $resChk->fetch();
     $hasResult = !empty($resRow['three_top']);
     
+    // เช็คว่ามีบิลในวันนี้ไหม
+    $betChk = $pdo->prepare("SELECT COUNT(*) FROM bets WHERE lottery_type_id = ? AND draw_date = ? AND status != 'cancelled'");
+    $betChk->execute([$selectedLottery, $drawDate]);
+    $hasBets = $betChk->fetchColumn() > 0;
+    
     if ($hasResult) {
         $dateStatusMap[$drawDate] = ['label' => 'จ่ายเงินแล้ว', 'color' => '#28a745'];
-    } else {
+    } elseif ($drawDate >= $today) {
         $dateStatusMap[$drawDate] = ['label' => 'รอออกผล', 'color' => '#007bff'];
+    } elseif ($hasBets) {
+        // วันผ่านไปแล้ว มีบิลแต่ยังไม่มีผล
+        $dateStatusMap[$drawDate] = ['label' => 'รอออกผล', 'color' => '#ffc107'];
+    } else {
+        $dateStatusMap[$drawDate] = ['label' => 'ไม่มีข้อมูล', 'color' => '#6c757d'];
     }
 }
 
