@@ -447,11 +447,10 @@ $closeTime = $lottery['close_time'] ?? null;
 
 if ($openTime && $closeTime) {
     $closeHour = intval(substr($closeTime, 0, 2));
-    $openHour = intval(substr($openTime, 0, 2));
     $nowHour = intval(date('H'));
     
-    // กรณีหวยข้ามเที่ยงคืน: open >= 20:00, close <= 05:00
-    if ($closeHour < 6 && $openHour >= 18) {
+    // กรณีหวยข้ามเที่ยงคืน: close_time < 06:00
+    if ($closeHour < 6) {
         if ($nowHour < 6) {
             $calcDrawDate = $yesterday;
             // openDT = เมื่อวาน open_time, closeDT = วันนี้ close_time
