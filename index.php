@@ -444,27 +444,13 @@ require_once 'includes/header.php';
                         $isResultStale = $resultDate < $prevDrawDate;
                     }
                     
-                    // === สถานะ ===
-                    if ($hasResultForRound && !$todayIsDrawDay) {
-                        // วันนี้ไม่ใช่วันออกผล + มีผลงวดล่าสุดแล้ว → รอออกผลงวดต่อไป
-                        $statusClass = 'status-next'; $statusLabel = 'รอออกผลงวดต่อไป';
-                    } elseif (!$hasResultForRound && !$todayIsDrawDay && $hasAnyResult) {
-                        // วันนี้ไม่ใช่วันออกผล + ไม่มีผลงวดนี้ แต่มีผลเก่า → รอออกผลงวดต่อไป
-                        $statusClass = 'status-next'; $statusLabel = 'รอออกผลงวดต่อไป';
-                    } elseif (!$todayIsDrawDay && !$hasAnyResult) {
-                        // วันนี้ไม่ใช่วันออกผล + ไม่เคยมีผลเลย → รอออกผลงวดต่อไป
-                        $statusClass = 'status-next'; $statusLabel = 'รอออกผลงวดต่อไป';
-                    } elseif ($isBetClosed && !$hasResultForRound) {
-                        $statusClass = 'status-closed'; $statusLabel = 'ปิดรับแทง';
-                    } elseif ($hasResultForRound && !$hasPending) {
-                        $statusClass = 'status-paid'; $statusLabel = 'จ่ายเงินแล้ว';
+                    // === สถานะ 3 ระดับ ===
+                    // 1. ผลออกแล้ว (เขียว) = มีผลงวดนี้ + คำนวณเสร็จแล้ว
+                    // 2. กำลังประมวลผล (ส้ม) = มีผลงวดนี้ แต่ยังมี pending
+                    // 3. รอออกผล (ฟ้า) = ยังไม่มีผลงวดนี้
+                    if ($hasResultForRound && !$hasPending) {
+                        $statusClass = 'status-paid'; $statusLabel = 'ผลออกแล้ว';
                     } elseif ($hasResultForRound && $hasPending) {
-                        $statusClass = 'status-processing'; $statusLabel = '<i class="fas fa-spinner fa-spin mr-1"></i> กำลังประมวลผล';
-                    } elseif ($pastCloseTime && !$hasResultForRound && $isResultStale) {
-                        $statusClass = 'status-suspended'; $statusLabel = 'งดออกผล';
-                    } elseif ($pastCloseTime && !$hasResultForRound && $hoursPastClose > 2) {
-                        $statusClass = 'status-processing'; $statusLabel = '<i class="fas fa-spinner fa-spin mr-1"></i> กำลังประมวลผล';
-                    } elseif ($pastCloseTime && !$hasResultForRound) {
                         $statusClass = 'status-processing'; $statusLabel = '<i class="fas fa-spinner fa-spin mr-1"></i> กำลังประมวลผล';
                     } else {
                         $statusClass = 'status-waiting'; $statusLabel = 'รอออกผล';
