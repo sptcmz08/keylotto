@@ -156,11 +156,14 @@ require_once 'includes/header.php';
                     <td class="px-3 py-2 text-center font-bold text-red-600 font-mono"><?= $r['two_bot'] ?: '-' ?></td>
                     <td class="px-3 py-2 text-center font-mono"><?= $r['run_top'] ?: '-' ?></td>
                     <td class="px-3 py-2 text-center font-mono"><?= $r['run_bot'] ?: '-' ?></td>
-                    <td class="px-3 py-2 text-center">
+                    <td class="px-3 py-2 text-center whitespace-nowrap">
+                        <button onclick="rescrapeResult(<?= $r['id'] ?>, '<?= htmlspecialchars($r['lottery_name']) ?>')" class="text-orange-400 hover:text-orange-600 mr-2" title="ลบแล้วดึงใหม่">
+                            <i class="fas fa-sync-alt"></i>
+                        </button>
                         <form method="POST" class="inline" onsubmit="return confirm('ลบผลรางวัลนี้?')">
                             <input type="hidden" name="form_action" value="delete_result">
                             <input type="hidden" name="id" value="<?= $r['id'] ?>">
-                            <button type="submit" class="text-red-400 hover:text-red-600"><i class="fas fa-trash-alt"></i></button>
+                            <button type="submit" class="text-red-400 hover:text-red-600" title="ลบ"><i class="fas fa-trash-alt"></i></button>
                         </form>
                     </td>
                 </tr>
@@ -169,5 +172,54 @@ require_once 'includes/header.php';
         </table>
     </div>
 </div>
+
+<!-- Rescrape Modal -->
+<div id="rescrapeModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden items-center justify-center">
+    <div class="bg-white rounded-xl shadow-lg p-6 max-w-md w-full mx-4">
+        <div class="text-center" id="rescrapeContent">
+            <div class="animate-spin text-orange-500 text-3xl mb-3"><i class="fas fa-sync-alt"></i></div>
+            <p class="text-gray-700 font-medium" id="rescrapeMsg">กำลังลบผลเก่าและดึงใหม่...</p>
+            <p class="text-xs text-gray-400 mt-1">อาจใช้เวลา 30-60 วินาที</p>
+        </div>
+    </div>
+</div>
+
+<script>
+function rescrapeResult(id, name) {
+    if (!confirm('ลบผลรางวัล "' + name + '" แล้วดึงใหม่จากระบบ?\n\n⚠️ โพยที่คำนวณผลไปแล้วจะถูกรีเซ็ตเป็น "รอผล"')) return;
+    
+    const modal = document.getElementById('rescrapeModal');
+    const msg = document.getElementById('rescrapeMsg');
+    modal.style.display = 'flex';
+    msg.textContent = 'กำลังลบ "' + name + '" แล้วดึงผลใหม่...';
+    
+    fetch('rescrape.php', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: 'result_id=' + id,
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            let result = '✅ ลบสำเร็จ: ' + data.deleted;
+            if (data.bets_reset > 0) result += '\n🔄 รีเซ็ตโพย ' + data.bets_reset + ' รายการ';
+            if (data.refetched && data.new_result) {
+                result += '\n🎯 ดึงผลใหม่ได้: ' + data.new_result.three_top + ' / ' + data.new_result.two_bot;
+            } else {
+                result += '\n⚠️ ยังดึงผลใหม่ไม่ได้ (อาจยังไม่ถึงเวลาออกผล)';
+            }
+            alert(result);
+            location.reload();
+        } else {
+            alert('❌ ' + (data.error || 'เกิดข้อผิดพลาด'));
+            modal.style.display = 'none';
+        }
+    })
+    .catch(err => {
+        alert('❌ เกิดข้อผิดพลาด: ' + err.message);
+        modal.style.display = 'none';
+    });
+}
+</script>
 
 <?php require_once 'includes/footer.php'; ?>
