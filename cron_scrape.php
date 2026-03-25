@@ -470,40 +470,21 @@ function processResults($pdo, $results, $source) {
         $existing = $stmt->fetch();
 
         if ($existing) {
-            // Update if result changed (safety net)
-            $needsUpdate = false;
-            $updates = [];
-
-            if ($threeTop && $existing['three_top'] !== $threeTop) {
-                $updates['three_top'] = $threeTop;
-                $updates['two_top'] = $twoTop;
-                $updates['run_top'] = $runTop;
-                $needsUpdate = true;
-            }
-            if ($twoBot && $existing['two_bot'] !== $twoBot) {
-                $updates['two_bot'] = $twoBot;
-                $updates['run_bot'] = $runBot;
-                $needsUpdate = true;
-            }
-
-            if ($needsUpdate) {
-                $setParts = [];
-                $params = [];
-                foreach ($updates as $col => $val) {
-                    $setParts[] = "{$col} = ?";
-                    $params[] = $val;
-                }
-                $setParts[] = "updated_at = NOW()";
-                $params[] = $existing['id'];
-
-                $pdo->prepare("UPDATE results SET " . implode(', ', $setParts) . " WHERE id = ?")->execute($params);
-                echo "🔄 {$keyLotteryName}: อัพเดตผล → {$threeTop}/{$twoTop}/{$twoBot}\n";
-                logScrape($pdo, $keyLotteryName, $source, 'success', "Updated: {$threeTop}/{$twoBot}", $drawDate);
-                // Auto-calculate payouts
-                $payoutCount = processBetPayouts($pdo, $lotteryTypeId, $drawDate);
-                if ($payoutCount > 0) echo "💰 {$keyLotteryName}: คำนวณผล {$payoutCount} โพย\n";
+            // ถ้ามีอยู่แล้ว เช็คว่าตรงกันไหม
+            $existingThree = $existing['three_top'] ?? '';
+            $existingBot = $existing['two_bot'] ?? '';
+            
+            $isMatch = true;
+            if ($threeTop && $existingThree && $existingThree !== $threeTop) $isMatch = false;
+            if ($twoBot && $existingBot && $existingBot !== $twoBot) $isMatch = false;
+            
+            if ($isMatch) {
+                echo "⏭️  {$keyLotteryName}: มีผลอยู่แล้ว ({$existingThree}/{$existingBot})\n";
             } else {
-                echo "⏭️  {$keyLotteryName}: มีผลอยู่แล้ว ({$existing['three_top']}/{$existing['two_bot']})\n";
+                // ⚠️ CONFLICT: ผลไม่ตรงกัน → log แจ้งเตือน ไม่ overwrite อัตโนมัติ
+                echo "⚠️  CONFLICT {$keyLotteryName}: DB=[{$existingThree}/{$existingBot}] vs {$source}=[{$threeTop}/{$twoBot}] — ไม่ overwrite\n";
+                logScrape($pdo, $keyLotteryName, $source, 'conflict', 
+                    "DB: {$existingThree}/{$existingBot} vs {$source}: {$threeTop}/{$twoBot}", $drawDate);
             }
             $skippedCount++;
             continue;
@@ -867,6 +848,119 @@ function scrapeExphuay($pdo) {
 }
 
 // =============================================
+// Smart Scraper: สลับ raakaadee ↔ exphuay ทุก 1 นาที
+// =============================================
+function scrapeSmart($pdo) {
+    global $SCRIPT_DIR, $PYTHON_PATH;
+
+    $minute = (int)date('i');
+    $sourceFirst = ($minute % 2 === 1) ? 'raakaadee' : 'exphuay';
+    $sourceSecond = ($sourceFirst === 'raakaadee') ? 'exphuay' : 'raakaadee';
+
+    echo "🔄 Smart Scraper — นาทีที่ {$minute} → ลำดับ: {$sourceFirst} → {$sourceSecond}\n\n";
+
+    // ดึงหวยที่ยังไม่มีผลวันนี้
+    $today = date('Y-m-d', time() - 4 * 3600);
+    $todayReal = date('Y-m-d');
+    
+    $missingStmt = $pdo->prepare("
+        SELECT lt.id, lt.name, lt.close_time, lt.open_time
+        FROM lottery_types lt
+        WHERE lt.is_active = 1
+        AND NOT EXISTS (
+            SELECT 1 FROM results r 
+            WHERE r.lottery_type_id = lt.id 
+            AND (r.draw_date = ? OR r.draw_date = ?)
+        )
+    ");
+    $missingStmt->execute([$today, $todayReal]);
+    $missingLotteries = $missingStmt->fetchAll(PDO::FETCH_ASSOC);
+
+    $missingCount = count($missingLotteries);
+    if ($missingCount === 0) {
+        echo "✅ ผลวันนี้ครบแล้ว → ไม่ต้องดึงเพิ่ม\n";
+        return;
+    }
+
+    echo "📋 ยังขาดผล {$missingCount} หวย\n";
+
+    // ดึงจากแหล่งแรก
+    echo "\n─── แหล่งที่ 1: {$sourceFirst} ───\n";
+    $stats1 = runSmartSource($pdo, $sourceFirst);
+    
+    if ($stats1['success'] > 0) {
+        echo "✅ {$sourceFirst}: ได้ผลใหม่ {$stats1['success']} รายการ\n";
+    }
+
+    // เช็คว่ายังขาดอยู่ไหม
+    $missingStmt->execute([$today, $todayReal]);
+    $stillMissing = count($missingStmt->fetchAll(PDO::FETCH_ASSOC));
+
+    if ($stillMissing === 0) {
+        echo "\n✅ ผลครบแล้วหลังดึงจาก {$sourceFirst}\n";
+        return;
+    }
+
+    // ดึงจากแหล่งที่ 2
+    echo "\n─── แหล่งที่ 2: {$sourceSecond} (ยังขาด {$stillMissing}) ───\n";
+    $stats2 = runSmartSource($pdo, $sourceSecond);
+    
+    if ($stats2['success'] > 0) {
+        echo "✅ {$sourceSecond}: ได้ผลใหม่ {$stats2['success']} รายการ\n";
+    }
+
+    $totalNew = $stats1['success'] + $stats2['success'];
+    $totalConflict = $stats1['conflict'] + $stats2['conflict'];
+    echo "\n═══════════════════════════════════════\n";
+    echo "📊 Smart Summary: ✅ {$totalNew} ใหม่";
+    if ($totalConflict > 0) echo ", ⚠️ {$totalConflict} conflict";
+    echo "\n";
+}
+
+function runSmartSource($pdo, $source) {
+    global $SCRIPT_DIR, $PYTHON_PATH;
+    
+    $today = date('Y-m-d', time() - 4 * 3600);
+    $stderrFile = tempnam(sys_get_temp_dir(), "smart_{$source}_");
+    $output = [];
+    $exitCode = 0;
+
+    if ($source === 'raakaadee') {
+        exec("{$PYTHON_PATH} \"{$SCRIPT_DIR}/scrape_raakaadee.py\" 2>{$stderrFile}", $output, $exitCode);
+    } else {
+        exec("{$PYTHON_PATH} \"{$SCRIPT_DIR}/scrape_exphuay.py\" --date={$today} 2>{$stderrFile}", $output, $exitCode);
+    }
+    @unlink($stderrFile);
+
+    $jsonOutput = implode("\n", $output);
+    $data = json_decode($jsonOutput, true);
+
+    if (!$data || empty($data['success'])) {
+        echo "❌ {$source}: " . ($data['error'] ?? 'No data / parse error') . "\n";
+        return ['success' => 0, 'conflict' => 0];
+    }
+
+    $results = $data['results'] ?? [];
+    echo "📊 {$source}: " . count($results) . " results found\n";
+
+    $stats = processResults($pdo, $results, $source);
+    
+    // นับ conflict จาก log
+    $conflictCount = 0;
+    $cStmt = $pdo->prepare("
+        SELECT COUNT(*) FROM scrape_logs 
+        WHERE status = 'conflict' AND draw_date = ? AND created_at >= NOW() - INTERVAL 2 MINUTE
+    ");
+    $cStmt->execute([$today]);
+    $conflictCount = (int)$cStmt->fetchColumn();
+
+    return [
+        'success' => $stats['success'],
+        'conflict' => $conflictCount,
+    ];
+}
+
+// =============================================
 // Main (only runs when called directly, not via require)
 // =============================================
 if (basename(__FILE__) === basename($_SERVER['SCRIPT_FILENAME'] ?? $_SERVER['argv'][0] ?? '')) {
@@ -878,6 +972,9 @@ echo "🎰 Lottery Scraper — " . date('Y-m-d H:i:s') . "\n";
 echo "═══════════════════════════════════════\n\n";
 
 switch ($scraper) {
+    case 'smart':
+        scrapeSmart($pdo);
+        break;
     case 'raakaadee':
         scrapeRaakaadee($pdo);
         break;
@@ -927,7 +1024,7 @@ switch ($scraper) {
         break;
     default:
         echo "❌ Unknown scraper: {$scraper}\n";
-        echo "Usage: php cron_scrape.php [raakaadee|ponhuay24|exphuay|rayriffy|gsb|all]\n";
+        echo "Usage: php cron_scrape.php [smart|raakaadee|ponhuay24|exphuay|all]\n";
         exit(1);
 }
 
