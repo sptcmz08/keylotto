@@ -461,8 +461,43 @@ $blocked2d = array_values($blocked2dMap);
 $blockedRun = array_values($blockedRunMap);
 
 $flagUrl = getFlagForCountry($lottery['flag_emoji'], $lottery['name']);
-$drawDate = $lottery['draw_date'] ? formatDateDisplay($lottery['draw_date']) : date('d-m-Y');
-$closeDateTime = $lottery['draw_date'] . ' ' . $lottery['close_time'];
+
+// คำนวณ drawDate + closeDateTime จาก open_time/close_time (เหมือน card listing)
+$today = date('Y-m-d');
+$tomorrow = date('Y-m-d', strtotime('+1 day'));
+$now = new DateTime();
+$openTime = $lottery['open_time'] ?? null;
+$closeTime = $lottery['close_time'] ?? null;
+
+if ($openTime && $closeTime) {
+    $openDT = new DateTime($today . ' ' . $openTime);
+    $closeDT = new DateTime($today . ' ' . $closeTime);
+    
+    if ($closeDT <= $openDT) {
+        // ข้ามวัน (เช่น เปิด 17:00 ปิด 00:05)
+        if ($now < $closeDT) {
+            $calcDrawDate = $today;
+            $openDT->modify('-1 day');
+        } else {
+            $calcDrawDate = $tomorrow;
+            $closeDT->modify('+1 day');
+        }
+    } else {
+        if ($now > $closeDT) {
+            $calcDrawDate = $tomorrow;
+            $openDT->modify('+1 day');
+            $closeDT->modify('+1 day');
+        } else {
+            $calcDrawDate = $today;
+        }
+    }
+    $closeDateTime = $closeDT->format('Y-m-d H:i:s');
+} else {
+    $calcDrawDate = $today;
+    $closeDateTime = $today . ' 23:59:59';
+}
+
+$drawDate = date('d-m-Y', strtotime($calcDrawDate));
 
 // Fetch recent 15 bills
 $stmtBills = $pdo->query("
