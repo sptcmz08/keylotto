@@ -96,7 +96,35 @@ try {
 
             $netAmount = $totalAmount;
             $betNumber = date('YmdHis') . rand(10, 99);
-            $drawDate = $lottery['draw_date'] ?? date('Y-m-d');
+            
+            // คำนวณ drawDate จาก open_time/close_time (ไม่ใช้ lottery_types.draw_date ที่อาจ stale)
+            $today = date('Y-m-d');
+            $tomorrow = date('Y-m-d', strtotime('+1 day'));
+            $now = new DateTime();
+            $openTime = $lottery['open_time'] ?? null;
+            $closeTime = $lottery['close_time'] ?? null;
+            
+            if ($openTime && $closeTime) {
+                $openDT = new DateTime($today . ' ' . $openTime);
+                $closeDT = new DateTime($today . ' ' . $closeTime);
+                
+                if ($closeDT <= $openDT) {
+                    // ข้ามวัน (เช่น เปิด 17:00 ปิด 00:05)
+                    if ($now < $closeDT) {
+                        $drawDate = $today;
+                    } else {
+                        $drawDate = $tomorrow;
+                    }
+                } else {
+                    if ($now > $closeDT) {
+                        $drawDate = $tomorrow;
+                    } else {
+                        $drawDate = $today;
+                    }
+                }
+            } else {
+                $drawDate = $today;
+            }
 
             // =============================================
             // ตรวจสอบยอดรับสูงสุดต่อเลข (max_per_number)
