@@ -479,12 +479,12 @@ require_once 'includes/header.php';
                     </td>
                     <td class="text-center text-gray-600 text-[12px]"><?= $displayDate ?></td>
                     <td class="text-center">
-                        <?php if ($hasAnyResult): ?>
+                        <?php if ($hasResultForRound): ?>
                             <span class="num-box"><?= htmlspecialchars($lt['three_top']) ?></span>
                         <?php endif; ?>
                     </td>
                     <td class="text-center">
-                        <?php if ($hasAnyResult && !empty($lt['two_bot'])): ?>
+                        <?php if ($hasResultForRound && !empty($lt['two_bot'])): ?>
                             <span class="num-box"><?= htmlspecialchars($lt['two_bot']) ?></span>
                         <?php endif; ?>
                     </td>
