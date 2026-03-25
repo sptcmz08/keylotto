@@ -641,11 +641,11 @@ require_once 'includes/header.php';
                         </div>
                         <div class="col-span-6 sm:col-span-3">
                             <label class="text-[11px] text-gray-500 block mb-0.5 text-center" id="topLabel">บน</label>
-                            <input type="number" id="topAmount" class="w-full border border-gray-300 rounded px-3 py-2 text-sm text-center focus:border-blue-500 outline-none h-[40px]">
+                            <input type="number" id="topAmount" min="0" class="w-full border border-gray-300 rounded px-3 py-2 text-sm text-center focus:border-blue-500 outline-none h-[40px]">
                         </div>
                         <div class="col-span-6 sm:col-span-3" id="botAmountWrap">
                             <label class="text-[11px] text-gray-500 block mb-0.5 text-center" id="botLabel">ล่าง</label>
-                            <input type="number" id="botAmount" class="w-full border border-gray-300 rounded px-3 py-2 text-sm text-center focus:border-blue-500 outline-none h-[40px]">
+                            <input type="number" id="botAmount" min="0" class="w-full border border-gray-300 rounded px-3 py-2 text-sm text-center focus:border-blue-500 outline-none h-[40px]">
                         </div>
                         <div class="col-span-12 sm:col-span-2">
                             <button onclick="addBetItem()" class="w-full bg-[#26a69a] text-white py-2 rounded text-[13px] hover:bg-teal-600 transition h-[40px] flex items-center justify-center font-medium">
@@ -1260,6 +1260,9 @@ function addBetItem() {
     const top = parseFloat(document.getElementById('topAmount').value) || 0;
     const bot = parseFloat(document.getElementById('botAmount').value) || 0;
     
+    // ❌ Block negative amounts
+    if (top < 0 || bot < 0) { Swal.fire({ icon: 'error', title: 'จำนวนเงินไม่ถูกต้อง', text: 'ไม่สามารถใส่จำนวนเงินติดลบได้', confirmButtonColor: '#e53935' }); return; }
+    
     // Use selectedNums if any, fallback to input field
     let numbers = [];
     if (selectedNums.length > 0) {
@@ -1272,6 +1275,23 @@ function addBetItem() {
     
     if (numbers.length === 0) { Swal.fire({ icon: 'warning', title: 'กรุณาใส่เลข', confirmButtonColor: '#f59e0b' }); return; }
     if (top === 0 && bot === 0) { Swal.fire({ icon: 'warning', title: 'กรุณาใส่จำนวนเงิน', confirmButtonColor: '#f59e0b' }); return; }
+    
+    // ✅ Validate digit count per bet type
+    let requiredLen = 2;
+    if (currentBetType === '3' || currentBetType === '6') requiredLen = 3;
+    else if (currentBetType === 'run' || currentBetType === 'win') requiredLen = 1;
+    else if (currentBetType === '19') requiredLen = 2; // 19ประตู generates 2-digit numbers
+    
+    const invalidNums = numbers.filter(n => !/^\d+$/.test(n) || n.length !== requiredLen);
+    if (invalidNums.length > 0) {
+        Swal.fire({
+            icon: 'error',
+            title: 'เลขไม่ถูกต้อง',
+            html: `<p>โหมด <b>${currentBetType === 'run' || currentBetType === 'win' ? 'วิ่ง' : currentBetType + ' ตัว'}</b> ต้องใส่เลข <b>${requiredLen} หลัก</b> เท่านั้น</p><p class="text-red-500 mt-2">เลขที่ผิด: ${invalidNums.join(', ')}</p>`,
+            confirmButtonColor: '#e53935'
+        });
+        return;
+    }
 
     // =============================================
     // ตรวจสอบเลขอั้น / ปิดรับ + แจ้งเตือนละเอียด
@@ -1808,10 +1828,10 @@ function addClassicRow() {
     const tbody = document.getElementById('classicBody');
     const tr = document.createElement('tr');
     tr.innerHTML = `
-        <td class="border px-1 py-1"><input type="text" class="classic-num w-full border rounded px-2 py-1.5 text-sm text-center outline-none" maxlength="3" placeholder="000"></td>
-        <td class="border px-1 py-1"><input type="number" class="classic-top w-full border rounded px-2 py-1.5 text-sm text-center outline-none" placeholder="0"></td>
-        <td class="border px-1 py-1"><input type="number" class="classic-bot w-full border rounded px-2 py-1.5 text-sm text-center outline-none" placeholder="0"></td>
-        <td class="border px-1 py-1"><input type="number" class="classic-tod w-full border rounded px-2 py-1.5 text-sm text-center outline-none" placeholder="0"></td>
+        <td class="border px-1 py-1"><input type="text" class="classic-num w-full border rounded px-2 py-1.5 text-sm text-center outline-none" maxlength="3" placeholder="000" pattern="[0-9]*" inputmode="numeric"></td>
+        <td class="border px-1 py-1"><input type="number" class="classic-top w-full border rounded px-2 py-1.5 text-sm text-center outline-none" placeholder="0" min="0"></td>
+        <td class="border px-1 py-1"><input type="number" class="classic-bot w-full border rounded px-2 py-1.5 text-sm text-center outline-none" placeholder="0" min="0"></td>
+        <td class="border px-1 py-1"><input type="number" class="classic-tod w-full border rounded px-2 py-1.5 text-sm text-center outline-none" placeholder="0" min="0"></td>
         <td class="border px-1 py-1 text-center"><button onclick="removeClassicRow(this)" class="text-red-400 hover:text-red-600"><i class="fas fa-times"></i></button></td>`;
     tbody.appendChild(tr);
     tr.querySelector('.classic-num').focus();
@@ -1825,12 +1845,19 @@ function removeClassicRow(btn) {
 function addClassicToBill() {
     const rows = document.querySelectorAll('#classicBody tr');
     let items = [];
-    rows.forEach(row => {
+    let errors = [];
+    rows.forEach((row, idx) => {
         const num = row.querySelector('.classic-num')?.value.trim();
         const top = parseFloat(row.querySelector('.classic-top')?.value) || 0;
         const bot = parseFloat(row.querySelector('.classic-bot')?.value) || 0;
         const tod = parseFloat(row.querySelector('.classic-tod')?.value) || 0;
         if (!num) return;
+        // Validate: digits only
+        if (!/^\d+$/.test(num)) { errors.push(`แถว ${idx+1}: "${num}" ต้องเป็นตัวเลขเท่านั้น`); return; }
+        // Validate: correct length (1, 2, or 3 digits)
+        if (num.length < 1 || num.length > 3) { errors.push(`แถว ${idx+1}: "${num}" ต้องเป็น 1-3 หลัก`); return; }
+        // Validate: no negative amounts
+        if (top < 0 || bot < 0 || tod < 0) { errors.push(`แถว ${idx+1}: จำนวนเงินติดลบไม่ได้`); return; }
         if (num.length === 2) {
             if (top > 0) items.push({ number: num, type: '2top', amount: top });
             if (bot > 0) items.push({ number: num, type: '2bot', amount: bot });
@@ -1844,6 +1871,7 @@ function addClassicToBill() {
         }
     });
     
+    if (errors.length > 0) { Swal.fire({ icon: 'error', title: 'ข้อมูลไม่ถูกต้อง', html: errors.join('<br>'), confirmButtonColor: '#e53935' }); return; }
     if (items.length === 0) { Swal.fire({ icon: 'warning', title: 'กรุณาใส่ข้อมูล', confirmButtonColor: '#f59e0b' }); return; }
     
     classicBetGroups.push({ id: Date.now(), items: items });

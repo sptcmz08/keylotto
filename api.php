@@ -54,6 +54,39 @@ try {
                 exit;
             }
 
+            // Server-side validation: digit count + negative amounts
+            $validLengths = [
+                '3top' => 3, '3tod' => 3,
+                '2top' => 2, '2bot' => 2,
+                'run_top' => 1, 'run_bot' => 1,
+            ];
+            $errors = [];
+            foreach ($items as $idx => $item) {
+                $num = $item['number'] ?? '';
+                $type = $item['type'] ?? '';
+                $amt = floatval($item['amount'] ?? 0);
+                
+                // Block non-digit characters
+                if (!preg_match('/^\d+$/', $num)) {
+                    $errors[] = "เลข \"{$num}\" ต้องเป็นตัวเลขเท่านั้น";
+                }
+                // Block wrong digit count
+                if (isset($validLengths[$type]) && strlen($num) !== $validLengths[$type]) {
+                    $errors[] = "เลข \"{$num}\" ({$type}) ต้องมี {$validLengths[$type]} หลัก";
+                }
+                // Block negative amounts
+                if ($amt < 0) {
+                    $errors[] = "เลข \"{$num}\" จำนวนเงินติดลบไม่ได้";
+                }
+                if ($amt <= 0) {
+                    $errors[] = "เลข \"{$num}\" จำนวนเงินต้องมากกว่า 0";
+                }
+            }
+            if (!empty($errors)) {
+                echo json_encode(['error' => implode("\n", $errors)]);
+                exit;
+            }
+
             // Calculate totals
             $totalAmount = 0;
             $totalItems = count($items);
