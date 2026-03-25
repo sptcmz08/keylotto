@@ -948,7 +948,7 @@ function runSmartSource($pdo, $source) {
     // นับ conflict จาก log
     $conflictCount = 0;
     $cStmt = $pdo->prepare("
-        SELECT COUNT(*) FROM scrape_logs 
+        SELECT COUNT(*) FROM scraper_logs 
         WHERE status = 'conflict' AND draw_date = ? AND created_at >= NOW() - INTERVAL 2 MINUTE
     ");
     $cStmt->execute([$today]);
