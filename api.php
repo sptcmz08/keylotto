@@ -109,9 +109,9 @@ try {
                 $closeHour = intval(substr($closeTime, 0, 2));
                 $nowHour = intval(date('H'));
                 
-                // กรณีหวยข้ามเที่ยงคืน: close_time < 06:00
+                // กรณีหวยข้ามเที่ยงคืน: close_time < 03:00
                 // เช่น ดาวโจนส์ VIP close=00:10
-                if ($closeHour < 6) {
+                if ($closeHour < 3) {
                     // หวยข้ามเที่ยงคืน → draw_date เป็นของเมื่อวานเสมอ
                     // (เปิดรับก่อนเที่ยงคืน ปิดหลังเที่ยงคืน → งวดเดียวกัน = วันเมื่อวาน)
                     if ($nowHour < 6) {

@@ -88,13 +88,14 @@ foreach ($allLotteries as &$l) {
     $drawSchedule = $l['draw_schedule'] ?? 'daily';
     $currentRoundDate = getCurrentDrawDate($drawSchedule);
     
-    // หวยข้ามเที่ยงคืน = close_time อยู่ช่วง 00:00-05:59
+    // หวยข้ามเที่ยงคืน = close_time อยู่ช่วง 00:00-02:59
     // เช่น ดาวโจนส์ VIP close=00:10, STAR close=01:05
-    // ถ้าตอนนี้ 00:00-05:59 → งวดปัจจุบันเป็นของเมื่อวาน
+    // ไม่รวมลาวประตูชัย (close=05:25) ซึ่งเป็นหวยเช้า ไม่ใช่ข้ามเที่ยงคืน
+    // ถ้าตอนนี้ 00:00-02:59 → งวดปัจจุบันเป็นของเมื่อวาน
     $lCloseTime = $l['close_time'] ?? '';
     $lCloseHour = intval(substr($lCloseTime, 0, 2));
     $nowHour = intval(date('H'));
-    $isCrossMidnightLottery = ($lCloseHour < 6 && !empty($lCloseTime));
+    $isCrossMidnightLottery = ($lCloseHour < 3 && !empty($lCloseTime));
     
     if ($isCrossMidnightLottery && $nowHour < 6) {
         $currentRoundDate = $yesterday;
@@ -388,7 +389,7 @@ require_once 'includes/header.php';
                     if (!empty($lt['close_time'])) {
                         $lCloseH = intval(substr($lt['close_time'], 0, 2));
                         
-                        if ($lCloseH < 6) {
+                        if ($lCloseH < 3) {
                             // หวยข้ามเที่ยงคืน: close_time อยู่วันถัดจาก roundDate
                             $nextDay = date('Y-m-d', strtotime($roundDate . ' +1 day'));
                             $closeTime = strtotime($nextDay . ' ' . $lt['close_time']);
@@ -412,7 +413,7 @@ require_once 'includes/header.php';
                     if (!empty($lt['result_time'])) {
                         $rtH = intval(substr($lt['result_time'], 0, 2));
                         $lCloseH2 = intval(substr($lt['close_time'] ?? '00', 0, 2));
-                        if ($lCloseH2 < 6) {
+                        if ($lCloseH2 < 3) {
                             $nextDay2 = date('Y-m-d', strtotime($roundDate . ' +1 day'));
                             $resultTime = strtotime($nextDay2 . ' ' . $lt['result_time']);
                         } else {
