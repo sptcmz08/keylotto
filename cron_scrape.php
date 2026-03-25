@@ -316,8 +316,14 @@ function processBetPayouts($pdo, $lotteryTypeId, $drawDate) {
 
             if ($isWinner) {
                 $hasWin = true;
-                // Use adjusted_pay_rate if set, otherwise normal rate
-                $payRate = !empty($item['adjusted_pay_rate']) ? floatval($item['adjusted_pay_rate']) : ($rateMap[$type] ?? 0);
+                // ใช้ pay_rate ที่บันทึกตอนแทงก่อน (รวม over-rate + จ่ายครึ่ง)
+                if (!empty($item['pay_rate']) && floatval($item['pay_rate']) > 0) {
+                    $payRate = floatval($item['pay_rate']);
+                } elseif (!empty($item['adjusted_pay_rate'])) {
+                    $payRate = floatval($item['adjusted_pay_rate']);
+                } else {
+                    $payRate = $rateMap[$type] ?? 0;
+                }
                 $winAmount = $amount * $payRate;
                 $totalWin += $winAmount;
             }

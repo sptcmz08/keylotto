@@ -29,11 +29,35 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'detail' && isset($_GET['bet_id'])
     $stmt->execute([$bet['lottery_type_id']]);
     $ratesRaw = $stmt->fetchAll(PDO::FETCH_ASSOC);
     $rateMap = [];
-    foreach ($ratesRaw as $r) $rateMap[$r['bet_type']] = $r;
+    $overRateMap = [];
+    foreach ($ratesRaw as $r) {
+        $rateMap[$r['bet_type']] = $r;
+        if (intval($r['over_threshold'] ?? 0) > 0 && floatval($r['over_pay_rate'] ?? 0) > 0) {
+            $overRateMap[$r['bet_type']] = [
+                'threshold' => intval($r['over_threshold']),
+                'rate' => floatval($r['over_pay_rate'])
+            ];
+        }
+    }
+    
+    // นับจำนวน items แต่ละ bet_type เพื่อเช็คเกิน threshold
+    $typeCounts = [];
+    foreach ($items as $it) {
+        $typeCounts[$it['bet_type']] = ($typeCounts[$it['bet_type']] ?? 0) + 1;
+    }
     
     foreach ($items as &$item) {
         $item['is_winner'] = false;
-        $item['pay_multiplier'] = $rateMap[$item['bet_type']]['pay_rate'] ?? 0;
+        $bt = $item['bet_type'];
+        // เช็คว่า bet_type นี้เกิน threshold หรือไม่ → ใช้ over_pay_rate
+        if (isset($overRateMap[$bt]) && ($typeCounts[$bt] ?? 0) >= $overRateMap[$bt]['threshold']) {
+            $item['pay_multiplier'] = $overRateMap[$bt]['rate'];
+        } elseif (!empty($item['pay_rate']) && floatval($item['pay_rate']) > 0) {
+            // ใช้ pay_rate ที่บันทึกไว้ตอนแทง (เลขอั้นจ่ายครึ่ง)
+            $item['pay_multiplier'] = floatval($item['pay_rate']);
+        } else {
+            $item['pay_multiplier'] = floatval($rateMap[$bt]['pay_rate'] ?? 0);
+        }
         $item['net_amount'] = floatval($item['amount']);
         $item['win_amount'] = 0;
         
