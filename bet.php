@@ -869,12 +869,13 @@ require_once 'includes/header.php';
                     <th class="px-2 py-2 text-center">รายการ</th>
                     <th class="px-2 py-2 text-center">บาท</th>
                     <th class="px-2 py-2 text-center">หมายเหตุ</th>
+                    <th class="px-2 py-2 text-center">สถานะ</th>
                     <th class="px-2 py-2 text-center">ลบโพย</th>
                 </tr>
             </thead>
             <tbody>
                 <?php if (empty($recentBills)): ?>
-                <tr><td colspan="8" class="text-center text-gray-400 py-6">ยังไม่มีรายการ</td></tr>
+                <tr><td colspan="9" class="text-center text-gray-400 py-6">ยังไม่มีรายการ</td></tr>
                 <?php else: ?>
                 <?php foreach ($recentBills as $i => $bill):
                     $statusMap = ['pending'=>'รอผล','won'=>'ถูกรางวัล','lost'=>'ไม่ถูก','cancelled'=>'ยกเลิก'];
@@ -889,6 +890,19 @@ require_once 'includes/header.php';
                     <td class="px-2 py-2 text-center"><?= number_format($bill['net_amount'], 2) ?></td>
                     <td class="px-2 py-2 text-center"><?= htmlspecialchars($bill['note'] ?? '') ?></td>
                     <td class="px-2 py-2 text-center">
+                        <?php 
+                        switch ($bill['status']) {
+                            case 'won': echo '<span class="text-green-600 font-bold">ถูกรางวัล</span>'; break;
+                            case 'lost': echo '<span class="text-red-400">ไม่ถูก</span>'; break;
+                            case 'cancelled': echo '<span class="text-red-500">ยกเลิก</span>'; break;
+                            default: echo '<span class="text-blue-500">รอผล</span>'; break;
+                        }
+                        ?>
+                    </td>
+                    <td class="px-2 py-2 text-center">
+                        <button onclick="viewRecentBetDetail(<?= $bill['id'] ?>)" class="text-blue-500 hover:text-blue-700 mr-1" title="ดูรายละเอียด">
+                            <i class="fas fa-eye"></i>
+                        </button>
                         <?php if (!$isCancelled): ?>
                         <button onclick="deleteBill(<?= $bill['id'] ?>)" class="text-red-500 hover:text-red-700" title="ลบโพย">
                             <i class="fas fa-trash"></i>
@@ -900,6 +914,19 @@ require_once 'includes/header.php';
                 <?php endif; ?>
             </tbody>
         </table>
+    </div>
+</div>
+
+<!-- Bet Detail Modal -->
+<div id="recentBetDetailModal" class="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center hidden" onclick="if(event.target===this)this.classList.add('hidden')">
+    <div class="bg-white rounded-xl shadow-2xl w-full max-w-xl mx-4 max-h-[85vh] overflow-y-auto">
+        <div class="p-3 border-b flex items-center justify-between bg-[#2e7d32] text-white rounded-t-xl">
+            <span class="font-bold text-sm" id="recentBetDetailTitle"><i class="fas fa-receipt mr-1"></i>รายละเอียดโพย</span>
+            <button onclick="document.getElementById('recentBetDetailModal').classList.add('hidden')" class="text-white/80 hover:text-white text-lg">&times;</button>
+        </div>
+        <div id="recentBetDetailContent" class="p-4">
+            <div class="text-center py-8 text-gray-400"><i class="fas fa-spinner fa-spin"></i> กำลังโหลด...</div>
+        </div>
     </div>
 </div>
 
@@ -2059,6 +2086,78 @@ if (selectedNums.length > 0 || betGroups.length > 0) {
     document.querySelectorAll('.bet-type-btn').forEach(b => { b.className = 'bet-type-btn px-4 py-1.5 rounded text-sm font-medium bg-[#fff8e1] text-[#f57f17] border border-[#ffca28] hover:bg-[#ffca28] hover:text-yellow-900'; });
     const btn = document.getElementById('btn-type-' + currentBetType);
     if (btn) btn.className = 'bet-type-btn px-4 py-1.5 rounded text-sm font-bold bg-[#ffca28] text-yellow-900 border border-[#ffca28]';
+}
+
+async function viewRecentBetDetail(betId) {
+    const modal = document.getElementById('recentBetDetailModal');
+    const content = document.getElementById('recentBetDetailContent');
+    const title = document.getElementById('recentBetDetailTitle');
+    
+    modal.classList.remove('hidden');
+    content.innerHTML = '<div class="text-center py-8 text-gray-400"><i class="fas fa-spinner fa-spin"></i> กำลังโหลด...</div>';
+    
+    try {
+        const res = await fetch('api.php?action=get_bet_detail&id=' + betId);
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+        
+        const items = data.items || [];
+        const typeLabels = { '3top': '3 ตัวบน', '3tod': '3 ตัวโต๊ด', '2top': '2 ตัวบน', '2bot': '2 ตัวล่าง', 'run_top': 'วิ่งบน', 'run_bot': 'วิ่งล่าง' };
+        const statusLabels = { 'pending': '<span class="text-blue-500">รอแทง</span>', 'won': '<span class="text-green-600 font-bold">ถูกรางวัล</span>', 'lost': '<span class="text-red-400">ไม่ถูก</span>', 'cancelled': '<span class="text-red-500">ยกเลิก</span>' };
+        
+        let totalAmount = 0;
+        let totalItems = items.length;
+        items.forEach(i => totalAmount += parseFloat(i.amount || 0));
+        
+        title.innerHTML = `<i class="fas fa-receipt mr-1"></i> #${data.bet_number} <span class="ml-2 text-xs bg-white/20 px-2 py-0.5 rounded">${statusLabels[data.status] || 'รอผล'}</span>`;
+        
+        let html = `
+            <div class="overflow-x-auto">
+                <table class="w-full text-[12px] border">
+                    <thead>
+                        <tr class="bg-[#2e7d32] text-white">
+                            <th class="px-2 py-2 text-center border">#</th>
+                            <th class="px-2 py-2 text-center border">ประเภท</th>
+                            <th class="px-2 py-2 text-center border">หมายเลข</th>
+                            <th class="px-2 py-2 text-right border">ยอดเดิมพัน</th>
+                            <th class="px-2 py-2 text-right border">รวม</th>
+                            <th class="px-2 py-2 text-right border">จ่าย</th>
+                            <th class="px-2 py-2 text-center border">สถานะ</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${items.map((item, i) => {
+                            const label = typeLabels[item.bet_type] || item.bet_type;
+                            const amt = parseFloat(item.amount || 0);
+                            const payRate = parseFloat(item.pay_rate || 0);
+                            return `
+                            <tr class="border-b hover:bg-gray-50 ${i % 2 === 1 ? 'bg-gray-50' : ''}">
+                                <td class="px-2 py-1.5 text-center border">${i+1}</td>
+                                <td class="px-2 py-1.5 text-center border">${label}</td>
+                                <td class="px-2 py-1.5 text-center border font-bold text-[#1565c0]">${item.number}</td>
+                                <td class="px-2 py-1.5 text-right border">${amt.toFixed(2)}</td>
+                                <td class="px-2 py-1.5 text-right border">${amt.toFixed(2)}</td>
+                                <td class="px-2 py-1.5 text-right border font-bold">${payRate.toFixed(2)}</td>
+                                <td class="px-2 py-1.5 text-center border">${statusLabels[data.status] || 'รอแทง'}</td>
+                            </tr>`;
+                        }).join('')}
+                    </tbody>
+                    <tfoot>
+                        <tr class="bg-[#e8f5e9] font-bold">
+                            <td colspan="2" class="px-2 py-2 text-center border">รวม</td>
+                            <td class="px-2 py-2 text-center border">${totalItems} รายการ</td>
+                            <td class="px-2 py-2 text-right border">${totalAmount.toFixed(2)}</td>
+                            <td colspan="3" class="px-2 py-2 text-center border text-green-700">${totalAmount.toFixed(2)}</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+            ${data.note ? `<div class="mt-3 text-xs text-gray-500"><b>หมายเหตุ:</b> ${data.note}</div>` : ''}`;
+        
+        content.innerHTML = html;
+    } catch (e) {
+        content.innerHTML = `<div class="text-center py-8 text-red-400"><i class="fas fa-exclamation-circle"></i> ${e.message}</div>`;
+    }
 }
 
 async function deleteBill(billId) {
