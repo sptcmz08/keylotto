@@ -1154,8 +1154,8 @@ function handleNumInput(e) {
 // Paste หลายตัว: "12 21 31 54 87" → เพิ่มทั้งหมด
 // ==========================================
 function handleMultiPaste(text) {
-    // แยกด้วย space, comma, newline, tab, slash, dash
-    const parts = text.split(/[\s,\/\-\n\r\t]+/).filter(n => n.length > 0 && /^\d+$/.test(n));
+    // แยกเฉพาะตัวเลขออกมาทั้งหมด (ทิ้งอักขระพิเศษและตัวหนังสือทุกอย่าง)
+    const parts = text.match(/\d+/g) || [];
     let added = 0;
     parts.forEach(num => {
         if (addSingleNumber(num)) added++;
