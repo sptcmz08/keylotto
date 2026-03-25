@@ -148,19 +148,22 @@ foreach ($numberStmt->fetchAll() as $r) {
 $betTypes = ['3top', '3tod', '2top', '2bot', 'run_top', 'run_bot'];
 $betTypeLabels = ['3top'=>'3 ตัวบน','3tod'=>'3 ตัวโต๊ด','2top'=>'2 ตัวบน','2bot'=>'2 ตัวล่าง','run_top'=>'วิ่งบน','run_bot'=>'วิ่งล่าง'];
 
-// Summary
+// Summary — คำนวณ worst case (เลขที่จ่ายสูงสุดต่อ bet_type)
 $summary = [];
-foreach ($betTypes as $bt) $summary[$bt] = ['buy'=>0,'payout'=>0];
+foreach ($betTypes as $bt) $summary[$bt] = ['buy'=>0,'worst_payout'=>0];
 foreach ($numberMap as $num => $types) {
     foreach ($betTypes as $bt) {
         if (isset($types[$bt])) {
             $summary[$bt]['buy'] += $types[$bt]['amount'];
-            $summary[$bt]['payout'] += $types[$bt]['amount'] * ($rates[$bt] ?? 0);
+            $thisPayout = $types[$bt]['amount'] * ($rates[$bt] ?? 0);
+            if ($thisPayout > $summary[$bt]['worst_payout']) {
+                $summary[$bt]['worst_payout'] = $thisPayout;
+            }
         }
     }
 }
 $grandBuy = array_sum(array_column($summary, 'buy'));
-$grandPayout = array_sum(array_column($summary, 'payout'));
+$grandWorstPayout = array_sum(array_column($summary, 'worst_payout'));
 
 // === Per-bet-type arrays (เลขคู่กับราคา แยกคอลัมน์) ===
 $betTypeRows = [];
@@ -168,11 +171,12 @@ foreach ($betTypes as $bt) {
     $btData = [];
     foreach ($numberMap as $num => $types) {
         if (isset($types[$bt]) && $types[$bt]['amount'] > 0) {
-            $btData[] = ['number' => $num, 'amount' => $types[$bt]['amount'], 'payout' => $types[$bt]['amount'] * ($rates[$bt] ?? 0)];
+            $payout = $types[$bt]['amount'] * ($rates[$bt] ?? 0);
+            $btData[] = ['number' => $num, 'amount' => $types[$bt]['amount'], 'payout' => $payout];
         }
     }
-    // Sort by amount desc (ตัวที่ซื้อเยอะขึ้นก่อน)
-    usort($btData, fn($a, $b) => $b['amount'] <=> $a['amount']);
+    // Sort by payout desc (เลขที่จ่ายสูงสุดขึ้นก่อน — worst case)
+    usort($btData, fn($a, $b) => $b['payout'] <=> $a['payout']);
     $betTypeRows[$bt] = $btData;
 }
 $maxDataRows = !empty($betTypeRows) ? max(array_map('count', $betTypeRows)) : 0;
@@ -369,16 +373,16 @@ require_once 'includes/header.php';
     <div style="overflow-x:auto;">
         <table class="wl-table">
             <thead><tr>
-                <th style="width:30px;">#</th><th>รวม</th>
+                <th style="width:30px;">#</th>
                 <?php foreach ($betTypes as $bt): ?><th colspan="2"><?= $betTypeLabels[$bt] ?></th><?php endforeach; ?>
             </tr></thead>
             <tbody>
-                <?php $colSpan = 2 + count($betTypes) * 2; ?>
-                <tr class="wl-summary"><td class="label-cell">ซื้อ</td><td class="num-cell pos" style="font-size:12px"><?= number_format($grandBuy,2) ?></td><?php foreach ($betTypes as $bt): ?><td class="num-cell" colspan="2"><?= number_format($summary[$bt]['buy'],2) ?></td><?php endforeach; ?></tr>
-                <tr class="wl-summary"><td class="label-cell" style="color:#d32f2f">คอมฯ</td><td class="num-cell neg">0.00</td><?php foreach ($betTypes as $bt): ?><td class="num-cell" colspan="2">0.00</td><?php endforeach; ?></tr>
-                <tr class="wl-summary" style="background:#e8f5e9"><td class="label-cell">กิน</td><td class="num-cell pos" style="font-size:12px"><?= number_format($grandBuy,2) ?></td><?php foreach ($betTypes as $bt): ?><td class="num-cell" colspan="2"><?= number_format($summary[$bt]['buy'],2) ?></td><?php endforeach; ?></tr>
-                <tr class="wl-summary"><td class="label-cell" style="color:#d32f2f">จ่าย</td><td class="num-cell neg" style="font-size:12px"><?= number_format(-$grandPayout,2) ?></td><?php foreach ($betTypes as $bt): ?><td class="num-cell neg" colspan="2"><?= $summary[$bt]['payout']>0 ? number_format(-$summary[$bt]['payout'],2) : '0.00' ?></td><?php endforeach; ?></tr>
-                <tr class="wl-summary" style="background:#e8f5e9"><td class="label-cell">ตั้งสู้</td><td class="num-cell"><button class="btn-save-fight" onclick="saveFightLimits()">บันทึก</button></td><?php foreach ($betTypes as $bt): ?><td style="text-align:center" colspan="2"><input type="text" class="fight-input" id="fight-<?= $bt ?>" value="<?= number_format($fightLimits[$bt],0,'','') ?>"></td><?php endforeach; ?></tr>
+                <?php $colSpan = 1 + count($betTypes) * 2; ?>
+                <tr class="wl-summary"><td class="label-cell">ซื้อ</td><?php foreach ($betTypes as $bt): ?><td class="num-cell" colspan="2"><?= number_format($summary[$bt]['buy'],2) ?></td><?php endforeach; ?></tr>
+                <tr class="wl-summary"><td class="label-cell" style="color:#d32f2f">คอมฯ</td><?php foreach ($betTypes as $bt): ?><td class="num-cell" colspan="2">0.00</td><?php endforeach; ?></tr>
+                <tr class="wl-summary" style="background:#e8f5e9"><td class="label-cell">กิน</td><?php foreach ($betTypes as $bt): ?><td class="num-cell" colspan="2"><?= number_format($summary[$bt]['buy'],2) ?></td><?php endforeach; ?></tr>
+                <tr class="wl-summary"><td class="label-cell" style="color:#d32f2f">จ่าย</td><?php foreach ($betTypes as $bt): ?><td class="num-cell neg" colspan="2"><?= $summary[$bt]['worst_payout']>0 ? number_format(-$summary[$bt]['worst_payout'],2) : '0.00' ?></td><?php endforeach; ?></tr>
+                <tr class="wl-summary" style="background:#e8f5e9"><td class="label-cell">ตั้งสู้ <button class="btn-save-fight" onclick="saveFightLimits()">บันทึก</button></td><?php foreach ($betTypes as $bt): ?><td style="text-align:center" colspan="2"><input type="text" class="fight-input" id="fight-<?= $bt ?>" value="<?= number_format($fightLimits[$bt],0,'','') ?>"></td><?php endforeach; ?></tr>
                 <tr style="height:3px; background:#00a65a"><td colspan="<?= $colSpan ?>"></td></tr>
 
                 <?php if ($maxDataRows === 0): ?>
@@ -395,7 +399,6 @@ require_once 'includes/header.php';
                 ?>
                 <tr class="<?= $hasExceed ? 'exceed-limit' : ($i%2===0?'wl-row-even':'wl-row-odd') ?>" onmouseover="this.style.background='#e3f2fd'" onmouseout="this.style.background=''">
                     <td style="text-align:center; color:#999; font-size:12px"><?= $i+1 ?></td>
-                    <td class="num-cell">&nbsp;</td>
                     <?php foreach ($betTypes as $bt):
                         $d = $betTypeRows[$bt][$i] ?? null;
                         $limit = $fightLimits[$bt];
@@ -405,7 +408,7 @@ require_once 'includes/header.php';
                     <td style="text-align:center;" onclick="drillDownType('<?= htmlspecialchars($d['number']) ?>','<?= $bt ?>')">
                         <span class="number-badge"><?= htmlspecialchars($d['number']) ?></span>
                     </td>
-                    <td class="num-cell data-amount <?= $exceeds ? 'neg' : '' ?>" onclick="drillDownType('<?= htmlspecialchars($d['number']) ?>','<?= $bt ?>')"><?= number_format($d['amount'],2) ?></td>
+                    <td class="num-cell data-amount neg" onclick="drillDownType('<?= htmlspecialchars($d['number']) ?>','<?= $bt ?>')"><?= number_format(-$d['payout'],2) ?></td>
                     <?php else: ?>
                     <td></td><td></td>
                     <?php endif; ?>
