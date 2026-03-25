@@ -232,7 +232,7 @@ require_once 'includes/header.php';
 ?>
 
 <style>
-    .wl-page { font-family: Tahoma, Arial, sans-serif; font-size: 11px; }
+    .wl-page { font-family: Tahoma, Arial, sans-serif; font-size: 13px; }
     .flag-sm { width: 22px; height: 14px; object-fit: cover; border-radius: 2px; border: 1px solid rgba(0,0,0,0.15); vertical-align: middle; }
     .flag-xs { width: 18px; height: 12px; object-fit: cover; border-radius: 2px; border: 1px solid rgba(0,0,0,0.1); vertical-align: middle; }
     .wl-header-bar { background: #00a65a; padding: 6px 12px; display: flex; align-items: center; gap: 12px; border-radius: 4px 4px 0 0; position: relative; }
@@ -251,37 +251,40 @@ require_once 'includes/header.php';
     .date-dropdown a:hover { background: #e8f5e9; }
     .date-dropdown a.active { background: #fff9c4; font-weight: bold; }
     .status-badge { font-size: 10px; padding: 2px 8px; border-radius: 10px; font-weight: bold; color: #fff; }
-    .wl-table { border-collapse: collapse; width: 100%; font-size: 11px; font-family: Tahoma, Arial, sans-serif; }
-    .wl-table th, .wl-table td { border: 1px solid #a5d6a7; padding: 2px 4px; }
-    .wl-table thead th { background: #00a65a; color: #fff; font-weight: bold; text-align: center; padding: 4px; white-space: nowrap; }
+    .wl-table { border-collapse: collapse; width: 100%; font-size: 13px; font-family: Tahoma, Arial, sans-serif; }
+    .wl-table th, .wl-table td { border: 1px solid #a5d6a7; padding: 4px 6px; }
+    .wl-table thead th { background: #00a65a; color: #fff; font-weight: bold; text-align: center; padding: 6px; white-space: nowrap; font-size: 13px; }
     .wl-summary { background: #f0fff0; }
-    .wl-summary td { font-weight: bold; white-space: nowrap; }
-    .wl-summary .label-cell { background: #e8f5e9; text-align: left; padding-left: 8px; font-size: 12px; color: #2e7d32; }
+    .wl-summary td { font-weight: bold; white-space: nowrap; font-size: 13px; }
+    .wl-summary .label-cell { background: #e8f5e9; text-align: left; padding-left: 8px; font-size: 14px; color: #2e7d32; }
     .neg { color: #d32f2f; }
     .pos { color: #1b5e20; }
-    .num-cell { text-align: right; font-family: 'Courier New', monospace; font-size: 11px; }
-    .number-badge { display: inline-block; background: #e8f5e9; border: 1px solid #c8e6c9; border-radius: 2px; padding: 0 4px; font-family: monospace; font-weight: bold; font-size: 12px; min-width: 28px; text-align: center; cursor: pointer; }
-    .number-badge:hover { background: #c8e6c9; }
-    .filter-bar { background: #f5f5f5; border: 1px solid #ddd; border-radius: 4px; padding: 4px 8px; margin-bottom: 6px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 11px; }
-    .filter-bar select { border: 1px solid #ccc; border-radius: 3px; padding: 2px 4px; font-size: 11px; }
-    .btn-refresh { background: #fff; border: 1px solid #00a65a; color: #00a65a; padding: 3px 12px; border-radius: 3px; font-size: 11px; cursor: pointer; font-weight: bold; }
+    .num-cell { text-align: right; font-family: 'Courier New', monospace; font-size: 13px; }
+    .number-badge { display: inline-block; background: #e8f5e9; border: 1px solid #a5d6a7; border-radius: 3px; padding: 2px 6px; font-family: monospace; font-weight: bold; font-size: 14px; min-width: 32px; text-align: center; cursor: pointer; transition: all 0.15s; }
+    .number-badge:hover { background: #66bb6a; color: #fff; transform: scale(1.05); }
+    .filter-bar { background: #f5f5f5; border: 1px solid #ddd; border-radius: 4px; padding: 4px 8px; margin-bottom: 6px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12px; }
+    .filter-bar select { border: 1px solid #ccc; border-radius: 3px; padding: 2px 4px; font-size: 12px; }
+    .btn-refresh { background: #fff; border: 1px solid #00a65a; color: #00a65a; padding: 3px 12px; border-radius: 3px; font-size: 12px; cursor: pointer; font-weight: bold; }
     .btn-refresh:hover { background: #e8f5e9; }
-    .fight-input { width: 60px; text-align: center; border: 1px solid #ccc; border-radius: 2px; padding: 1px 2px; font-size: 11px; }
-    .btn-save-fight { background: #00a65a; color: #fff; border: none; padding: 2px 10px; border-radius: 2px; font-size: 11px; cursor: pointer; font-weight: bold; }
+    .fight-input { width: 70px; text-align: center; border: 1px solid #ccc; border-radius: 2px; padding: 2px 4px; font-size: 13px; }
+    .btn-save-fight { background: #00a65a; color: #fff; border: none; padding: 3px 12px; border-radius: 3px; font-size: 12px; cursor: pointer; font-weight: bold; }
     .wl-row-even { background: #fff; }
     .wl-row-odd { background: #f9fff9; }
-    .clickable-amount { cursor: pointer; text-decoration: underline; text-decoration-style: dotted; }
+    .clickable-amount { cursor: pointer; }
     .clickable-amount:hover { color: #1565c0; font-weight: bold; }
     .exceed-limit { background: #ffebee !important; }
+    .data-amount { font-size: 13px; cursor: pointer; }
+    .data-amount:hover { color: #1565c0; }
     /* Drill-down modal */
     .drill-modal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 9999; }
-    .drill-content { background: #fff; margin: 5% auto; max-width: 700px; border-radius: 8px; box-shadow: 0 8px 32px rgba(0,0,0,0.3); overflow: hidden; max-height: 80vh; display: flex; flex-direction: column; }
-    .drill-header { background: #00a65a; color: #fff; padding: 10px 16px; font-weight: bold; display: flex; justify-content: space-between; align-items: center; }
+    .drill-content { background: #fff; margin: 2% auto; max-width: 95%; width: 1100px; border-radius: 8px; box-shadow: 0 8px 32px rgba(0,0,0,0.3); overflow: hidden; max-height: 85vh; display: flex; flex-direction: column; }
+    .drill-header { background: #00a65a; color: #fff; padding: 10px 16px; font-weight: bold; font-size: 14px; display: flex; justify-content: space-between; align-items: center; }
     .drill-body { overflow-y: auto; padding: 0; flex: 1; }
-    .drill-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-    .drill-table th { background: #e8f5e9; padding: 6px 8px; border: 1px solid #c8e6c9; font-weight: bold; text-align: center; position: sticky; top: 0; }
-    .drill-table td { padding: 5px 8px; border: 1px solid #e0e0e0; }
+    .drill-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .drill-table th { background: #e8f5e9; padding: 8px 10px; border: 1px solid #c8e6c9; font-weight: bold; text-align: center; position: sticky; top: 0; font-size: 13px; }
+    .drill-table td { padding: 6px 10px; border: 1px solid #e0e0e0; }
     .drill-table tr:hover { background: #f5f5f5; }
+    .drill-table .drill-total { background: #e8f5e9; font-weight: bold; font-size: 13px; }
 </style>
 
 <div class="wl-page">
@@ -391,7 +394,7 @@ require_once 'includes/header.php';
                         }
                 ?>
                 <tr class="<?= $hasExceed ? 'exceed-limit' : ($i%2===0?'wl-row-even':'wl-row-odd') ?>" onmouseover="this.style.background='#e3f2fd'" onmouseout="this.style.background=''">
-                    <td style="text-align:center; color:#999; font-size:10px"><?= $i+1 ?></td>
+                    <td style="text-align:center; color:#999; font-size:12px"><?= $i+1 ?></td>
                     <td class="num-cell">&nbsp;</td>
                     <?php foreach ($betTypes as $bt):
                         $d = $betTypeRows[$bt][$i] ?? null;
@@ -399,8 +402,10 @@ require_once 'includes/header.php';
                         $exceeds = $d && ($limit > 0 && $d['amount'] >= $limit);
                     ?>
                     <?php if ($d): ?>
-                    <td style="text-align:center; cursor:pointer" onclick="drillDownType('<?= htmlspecialchars($d['number']) ?>','<?= $bt ?>')" class="number-badge"><?= htmlspecialchars($d['number']) ?></td>
-                    <td class="num-cell <?= $exceeds ? 'neg' : '' ?>" style="cursor:pointer" onclick="drillDownType('<?= htmlspecialchars($d['number']) ?>','<?= $bt ?>')"><?= number_format($d['amount'],2) ?></td>
+                    <td style="text-align:center;" onclick="drillDownType('<?= htmlspecialchars($d['number']) ?>','<?= $bt ?>')">
+                        <span class="number-badge"><?= htmlspecialchars($d['number']) ?></span>
+                    </td>
+                    <td class="num-cell data-amount <?= $exceeds ? 'neg' : '' ?>" onclick="drillDownType('<?= htmlspecialchars($d['number']) ?>','<?= $bt ?>')"><?= number_format($d['amount'],2) ?></td>
                     <?php else: ?>
                     <td></td><td></td>
                     <?php endif; ?>
@@ -540,13 +545,13 @@ function drillDown(number) {
     });
 }
 
-// Drill-down: single bet type
+// Drill-down: single bet type — แสดงรายละเอียดลูกค้า
 function drillDownType(number, betType) {
     const modal = document.getElementById('drillModal');
     const body = document.getElementById('drillBody');
     const title = document.getElementById('drillTitle');
-    title.textContent = `รายละเอียดเลข ${number} — ${BET_TYPE_LABELS[betType]}`;
-    body.innerHTML = '<div style="padding:30px;text-align:center;color:#999;"><i class="fas fa-spinner fa-spin"></i> กำลังโหลด...</div>';
+    title.textContent = `รายการแทง ${BET_TYPE_LABELS[betType]} หมายเลข ${number}`;
+    body.innerHTML = '<div style="padding:30px;text-align:center;color:#999;font-size:14px;"><i class="fas fa-spinner fa-spin"></i> กำลังโหลด...</div>';
     modal.style.display = '';
     document.body.style.overflow = 'hidden';
     
@@ -555,32 +560,50 @@ function drillDownType(number, betType) {
         .then(data => {
             const items = data.items || [];
             if (items.length === 0) {
-                body.innerHTML = '<div style="padding:30px;text-align:center;color:#999;">ไม่พบรายการ</div>';
+                body.innerHTML = '<div style="padding:30px;text-align:center;color:#999;font-size:14px;">ไม่พบรายการ</div>';
                 return;
             }
             
             let subtotal = 0;
-            items.forEach(i => subtotal += parseFloat(i.amount));
+            let subtotalPayout = 0;
+            items.forEach(i => {
+                subtotal += parseFloat(i.amount);
+                const rate = parseFloat(i.item_pay_rate || i.pay_rate || 0);
+                subtotalPayout += parseFloat(i.amount) * rate;
+            });
             
-            let html = `<div style="background:#fff3cd;padding:6px 12px;font-size:13px;font-weight:bold;border-bottom:2px solid #ffc107;">
-                เลข: <span style="font-size:16px;color:#d32f2f">${number}</span> — ${BET_TYPE_LABELS[betType]} — ${items.length} รายการ — รวม: <span style="color:#1b5e20">${subtotal.toLocaleString('en-US',{minimumFractionDigits:2})} บาท</span>
+            let html = `<div style="background:#e8f5e9;padding:8px 16px;font-size:14px;font-weight:bold;border-bottom:2px solid #00a65a;display:flex;justify-content:space-between;align-items:center;">
+                <span>รวม ${items.length} รายการ</span>
+                <span>ยอดซื้อ: <span style="color:#1b5e20">${subtotal.toLocaleString('en-US',{minimumFractionDigits:2})}</span> — ยอดจ่าย: <span style="color:#d32f2f">${subtotalPayout.toLocaleString('en-US',{minimumFractionDigits:2})}</span></span>
             </div>`;
             html += '<table class="drill-table"><thead><tr>';
-            html += '<th>#</th><th>วันที่</th><th>เลขที่โพย</th><th>หมายเลข</th><th>จำนวน</th><th>เรทจ่าย</th><th>หมายเหตุ</th>';
+            html += '<th style="width:30px">#</th><th>ลูกค้า</th><th>วันที่</th><th>ประเภท</th><th>หมายเลข</th><th>เรทจ่าย</th><th>จำนวน</th><th>ยอดจ่าย</th><th>เลขที่โพย</th>';
             html += '</tr></thead><tbody>';
             items.forEach((item, i) => {
                 const dt = new Date(item.created_at);
-                const dateStr = dt.toLocaleDateString('th-TH') + ' ' + dt.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'});
+                const dateStr = dt.toLocaleDateString('th-TH',{day:'2-digit',month:'2-digit',year:'2-digit'}) + ' ' + dt.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'});
+                const rate = parseFloat(item.item_pay_rate || item.pay_rate || 0);
+                const payout = parseFloat(item.amount) * rate;
+                const customer = item.note || '-';
                 html += `<tr>
-                    <td style="text-align:center">${i+1}</td>
+                    <td style="text-align:center;color:#999">${i+1}</td>
+                    <td style="font-weight:bold;color:#1565c0">${customer}</td>
                     <td style="text-align:center;white-space:nowrap">${dateStr}</td>
-                    <td style="text-align:center;font-weight:bold">${item.bet_number}</td>
-                    <td style="text-align:center;font-weight:bold;font-family:monospace">${item.number}</td>
+                    <td style="text-align:center">${BET_TYPE_LABELS[betType]}</td>
+                    <td style="text-align:center;font-weight:bold;font-family:monospace;font-size:14px">${item.number}</td>
+                    <td style="text-align:center">${rate.toFixed(2)}</td>
                     <td style="text-align:right;font-weight:bold">${parseFloat(item.amount).toLocaleString('en-US',{minimumFractionDigits:2})}</td>
-                    <td style="text-align:center">${item.pay_rate || '-'}</td>
-                    <td>${item.note || ''}</td>
+                    <td style="text-align:right;color:#d32f2f">${payout.toLocaleString('en-US',{minimumFractionDigits:2})}</td>
+                    <td style="text-align:center;font-size:11px;color:#666">${item.bet_number}</td>
                 </tr>`;
             });
+            // Summary row
+            html += `<tr class="drill-total">
+                <td colspan="6" style="text-align:right;padding-right:10px">รวม ${items.length} รายการ</td>
+                <td style="text-align:right">${subtotal.toLocaleString('en-US',{minimumFractionDigits:2})}</td>
+                <td style="text-align:right;color:#d32f2f">${subtotalPayout.toLocaleString('en-US',{minimumFractionDigits:2})}</td>
+                <td></td>
+            </tr>`;
             html += '</tbody></table>';
             
             body.innerHTML = html;
