@@ -292,7 +292,7 @@ def parse_page_results(lines, found_slugs, today, yesterday, debug=False):
         # === Time validation: skip wrong draw rounds ===
         # ลาวพัฒนามีรอบเที่ยง+ค่ำ → ต้องการแค่ 20:30
         REQUIRED_DRAW_TIMES = {
-            'lao': 20,  # ลาวพัฒนา: เอาแค่รอบ 20:30 (ค่ำ)
+            'lao-pattana': 20,  # ลาวพัฒนา: เอาแค่รอบ 20:30 (ค่ำ) ไม่เอารอบเที่ยง 12:30
         }
         if slug in REQUIRED_DRAW_TIMES:
             time_m = re.search(r'เวลา\s*(\d{1,2})[:.](\d{2})', line_stripped)
