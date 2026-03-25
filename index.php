@@ -276,6 +276,17 @@ require_once 'includes/header.php';
         display: inline-block;
         white-space: nowrap;
     }
+    .status-drawing {
+        background: linear-gradient(135deg, #ffca28 0%, #ffa000 100%);
+        color: white;
+        font-size: 11px;
+        font-weight: 600;
+        padding: 4px 10px;
+        border-radius: 20px;
+        display: inline-block;
+        white-space: nowrap;
+        animation: pulse-glow 2s infinite;
+    }
     .status-suspended {
         background: linear-gradient(135deg, #9e9e9e 0%, #757575 100%);
         color: white;
@@ -371,22 +382,47 @@ require_once 'includes/header.php';
                     $roundDate = $lt['current_round_date'];
                     
                     $closeTime = null;
+                    $resultTime = null;
                     $pastCloseTime = false;
+                    $pastResultTime = false;
                     $hoursPastClose = 0;
                     if (!empty($lt['close_time'])) {
-                        $closeTimeStr = $roundDate . ' ' . $lt['close_time'];
-                        $closeTime = strtotime($closeTimeStr);
+                        $lCloseH = intval(substr($lt['close_time'], 0, 2));
+                        $lOpenH = intval(substr($lt['open_time'] ?? '06', 0, 2));
                         
-                        $openTimeStr = $roundDate . ' ' . ($lt['open_time'] ?? '06:00:00');
-                        $openTimeForRound = strtotime($openTimeStr);
-                        
-                        // ถ้า close_time < open_time → ข้ามเที่ยงคืน → บวก 1 วัน
-                        if ($closeTime < $openTimeForRound) {
-                            $closeTime += 86400; // +24 ชม.
+                        if ($lCloseH < 6 && $lOpenH >= 18) {
+                            // หวยข้ามเที่ยงคืน: close_time อยู่วันถัดจาก roundDate
+                            $nextDay = date('Y-m-d', strtotime($roundDate . ' +1 day'));
+                            $closeTime = strtotime($nextDay . ' ' . $lt['close_time']);
+                        } else {
+                            $closeTimeStr = $roundDate . ' ' . $lt['close_time'];
+                            $closeTime = strtotime($closeTimeStr);
+                            
+                            $openTimeStr = $roundDate . ' ' . ($lt['open_time'] ?? '06:00:00');
+                            $openTimeForRound = strtotime($openTimeStr);
+                            
+                            if ($closeTime < $openTimeForRound) {
+                                $closeTime += 86400;
+                            }
                         }
                         
                         $pastCloseTime = $now > $closeTime;
                         $hoursPastClose = ($now - $closeTime) / 3600;
+                    }
+                    
+                    // result_time สำหรับเช็คว่าถึงเวลาออกผลหรือยัง
+                    if (!empty($lt['result_time'])) {
+                        $rtH = intval(substr($lt['result_time'], 0, 2));
+                        $lCloseH2 = intval(substr($lt['close_time'] ?? '00', 0, 2));
+                        $lOpenH2 = intval(substr($lt['open_time'] ?? '06', 0, 2));
+                        if ($lCloseH2 < 6 && $lOpenH2 >= 18) {
+                            $nextDay2 = date('Y-m-d', strtotime($roundDate . ' +1 day'));
+                            $resultTime = strtotime($nextDay2 . ' ' . $lt['result_time']);
+                        } else {
+                            $resultTime = strtotime($roundDate . ' ' . $lt['result_time']);
+                            if ($resultTime < $closeTime) $resultTime += 86400;
+                        }
+                        $pastResultTime = $now > $resultTime;
                     }
                     
                     // ผลล่าสุดเก่าแค่ไหน (เทียบกับ draw schedule)
@@ -422,14 +458,21 @@ require_once 'includes/header.php';
                         $isResultStale = $resultDate < $prevDrawDate;
                     }
                     
-                    // === สถานะ 3 ระดับ ===
+                    // === สถานะ 4 ระดับ ===
                     // 1. ผลออกแล้ว (เขียว) = มีผลงวดนี้ + คำนวณเสร็จแล้ว
                     // 2. กำลังประมวลผล (ส้ม) = มีผลงวดนี้ แต่ยังมี pending
-                    // 3. รอออกผล (ฟ้า) = ยังไม่มีผลงวดนี้
+                    // 3. กำลังออกผล (เหลือง) = เลยเวลาปิดรับ/ใกล้ result_time แต่ยังไม่มีผล
+                    // 4. รอออกผล (ฟ้า) = ยังไม่ถึงเวลาปิดรับ
                     if ($hasResultForRound && !$hasPending) {
                         $statusClass = 'status-paid'; $statusLabel = 'ผลออกแล้ว';
                     } elseif ($hasResultForRound && $hasPending) {
                         $statusClass = 'status-processing'; $statusLabel = '<i class="fas fa-spinner fa-spin mr-1"></i> กำลังประมวลผล';
+                    } elseif ($pastCloseTime && !$hasResultForRound) {
+                        // เลยเวลาปิดรับแล้ว แต่ยังไม่มีผล → กำลังออกผล
+                        $statusClass = 'status-drawing'; $statusLabel = '<i class="fas fa-spinner fa-spin mr-1"></i> กำลังออกผล';
+                    } elseif (!$pastCloseTime && $closeTime && ($closeTime - $now) < 900) {
+                        // อีก < 15 นาทีจะปิดรับ → ใกล้ออกผล
+                        $statusClass = 'status-drawing'; $statusLabel = 'ใกล้ออกผล';
                     } else {
                         $statusClass = 'status-waiting'; $statusLabel = 'รอออกผล';
                     }
