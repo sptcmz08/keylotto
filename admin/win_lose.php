@@ -96,12 +96,13 @@ if (empty($selectedLottery) && !empty($lotteryTypes)) {
 // Available draw dates — รวมวันที่ของทุกหวย + วันนี้เสมอ
 $availableDates = $pdo->query("
     SELECT DISTINCT draw_date FROM (
-        SELECT draw_date FROM results
+        SELECT draw_date FROM results WHERE draw_date IS NOT NULL AND draw_date >= '2025-01-01'
         UNION
-        SELECT draw_date FROM bets WHERE status != 'cancelled'
+        SELECT draw_date FROM bets WHERE status != 'cancelled' AND draw_date IS NOT NULL AND draw_date >= '2025-01-01'
         UNION
         SELECT CURDATE()
     ) combined
+    WHERE draw_date IS NOT NULL AND draw_date > '0000-00-00'
     ORDER BY draw_date DESC
     LIMIT 50
 ")->fetchAll(PDO::FETCH_COLUMN);
