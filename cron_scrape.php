@@ -486,6 +486,9 @@ function processResults($pdo, $results, $source) {
             
             if ($isMatch) {
                 echo "⏭️  {$keyLotteryName}: มีผลอยู่แล้ว ({$existingThree}/{$existingBot})\n";
+                // ✅ ถึงผลมีแล้ว ก็ยังเช็คว่ามี pending bets ค้างอยู่ไหม → คำนวณจ่าย
+                $payoutCount = processBetPayouts($pdo, $lotteryTypeId, $drawDate);
+                if ($payoutCount > 0) echo "💰 {$keyLotteryName}: คำนวณผลค้าง {$payoutCount} โพย\n";
             } else {
                 // ⚠️ CONFLICT: ผลไม่ตรงกัน → log แจ้งเตือน ไม่ overwrite อัตโนมัติ
                 echo "⚠️  CONFLICT {$keyLotteryName}: DB=[{$existingThree}/{$existingBot}] vs {$source}=[{$threeTop}/{$twoBot}] — ไม่ overwrite\n";
@@ -921,6 +924,35 @@ function scrapeSmart($pdo) {
     echo "📊 Smart Summary: ✅ {$totalNew} ใหม่";
     if ($totalConflict > 0) echo ", ⚠️ {$totalConflict} conflict";
     echo "\n";
+
+    // =============================================
+    // Catch-all: คำนวณจ่ายโพย pending ทั้งหมดที่มีผลแล้ว
+    // =============================================
+    echo "\n─── Catch-all: เช็คโพย pending ที่มีผลแล้ว ───\n";
+    $catchAllStmt = $pdo->query("
+        SELECT DISTINCT b.lottery_type_id, b.draw_date
+        FROM bets b
+        JOIN results r ON r.lottery_type_id = b.lottery_type_id AND r.draw_date = b.draw_date
+        WHERE b.status = 'pending'
+        AND r.three_top IS NOT NULL AND r.three_top != ''
+    ");
+    $catchAllPairs = $catchAllStmt->fetchAll();
+    $catchAllTotal = 0;
+    foreach ($catchAllPairs as $pair) {
+        $count = processBetPayouts($pdo, $pair['lottery_type_id'], $pair['draw_date']);
+        if ($count > 0) {
+            $ltName = $pdo->prepare("SELECT name FROM lottery_types WHERE id = ?");
+            $ltName->execute([$pair['lottery_type_id']]);
+            $name = $ltName->fetchColumn() ?: $pair['lottery_type_id'];
+            echo "💰 Catch-all: {$name} ({$pair['draw_date']}): คำนวณผล {$count} โพย\n";
+            $catchAllTotal += $count;
+        }
+    }
+    if ($catchAllTotal === 0) {
+        echo "✅ ไม่มีโพย pending ค้าง\n";
+    } else {
+        echo "💰 Catch-all: คำนวณผลรวม {$catchAllTotal} โพย\n";
+    }
 
     // =============================================
     // Auto-cancel: หวยที่เลย result_time > 2 ชม. ยังไม่มีผล → ยกเลิกโพย pending
