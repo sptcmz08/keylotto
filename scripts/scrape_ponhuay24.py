@@ -67,6 +67,8 @@ NAME_MAPPINGS = {
     'ฮานอยทีวี': 'hanoi-tv',
     'ฮานอยเฉพาะกิจ': 'hanoi-adhoc',
     'ฮานอยตรุษจีน': 'hanoi-chinese-ny',
+    'ฮานอย ตรุจีน': 'hanoi-chinese-ny',
+    'ฮานอยตรุจีน': 'hanoi-chinese-ny',
 
     # === หุ้น ===
     # ดาวโจนส์/STAR/VIP → ออกผลดึก (00:00+) ใช้ exphuay เท่านั้น
