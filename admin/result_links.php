@@ -18,15 +18,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // Auto-Heal: ซิงค์ข้อมูลอัตโนมัติทุกครั้งที่เข้าหน้านี้
 // ==========================================
 try {
-    // 0. อัพเดทรหัสหมวดหมู่ให้ตรงกันล่วงหน้า (เผื่อหมวดหมู่ไม่ตรง)
-    $pdo->exec("
-        UPDATE result_links rl
-        JOIN lottery_types lt ON TRIM(rl.name) = TRIM(lt.name)
-        SET rl.category_id = lt.category_id
-        WHERE rl.category_id != lt.category_id
-    ");
-
     // 1. ลบข้อมูลใน result_links ที่ซ้ำซ้อนกันในตัวเอง (ชื่อเดียวกัน เก็บแค่ตัวแรกที่สร้างไว้)
+    // ต้องทำก่อนอัพเดทหมวดหมู่ เพื่อป้องกัน Error 1062 Duplicate Entry
     $pdo->exec("
         DELETE FROM result_links 
         WHERE id NOT IN (
@@ -36,7 +29,15 @@ try {
         )
     ");
 
-    // 2. ลบลิงค์ดูผลที่ไม่มีอยู่ในชื่อหวยตารางจัดการหวยแล้วออก (กันค้าง 100%)
+    // 2. อัพเดทรหัสหมวดหมู่ให้ตรงกันตารางหลัก
+    $pdo->exec("
+        UPDATE result_links rl
+        JOIN lottery_types lt ON TRIM(rl.name) = TRIM(lt.name)
+        SET rl.category_id = lt.category_id
+        WHERE rl.category_id != lt.category_id
+    ");
+
+    // 3. ลบลิงค์ดูผลที่ไม่มีอยู่ในชื่อหวยตารางจัดการหวยแล้วออก (กันค้าง 100%)
     $pdo->exec("
         DELETE FROM result_links 
         WHERE TRIM(name) NOT IN (
@@ -44,7 +45,7 @@ try {
         )
     ");
 
-    // 3. ดึงหวยที่มีในจัดการหวย แต่ยังไม่มีในลิงค์ดูผล เข้ามาใส่ให้อัตโนมัติ (กันตกหล่น)
+    // 4. ดึงหวยที่มีในจัดการหวย แต่ยังไม่มีในลิงค์ดูผล เข้ามาใส่ให้อัตโนมัติ (กันตกหล่น)
     $pdo->exec("
         INSERT IGNORE INTO result_links (category_id, name, flag_emoji, close_time, result_time, result_url, result_label, sort_order, is_active)
         SELECT lt.category_id, TRIM(lt.name), lt.flag_emoji, lt.close_time, lt.result_time, lt.result_url, lt.result_label, lt.sort_order, lt.is_active
