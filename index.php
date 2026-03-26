@@ -368,19 +368,20 @@ require_once 'includes/header.php';
                     // 2. วันนี้เป็นวัน draw + เลย close_time แล้ว
                     $roundDate = $lt['current_round_date'];
                     $ltSchedule = $lt['draw_schedule'] ?? 'daily';
+                    $showingNextRound = false;
                     if ($ltSchedule !== 'daily' && !empty($ltSchedule)) {
-                        $shouldShowNext = false;
                         if ($hasResultForRound) {
-                            $shouldShowNext = true; // ผลออกแล้ว → งวดถัดไป
+                            $showingNextRound = true; // ผลออกแล้ว → งวดถัดไป
                         } elseif ($roundDate === date('Y-m-d') && !empty($lt['close_time'])) {
-                            // วันนี้เป็นวัน draw → เช็ค close_time
                             $ltCloseDT = new DateTime(date('Y-m-d') . ' ' . $lt['close_time']);
                             if (new DateTime() > $ltCloseDT) {
-                                $shouldShowNext = true; // เลย close_time แล้ว → งวดถัดไป
+                                $showingNextRound = true; // เลย close_time แล้ว → งวดถัดไป
                             }
                         }
-                        if ($shouldShowNext) {
+                        if ($showingNextRound) {
                             $roundDate = getNextDrawDate($ltSchedule);
+                            // สลับไปงวดถัดไป → ซ่อนเลขเก่า + reset สถานะ
+                            $hasResultForRound = false;
                         }
                     }
                     $displayDate = date('d-m-Y', strtotime($roundDate));
