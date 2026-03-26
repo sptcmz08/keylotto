@@ -363,35 +363,35 @@ require_once 'includes/header.php';
                     $hasResultForRound = $lt['has_result_current_round'];
                     $hasAnyResult = !empty($lt['three_top']);
                     
-                    // แสดงวันที่งวด — หวยไม่ใช่รายวัน: แสดงงวดถัดไปเมื่อ:
-                    // 1. มีผลงวดนี้แล้ว, หรือ
-                    // 2. วันนี้เป็นวัน draw + เลย close_time แล้ว
+                    // แสดงวันที่งวด — เฉพาะหวยรายเดือน (1,16) เท่านั้น:
+                    // หลังผลออก/เลย close_time → สลับแสดงงวดถัดไป + ซ่อนเลขเก่า
+                    // หวยรายสัปดาห์ (mon-fri) แสดงผลปกติเหมือน daily
                     $roundDate = $lt['current_round_date'];
                     $ltSchedule = $lt['draw_schedule'] ?? 'daily';
                     $showingNextRound = false;
-                    if ($ltSchedule !== 'daily' && !empty($ltSchedule)) {
+                    $isMonthlySchedule = preg_match('/^\d+(,\d+)*$/', $ltSchedule); // เช่น 1,16
+                    
+                    if ($isMonthlySchedule) {
                         if ($hasResultForRound) {
-                            $showingNextRound = true; // ผลออกแล้ว → งวดถัดไป
+                            $showingNextRound = true;
                         } elseif ($roundDate === date('Y-m-d') && !empty($lt['close_time'])) {
                             $ltCloseDT = new DateTime(date('Y-m-d') . ' ' . $lt['close_time']);
                             if (new DateTime() > $ltCloseDT) {
-                                $showingNextRound = true; // เลย close_time แล้ว → งวดถัดไป
+                                $showingNextRound = true;
                             }
                         }
                         if ($showingNextRound) {
                             $roundDate = getNextDrawDate($ltSchedule);
-                            // สลับไปงวดถัดไป → ซ่อนเลขเก่า + reset สถานะ
-                            $hasResultForRound = false;
+                            $hasResultForRound = false; // ซ่อนเลขเก่า
                         }
                     }
                     $displayDate = date('d-m-Y', strtotime($roundDate));
                     
+                    // === ถ้าแสดงงวดถัดไป (หวยรายเดือน) → บังคับ "รอออกผล" ===
+                    if ($showingNextRound) {
+                        $statusClass = 'status-waiting'; $statusLabel = 'รอออกผล';
+                    } else {
                     // สถานะ realtime 5 ระดับ (อิงจากงวดปัจจุบัน):
-                    // 1. ปิดรับแทง (แดง) = Admin กดปิด
-                    // 2. จ่ายเงินแล้ว (เขียว) = มีผลงวดนี้ + ไม่มี pending
-                    // 3. กำลังประมวลผล (ส้ม) = เลย close_time ≤ 2 ชม. / หรือมีผลแต่ยัง pending
-                    // 4. งดออกผล (เทา) = เลย close_time > 2 ชม. ยังไม่มีผลงวดนี้
-                    // 5. รอออกผล (ฟ้า) = ยังไม่ถึงเวลาปิดรับ
                     $betKey = $lt['id'] . '_' . $lt['current_round_date'];
                     $hasPending = isset($pendingBets[$betKey]) && $pendingBets[$betKey] > 0;
                     $hasPaid = isset($paidBets[$betKey]) && $paidBets[$betKey] > 0;
@@ -445,7 +445,7 @@ require_once 'includes/header.php';
                     // ผลล่าสุดเก่าแค่ไหน (เทียบกับ draw schedule)
                     $resultDate = $lt['result_date'] ?? null;
                     $drawSchedule = $lt['draw_schedule'] ?? 'daily';
-                    $currentRoundDate = $lt['current_round_date']; // ใช้ค่าจาก processing loop
+                    $currentRoundDate = $lt['current_round_date'];
                     
                     // เช็คว่าวันนี้เป็นวันออกผลหรือไม่
                     $todayIsDrawDay = true;
@@ -461,12 +461,8 @@ require_once 'includes/header.php';
                         $prevDrawDate = getCurrentDrawDate($drawSchedule, $prevDay);
                     }
                     
-                    // ผลล่าสุดถือว่า "เก่าเกิน" ถ้า:
-                    // - หวย daily: ผลเก่ากว่า 3 วัน
-                    // - หวยอื่น: ผลเก่ากว่างวดก่อนหน้า
                     $isResultStale = false;
                     if (!$resultDate) {
-                        // ไม่เคยมีผลเลย — ถือว่า stale เฉพาะวันที่ไม่ได้ออกหวย
                         $isResultStale = !$todayIsDrawDay;
                     } elseif ($drawSchedule === 'daily') {
                         $lastResultAgeDays = (strtotime($today) - strtotime($resultDate)) / 86400;
@@ -476,27 +472,20 @@ require_once 'includes/header.php';
                     }
                     
                     // === สถานะ 5 ระดับ ===
-                    // 1. ผลออกแล้ว (เขียว) = มีผลงวดนี้ + คำนวณเสร็จแล้ว
-                    // 2. กำลังประมวลผล (ส้ม) = มีผลงวดนี้ แต่ยังมี pending
-                    // 3. กำลังออกผล (เหลือง) = เลยเวลาปิดรับ แต่ยังไม่มีผล (< 2 ชม.)
-                    // 4. ไม่ออกผล (แดง) = เลยเวลาปิดรับ > 2 ชม. ไม่มีผล (ตลาดปิด/วันหยุด)
-                    // 5. รอออกผล (ฟ้า) = ยังไม่ถึงเวลาปิดรับ
                     if ($hasResultForRound && !$hasPending) {
                         $statusClass = 'status-paid'; $statusLabel = 'ผลออกแล้ว';
                     } elseif ($hasResultForRound && $hasPending) {
                         $statusClass = 'status-processing'; $statusLabel = '<i class="fas fa-spinner fa-spin mr-1"></i> กำลังประมวลผล';
                     } elseif ($pastCloseTime && !$hasResultForRound && $hoursPastClose >= 2) {
-                        // เลย 2 ชม. แล้วยังไม่มีผล → ตลาดปิด/วันหยุด
                         $statusClass = 'status-closed'; $statusLabel = 'ไม่ออกผล';
                     } elseif ($pastCloseTime && !$hasResultForRound) {
-                        // เลยเวลาปิดรับแล้ว แต่ยังไม่มีผล → กำลังออกผล
                         $statusClass = 'status-drawing'; $statusLabel = '<i class="fas fa-spinner fa-spin mr-1"></i> กำลังออกผล';
                     } elseif (!$pastCloseTime && $closeTime && ($closeTime - $now) < 900) {
-                        // อีก < 15 นาทีจะปิดรับ → ใกล้ออกผล
                         $statusClass = 'status-drawing'; $statusLabel = 'ใกล้ออกผล';
                     } else {
                         $statusClass = 'status-waiting'; $statusLabel = 'รอออกผล';
                     }
+                    } // end if/else showingNextRound
                 ?>
                 <tr>
                     <td>
