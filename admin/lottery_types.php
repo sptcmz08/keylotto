@@ -41,7 +41,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     } elseif ($action === 'delete') {
         $id = intval($_POST['id']);
+        // ดึงชื่อหวยก่อนลบ เพื่อลบ result_links ที่ชื่อตรงกันด้วย
+        $nameStmt = $pdo->prepare("SELECT name FROM lottery_types WHERE id = ?");
+        $nameStmt->execute([$id]);
+        $ltName = $nameStmt->fetchColumn();
         $pdo->prepare("DELETE FROM lottery_types WHERE id = ?")->execute([$id]);
+        if ($ltName) {
+            $pdo->prepare("DELETE FROM result_links WHERE name = ?")->execute([$ltName]);
+        }
         $msg = 'ลบสำเร็จ';
         $msgType = 'success';
     } elseif ($action === 'toggle') {
