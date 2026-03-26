@@ -59,7 +59,6 @@ $lotteries = $pdo->query("
     SELECT lt.*, lc.name as category_name, lc.id as cat_id
     FROM lottery_types lt 
     JOIN lottery_categories lc ON lt.category_id = lc.id 
-    WHERE lt.is_active = 1 
     ORDER BY lc.sort_order, lt.sort_order, lt.name
 ")->fetchAll();
 
@@ -130,8 +129,9 @@ require_once 'includes/header.php';
                         $limits = $existingLimits[$lid] ?? [];
                     ?>
                     <tr class="border-b <?= $i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50' ?> hover:bg-green-50/50 transition">
-                        <td class="px-3 py-2 font-medium text-gray-800 whitespace-nowrap">
-                            <?= htmlspecialchars($lot['flag_emoji'] ?? '') ?> <?= htmlspecialchars($lot['name']) ?>
+                        <td class="px-3 py-2 font-medium text-gray-800 whitespace-nowrap flex items-center gap-2">
+                            <img src="<?= getFlagForCountry($lot['flag_emoji'] ?? '', $lot['name']) ?>" class="w-6 h-4 object-cover rounded border"> 
+                            <?= htmlspecialchars($lot['name']) ?>
                         </td>
                         <td class="px-2 py-2 text-center">
                             <input type="checkbox" class="lot-cb w-3.5 h-3.5" data-lid="<?= $lid ?>">
