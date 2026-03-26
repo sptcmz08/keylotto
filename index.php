@@ -456,15 +456,19 @@ require_once 'includes/header.php';
                         $isResultStale = $resultDate < $prevDrawDate;
                     }
                     
-                    // === สถานะ 4 ระดับ ===
+                    // === สถานะ 5 ระดับ ===
                     // 1. ผลออกแล้ว (เขียว) = มีผลงวดนี้ + คำนวณเสร็จแล้ว
                     // 2. กำลังประมวลผล (ส้ม) = มีผลงวดนี้ แต่ยังมี pending
-                    // 3. กำลังออกผล (เหลือง) = เลยเวลาปิดรับ/ใกล้ result_time แต่ยังไม่มีผล
-                    // 4. รอออกผล (ฟ้า) = ยังไม่ถึงเวลาปิดรับ
+                    // 3. กำลังออกผล (เหลือง) = เลยเวลาปิดรับ แต่ยังไม่มีผล (< 2 ชม.)
+                    // 4. ไม่ออกผล (แดง) = เลยเวลาปิดรับ > 2 ชม. ไม่มีผล (ตลาดปิด/วันหยุด)
+                    // 5. รอออกผล (ฟ้า) = ยังไม่ถึงเวลาปิดรับ
                     if ($hasResultForRound && !$hasPending) {
                         $statusClass = 'status-paid'; $statusLabel = 'ผลออกแล้ว';
                     } elseif ($hasResultForRound && $hasPending) {
                         $statusClass = 'status-processing'; $statusLabel = '<i class="fas fa-spinner fa-spin mr-1"></i> กำลังประมวลผล';
+                    } elseif ($pastCloseTime && !$hasResultForRound && $hoursPastClose >= 2) {
+                        // เลย 2 ชม. แล้วยังไม่มีผล → ตลาดปิด/วันหยุด
+                        $statusClass = 'status-closed'; $statusLabel = 'ไม่ออกผล';
                     } elseif ($pastCloseTime && !$hasResultForRound) {
                         // เลยเวลาปิดรับแล้ว แต่ยังไม่มีผล → กำลังออกผล
                         $statusClass = 'status-drawing'; $statusLabel = '<i class="fas fa-spinner fa-spin mr-1"></i> กำลังออกผล';
