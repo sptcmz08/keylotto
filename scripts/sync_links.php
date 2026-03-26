@@ -1,5 +1,5 @@
 <?php
-require 'c:\\Users\\ae1nt\\key_lotto\\config.php';
+require __DIR__ . '/../config.php';
 
 global $pdo;
 
