@@ -31,7 +31,7 @@ async function scrape() {
         
         // Wait for SPA to render
         console.error('[Ponhuay24-Hanoi] Waiting for content...');
-        await page.waitForTimeout(8000);
+        await new Promise(r => setTimeout(r, 8000));
         
         // Try waiting for table content
         try {
