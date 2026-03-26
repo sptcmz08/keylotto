@@ -61,6 +61,7 @@ $SLUG_TO_LOTTERY_NAME = [
     'lao-asean'          => 'ลาวอาเซียน',
     'lao-redcross'       => 'ลาวกาชาด',
     'malaysia'           => 'หวยมาเลเซีย',
+    'malay'              => 'หวยมาเลเซีย',
 
     // === หุ้น VIP (จาก Raakaadee) ===
     'dowjones-vip'           => 'ดาวโจนส์ VIP',
