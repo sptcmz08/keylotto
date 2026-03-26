@@ -20,14 +20,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $payRates = $_POST['pay_rate'] ?? [];
         $minBets = $_POST['min_bet'] ?? [];
         $maxBets = $_POST['max_bet'] ?? [];
-        $maxPerNumbers = $_POST['max_per_number'] ?? [];
 
         if (empty($lotteryIds)) {
             $msg = 'กรุณาเลือกหวยอย่างน้อย 1 รายการ';
             $msgType = 'error';
         } else {
             $stmtDel = $pdo->prepare("DELETE FROM pay_rates WHERE lottery_type_id = ?");
-            $stmtIns = $pdo->prepare("INSERT INTO pay_rates (lottery_type_id, bet_type, rate_label, pay_rate, discount, min_bet, max_bet, max_per_number) VALUES (?, ?, ?, ?, 0, ?, ?, ?)");
+            $stmtIns = $pdo->prepare("INSERT INTO pay_rates (lottery_type_id, bet_type, rate_label, pay_rate, discount, min_bet, max_bet, max_per_number) VALUES (?, ?, ?, ?, 0, ?, ?, 0)");
             
             foreach ($lotteryIds as $lid) {
                 $lid = intval($lid);
@@ -41,8 +40,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $rateLabels[$i] ?? '',
                             floatval($payRates[$i]),
                             intval($minBets[$i] ?? 1),
-                            intval($maxBets[$i] ?? 500),
-                            intval($maxPerNumbers[$i] ?? 0)
+                            intval($maxBets[$i] ?? 500)
                         ]);
                     }
                 }
@@ -133,7 +131,6 @@ require_once 'includes/header.php';
                         <th class="px-3 py-2 text-center text-xs text-gray-500">จ่าย (บาท)</th>
                         <th class="px-3 py-2 text-center text-xs text-gray-500">ขั้นต่ำ/บิล</th>
                         <th class="px-3 py-2 text-center text-xs text-gray-500">สูงสุด/บิล</th>
-                        <th class="px-3 py-2 text-center text-xs text-gray-500 bg-orange-50 text-orange-700">รับสูงสุด/เลข</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -159,9 +156,6 @@ require_once 'includes/header.php';
                         </td>
                         <td class="px-3 py-2">
                             <input type="number" name="max_bet[]" value="<?= $existing['max_bet'] ?? $d['max'] ?>" class="w-full border rounded px-2 py-1 text-sm text-center focus:border-green-500 outline-none">
-                        </td>
-                        <td class="px-3 py-2 bg-orange-50">
-                            <input type="number" name="max_per_number[]" value="<?= $existing['max_per_number'] ?? $d['max_num'] ?>" placeholder="0=ไม่จำกัด" class="w-full border border-orange-300 rounded px-2 py-1 text-sm text-center focus:border-orange-500 outline-none">
                         </td>
                     </tr>
                     <?php endforeach; ?>
@@ -220,7 +214,6 @@ require_once 'includes/header.php';
                     <?php endforeach; ?>
                     <th class="px-2 py-2 text-center text-xs text-gray-600">ขั้นต่ำ</th>
                     <th class="px-2 py-2 text-center text-xs text-gray-600">สูงสุด</th>
-                    <th class="px-2 py-2 text-center text-xs text-orange-600 bg-orange-50">สูงสุด/เลข</th>
                     <th class="px-2 py-2 text-center text-xs text-gray-500">จัดการ</th>
                 </tr>
             </thead>
@@ -252,9 +245,6 @@ require_once 'includes/header.php';
                     </td>
                     <td class="px-2 py-1.5 text-center text-gray-600">
                         <?= $firstRate ? number_format($firstRate['max_bet']) : '-' ?>
-                    </td>
-                    <td class="px-2 py-1.5 text-center bg-orange-50 text-orange-700 font-medium">
-                        <?= ($firstRate && $firstRate['max_per_number'] > 0) ? number_format($firstRate['max_per_number']) : '-' ?>
                     </td>
                     <td class="px-2 py-1.5 text-center whitespace-nowrap">
                         <a href="?edit=<?= $lid ?>" class="text-blue-500 hover:text-blue-700 mr-1" title="แก้ไข"><i class="fas fa-edit"></i></a>
