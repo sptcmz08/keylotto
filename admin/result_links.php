@@ -14,6 +14,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Removed add/edit/delete logic since it's synced from lottery_types
 }
 
+// ==========================================
+// Auto-Heal: ซิงค์ข้อมูลอัตโนมัติทุกครั้งที่เข้าหน้านี้
+// ==========================================
+// 1. ลบลิงค์ดูผลที่ไม่มีอยู่ในตารางหวยแล้วออก (กันค้าง)
+$pdo->exec("
+    DELETE rl FROM result_links rl 
+    LEFT JOIN lottery_types lt ON rl.name = lt.name 
+    WHERE lt.id IS NULL
+");
+
+// 2. ดึงหวยที่เพิ่งเพิ่ม/ไม่เคยมีในหน้าลิงค์ดูผล เข้ามาใส่ให้อัตโนมัติ (กันตกหล่น)
+$pdo->exec("
+    INSERT IGNORE INTO result_links (category_id, name, flag_emoji, close_time, result_time, result_url, result_label, sort_order, is_active)
+    SELECT lt.category_id, lt.name, lt.flag_emoji, lt.close_time, lt.result_time, lt.result_url, lt.result_label, lt.sort_order, lt.is_active
+    FROM lottery_types lt
+    WHERE NOT EXISTS (SELECT 1 FROM result_links rl WHERE rl.name = lt.name)
+        AND lt.name IS NOT NULL AND trim(lt.name) != ''
+");
+
+
 $categories = $pdo->query("SELECT * FROM lottery_categories ORDER BY sort_order")->fetchAll();
 $links = $pdo->query("SELECT rl.*, lc.name as category_name FROM result_links rl JOIN lottery_categories lc ON rl.category_id = lc.id ORDER BY lc.sort_order, rl.sort_order")->fetchAll();
 
