@@ -28,16 +28,20 @@ try {
 
     // 1. ลบข้อมูลใน result_links ที่ซ้ำซ้อนกันในตัวเอง (ชื่อเดียวกัน เก็บแค่ตัวแรกที่สร้างไว้)
     $pdo->exec("
-        DELETE t1 FROM result_links t1
-        INNER JOIN result_links t2 
-        WHERE t1.id > t2.id AND TRIM(t1.name) = TRIM(t2.name)
+        DELETE FROM result_links 
+        WHERE id NOT IN (
+            SELECT min_id FROM (
+                SELECT MIN(id) as min_id FROM result_links GROUP BY TRIM(name)
+            ) as temp
+        )
     ");
 
-    // 2. ลบลิงค์ดูผลที่ไม่มีอยู่ในชื่อหวยตารางจัดการหวยแล้วออก (กันค้าง)
+    // 2. ลบลิงค์ดูผลที่ไม่มีอยู่ในชื่อหวยตารางจัดการหวยแล้วออก (กันค้าง 100%)
     $pdo->exec("
-        DELETE rl FROM result_links rl 
-        LEFT JOIN lottery_types lt ON TRIM(rl.name) = TRIM(lt.name) 
-        WHERE lt.id IS NULL
+        DELETE FROM result_links 
+        WHERE TRIM(name) NOT IN (
+            SELECT TRIM(name) FROM lottery_types WHERE name IS NOT NULL
+        )
     ");
 
     // 3. ดึงหวยที่มีในจัดการหวย แต่ยังไม่มีในลิงค์ดูผล เข้ามาใส่ให้อัตโนมัติ (กันตกหล่น)
@@ -45,11 +49,13 @@ try {
         INSERT IGNORE INTO result_links (category_id, name, flag_emoji, close_time, result_time, result_url, result_label, sort_order, is_active)
         SELECT lt.category_id, TRIM(lt.name), lt.flag_emoji, lt.close_time, lt.result_time, lt.result_url, lt.result_label, lt.sort_order, lt.is_active
         FROM lottery_types lt
-        WHERE NOT EXISTS (SELECT 1 FROM result_links rl WHERE TRIM(rl.name) = TRIM(lt.name))
+        WHERE TRIM(lt.name) NOT IN (SELECT TRIM(name) FROM result_links)
             AND lt.name IS NOT NULL AND TRIM(lt.name) != ''
     ");
 } catch (Exception $e) {
-    // เงียบไว้ถ้า auto_heal มีปัญหา ไม่ให้กระทบการโหลดตาราง
+    // มีข้อผิดพลาดในการ Auto-Heal ให้แจ้งเตือนแอดมินเพื่อให้เราตรวจสอบได้ (แทนที่การเงียบไป)
+    $msg = 'Auto-Heal Error: ' . $e->getMessage();
+    $msgType = 'error';
 }
 
 
