@@ -31,14 +31,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($action === 'add') {
             $stmt = $pdo->prepare("INSERT INTO lottery_types (category_id, name, flag_emoji, close_time, open_time, result_time, result_url, result_label, draw_schedule, is_active, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
             $stmt->execute([$categoryId, $name, $flagEmoji, $closeTime, $openTime, $resultTime, $resultUrl, $resultLabel, $drawSchedule, $isActive, $sortOrder]);
-            $msg = 'เพิ่มหวยสำเร็จ';
+            $msg = 'เพิ่มหวยและลิงค์ดูผลสำเร็จ';
             $msgType = 'success';
         } else {
+            // ดึงชื่อเดิมก่อนเปลี่ยน เพื่ออัพเดท result_links ให้ตรงกันก่อนทำ UPSERT
+            $stmtOld = $pdo->prepare("SELECT name FROM lottery_types WHERE id=?");
+            $stmtOld->execute([$id]);
+            $oldName = $stmtOld->fetchColumn();
+
             $stmt = $pdo->prepare("UPDATE lottery_types SET category_id=?, name=?, flag_emoji=?, close_time=?, open_time=?, result_time=?, result_url=?, result_label=?, draw_schedule=?, is_active=?, sort_order=? WHERE id=?");
             $stmt->execute([$categoryId, $name, $flagEmoji, $closeTime, $openTime, $resultTime, $resultUrl, $resultLabel, $drawSchedule, $isActive, $sortOrder, $id]);
-            $msg = 'แก้ไขสำเร็จ';
+            
+            if ($oldName && $oldName !== $name) {
+                // ถ้าเปลี่ยนชื่อหวย ให้ไปเปลี่ยนชื่อใน result_links ด้วยเพื่อรักษาข้อมูลเดิม (เช่น scraper_url)
+                $pdo->prepare("UPDATE result_links SET name=? WHERE name=?")->execute([$name, $oldName]);
+            }
+
+            $msg = 'แก้ไขข้อมูลหวยและลิงค์ดูผลสำเร็จ';
             $msgType = 'success';
         }
+
+        // ==========================================
+        // Sync ข้อมูลไปที่ตาราง result_links อัตโนมัติ (UPSERT)
+        // ==========================================
+        $syncStmt = $pdo->prepare("
+            INSERT INTO result_links 
+            (category_id, name, flag_emoji, close_time, result_time, result_url, result_label, sort_order, is_active) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE 
+            category_id=VALUES(category_id), 
+            flag_emoji=VALUES(flag_emoji),
+            close_time=VALUES(close_time), 
+            result_time=VALUES(result_time), 
+            result_url=VALUES(result_url), 
+            result_label=VALUES(result_label), 
+            sort_order=VALUES(sort_order), 
+            is_active=VALUES(is_active)
+        ");
+        $syncStmt->execute([$categoryId, $name, $flagEmoji, $closeTime, $resultTime, $resultUrl, $resultLabel, $sortOrder, $isActive]);
     } elseif ($action === 'delete') {
         $id = intval($_POST['id']);
         // ดึงชื่อหวยก่อนลบ เพื่อลบ result_links ที่ชื่อตรงกันด้วย
