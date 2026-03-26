@@ -128,6 +128,7 @@ require_once 'includes/header.php';
         <table class="w-full text-sm">
             <thead class="bg-gray-50 border-b">
                 <tr>
+                    <th class="px-3 py-2 text-left text-xs text-gray-500">ลำดับ</th>
                     <th class="px-3 py-2 text-left text-xs text-gray-500">ธง</th>
                     <th class="px-3 py-2 text-left text-xs text-gray-500">ชื่อ</th>
                     <th class="px-3 py-2 text-left text-xs text-gray-500">หมวด</th>
@@ -140,10 +141,11 @@ require_once 'includes/header.php';
                 </tr>
             </thead>
             <tbody>
-                <?php foreach ($links as $l):
+                <?php $rowNum = 1; foreach ($links as $l):
                     $flagUrl = getFlagForCountry($l['flag_emoji'], $l['name']);
                 ?>
                 <tr class="border-b hover:bg-gray-50">
+                    <td class="px-3 py-2 text-xs text-gray-400"><?= $rowNum++ ?></td>
                     <td class="px-3 py-2"><img src="<?= $flagUrl ?>" class="w-8 h-5 object-cover rounded border"></td>
                     <td class="px-3 py-2 font-medium text-gray-800"><?= htmlspecialchars($l['name']) ?></td>
                     <td class="px-3 py-2 text-xs text-gray-500"><?= htmlspecialchars($l['category_name']) ?></td>
