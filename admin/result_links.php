@@ -17,21 +17,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // ==========================================
 // Auto-Heal: ซิงค์ข้อมูลอัตโนมัติทุกครั้งที่เข้าหน้านี้
 // ==========================================
-// 1. ลบลิงค์ดูผลที่ไม่มีอยู่ในตารางหวยแล้วออก (กันค้าง)
-$pdo->exec("
-    DELETE rl FROM result_links rl 
-    LEFT JOIN lottery_types lt ON rl.name = lt.name 
-    WHERE lt.id IS NULL
-");
+try {
+    // 0. อัพเดทรหัสหมวดหมู่ให้ตรงกันล่วงหน้า (เผื่อหมวดหมู่ไม่ตรง)
+    $pdo->exec("
+        UPDATE result_links rl
+        JOIN lottery_types lt ON TRIM(rl.name) = TRIM(lt.name)
+        SET rl.category_id = lt.category_id
+        WHERE rl.category_id != lt.category_id
+    ");
 
-// 2. ดึงหวยที่เพิ่งเพิ่ม/ไม่เคยมีในหน้าลิงค์ดูผล เข้ามาใส่ให้อัตโนมัติ (กันตกหล่น)
-$pdo->exec("
-    INSERT IGNORE INTO result_links (category_id, name, flag_emoji, close_time, result_time, result_url, result_label, sort_order, is_active)
-    SELECT lt.category_id, lt.name, lt.flag_emoji, lt.close_time, lt.result_time, lt.result_url, lt.result_label, lt.sort_order, lt.is_active
-    FROM lottery_types lt
-    WHERE NOT EXISTS (SELECT 1 FROM result_links rl WHERE rl.name = lt.name)
-        AND lt.name IS NOT NULL AND trim(lt.name) != ''
-");
+    // 1. ลบข้อมูลใน result_links ที่ซ้ำซ้อนกันในตัวเอง (ชื่อเดียวกัน เก็บแค่ตัวแรกที่สร้างไว้)
+    $pdo->exec("
+        DELETE t1 FROM result_links t1
+        INNER JOIN result_links t2 
+        WHERE t1.id > t2.id AND TRIM(t1.name) = TRIM(t2.name)
+    ");
+
+    // 2. ลบลิงค์ดูผลที่ไม่มีอยู่ในชื่อหวยตารางจัดการหวยแล้วออก (กันค้าง)
+    $pdo->exec("
+        DELETE rl FROM result_links rl 
+        LEFT JOIN lottery_types lt ON TRIM(rl.name) = TRIM(lt.name) 
+        WHERE lt.id IS NULL
+    ");
+
+    // 3. ดึงหวยที่มีในจัดการหวย แต่ยังไม่มีในลิงค์ดูผล เข้ามาใส่ให้อัตโนมัติ (กันตกหล่น)
+    $pdo->exec("
+        INSERT IGNORE INTO result_links (category_id, name, flag_emoji, close_time, result_time, result_url, result_label, sort_order, is_active)
+        SELECT lt.category_id, TRIM(lt.name), lt.flag_emoji, lt.close_time, lt.result_time, lt.result_url, lt.result_label, lt.sort_order, lt.is_active
+        FROM lottery_types lt
+        WHERE NOT EXISTS (SELECT 1 FROM result_links rl WHERE TRIM(rl.name) = TRIM(lt.name))
+            AND lt.name IS NOT NULL AND TRIM(lt.name) != ''
+    ");
+} catch (Exception $e) {
+    // เงียบไว้ถ้า auto_heal มีปัญหา ไม่ให้กระทบการโหลดตาราง
+}
 
 
 $categories = $pdo->query("SELECT * FROM lottery_categories ORDER BY sort_order")->fetchAll();
