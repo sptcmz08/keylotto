@@ -437,56 +437,102 @@ $blockedRun = array_values($blockedRunMap);
 
 $flagUrl = getFlagForCountry($lottery['flag_emoji'], $lottery['name']);
 
-// คำนวณ drawDate + closeDateTime จาก open_time/close_time (เหมือน card listing)
+// คำนวณ drawDate + closeDateTime ตาม draw_schedule
 $today = date('Y-m-d');
 $yesterday = date('Y-m-d', strtotime('-1 day'));
 $tomorrow = date('Y-m-d', strtotime('+1 day'));
 $now = new DateTime();
 $openTime = $lottery['open_time'] ?? null;
 $closeTime = $lottery['close_time'] ?? null;
+$drawSchedule = $lottery['draw_schedule'] ?? 'daily';
 
-if ($openTime && $closeTime) {
-    $closeHour = intval(substr($closeTime, 0, 2));
-    $nowHour = intval(date('H'));
-    
-    // กรณีหวยข้ามเที่ยงคืน: close_time < 03:00
-    if ($closeHour < 3) {
-        if ($nowHour < 6) {
-            $calcDrawDate = $yesterday;
-            // openDT = เมื่อวาน open_time, closeDT = วันนี้ close_time
-            $openDT = new DateTime($yesterday . ' ' . $openTime);
-            $closeDT = new DateTime($today . ' ' . $closeTime);
-        } else {
-            $calcDrawDate = $today;
-            $openDT = new DateTime($today . ' ' . $openTime);
-            $closeDT = new DateTime($tomorrow . ' ' . $closeTime);
-        }
-    } else {
-        $openDT = new DateTime($today . ' ' . $openTime);
-        $closeDT = new DateTime($today . ' ' . $closeTime);
+if ($drawSchedule === 'daily' || empty($drawSchedule)) {
+    // === หวยรายวัน: ใช้ logic เดิม ===
+    if ($openTime && $closeTime) {
+        $closeHour = intval(substr($closeTime, 0, 2));
+        $nowHour = intval(date('H'));
         
-        if ($closeDT <= $openDT) {
-            if ($now < $closeDT) {
-                $calcDrawDate = $today;
-                $openDT->modify('-1 day');
+        if ($closeHour < 3) {
+            if ($nowHour < 6) {
+                $calcDrawDate = $yesterday;
+                $openDT = new DateTime($yesterday . ' ' . $openTime);
+                $closeDT = new DateTime($today . ' ' . $closeTime);
             } else {
-                $calcDrawDate = $tomorrow;
-                $closeDT->modify('+1 day');
+                $calcDrawDate = $today;
+                $openDT = new DateTime($today . ' ' . $openTime);
+                $closeDT = new DateTime($tomorrow . ' ' . $closeTime);
             }
         } else {
-            if ($now > $closeDT) {
-                $calcDrawDate = $tomorrow;
-                $openDT->modify('+1 day');
-                $closeDT->modify('+1 day');
+            $openDT = new DateTime($today . ' ' . $openTime);
+            $closeDT = new DateTime($today . ' ' . $closeTime);
+            
+            if ($closeDT <= $openDT) {
+                if ($now < $closeDT) {
+                    $calcDrawDate = $today;
+                    $openDT->modify('-1 day');
+                } else {
+                    $calcDrawDate = $tomorrow;
+                    $closeDT->modify('+1 day');
+                }
             } else {
+                if ($now > $closeDT) {
+                    $calcDrawDate = $tomorrow;
+                    $openDT->modify('+1 day');
+                    $closeDT->modify('+1 day');
+                } else {
+                    $calcDrawDate = $today;
+                }
+            }
+        }
+        $closeDateTime = $closeDT->format('Y-m-d H:i:s');
+    } else {
+        $calcDrawDate = $today;
+        $closeDateTime = $today . ' 23:59:59';
+    }
+} else {
+    // === หวยไม่ใช่รายวัน (1,16 / mon,tue,wed,thu,fri / mon,wed,fri) ===
+    $currentRound = getCurrentDrawDate($drawSchedule);
+    $nextRound = getNextDrawDate($drawSchedule);
+    
+    if ($currentRound === $today) {
+        // วันนี้เป็นวัน draw
+        if ($closeTime) {
+            $closeDT = new DateTime($today . ' ' . $closeTime);
+            if ($now < $closeDT) {
+                // ยังไม่ปิดรับ → งวดนี้
                 $calcDrawDate = $today;
+                $closeDateTime = $closeDT->format('Y-m-d H:i:s');
+            } else {
+                // เลย close_time แล้ว → ปิดรับ (รอเปิดเที่ยงคืน)
+                // งวดถัดไป แต่ยังแทงไม่ได้จนกว่าจะเที่ยงคืน
+                $calcDrawDate = $nextRound;
+                $closeDateTime = $closeDT->format('Y-m-d H:i:s'); // ปิดแล้ว
+            }
+        } else {
+            $calcDrawDate = $today;
+            $closeDateTime = $today . ' 23:59:59';
+        }
+    } else {
+        // วันนี้ไม่ใช่วัน draw → แทงสำหรับงวดถัดไป
+        // เช็คว่าเป็นวันหยุด (เสาร์-อาทิตย์) สำหรับหวย จ-ศ หรือไม่
+        $isWeekdaySchedule = preg_match('/^(mon|tue|wed|thu|fri|sat|sun)(,(mon|tue|wed|thu|fri|sat|sun))*$/i', $drawSchedule);
+        $todayDow = intval(date('N')); // 1=Mon, 7=Sun
+        
+        if ($isWeekdaySchedule && ($todayDow == 6 || $todayDow == 7)) {
+            // วันเสาร์-อาทิตย์ + หวยออก จ-ศ → ปิดรับ
+            $calcDrawDate = $nextRound;
+            // ปิดแล้ว → close ตั้งเป็นเมื่อวานเพื่อให้ UI แสดงว่าปิด
+            $closeDateTime = $yesterday . ' 23:59:59';
+        } else {
+            // วันธรรมดาที่ไม่ใช่วัน draw → เปิดรับสำหรับงวดถัดไป
+            $calcDrawDate = $nextRound;
+            if ($closeTime) {
+                $closeDateTime = $nextRound . ' ' . $closeTime;
+            } else {
+                $closeDateTime = $nextRound . ' 23:59:59';
             }
         }
     }
-    $closeDateTime = $closeDT->format('Y-m-d H:i:s');
-} else {
-    $calcDrawDate = $today;
-    $closeDateTime = $today . ' 23:59:59';
 }
 
 $drawDate = date('d-m-Y', strtotime($calcDrawDate));
