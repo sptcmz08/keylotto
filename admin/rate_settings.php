@@ -23,11 +23,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['form_action'] ?? '') === '
         $msg = 'กรุณาเลือกหวยอย่างน้อย 1 รายการ';
         $msgType = 'error';
     } else {
-        $stmtUpdate = $pdo->prepare("UPDATE pay_rates SET over_threshold = ?, over_pay_rate = ? WHERE lottery_type_id = ? AND bet_type = ?");
+        $stmtUpdate = $pdo->prepare("
+            INSERT INTO pay_rates (lottery_type_id, bet_type, rate_label, pay_rate, discount, min_bet, max_bet, max_per_number, over_threshold, over_pay_rate)
+            VALUES (?, ?, ?, ?, 0, 1, 500, 0, ?, ?)
+            ON DUPLICATE KEY UPDATE over_threshold = VALUES(over_threshold), over_pay_rate = VALUES(over_pay_rate)
+        ");
+        
+        $defaultRates = ['3top'=>800, '3tod'=>125, '2top'=>100, '2bot'=>100, 'run_top'=>3, 'run_bot'=>4];
+        $defaultLabels = ['3top'=>'3 ตัวบน', '3tod'=>'3 ตัวโต๊ด', '2top'=>'2 ตัวบน', '2bot'=>'2 ตัวล่าง', 'run_top'=>'วิ่งบน', 'run_bot'=>'วิ่งล่าง'];
+
         foreach ($lotteryIds as $lid) {
             $lid = intval($lid);
             foreach ($betTypes as $bt) {
-                $stmtUpdate->execute([$threshold, $overRates[$bt], $lid, $bt]);
+                $baseRate = $defaultRates[$bt] ?? 0;
+                $baseLabel = $defaultLabels[$bt] ?? '';
+                $stmtUpdate->execute([$lid, $bt, $baseLabel, $baseRate, $threshold, $overRates[$bt]]);
             }
         }
         $msg = 'บันทึกอัตราจ่ายเกินสำเร็จ (' . count($lotteryIds) . ' หวย)';
@@ -82,7 +92,6 @@ foreach ($overSummary as $r) {
 }
 
 // Which lotteries have pay_rates at all
-$hasRates = $pdo->query("SELECT DISTINCT lottery_type_id FROM pay_rates")->fetchAll(PDO::FETCH_COLUMN);
 
 $betTypeLabels = [
     '2top' => '2 ตัวบน', '2bot' => '2 ตัวล่าง',
@@ -176,11 +185,9 @@ require_once 'includes/header.php';
                     <button type="button" onclick="toggleCategory(this)" class="text-[10px] text-blue-500 hover:text-blue-700 cursor-pointer">เลือกกลุ่มนี้</button>
                 </div>
                 <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-1">
-                    <?php foreach ($catLotteries as $l): 
-                        $hasRate = in_array($l['id'], $hasRates);
-                    ?>
-                    <label class="flex items-center space-x-1.5 text-xs p-1.5 rounded hover:bg-green-50 cursor-pointer <?= $hasRate ? '' : 'opacity-40' ?>">
-                        <input type="checkbox" name="lottery_ids[]" value="<?= $l['id'] ?>" class="w-3.5 h-3.5 text-green-500 rounded lottery-cb" <?= !$hasRate ? 'disabled title="ยังไม่มีอัตราจ่าย"' : '' ?>>
+                    <?php foreach ($catLotteries as $l): ?>
+                    <label class="flex items-center space-x-1.5 text-xs p-1.5 rounded hover:bg-green-50 cursor-pointer">
+                        <input type="checkbox" name="lottery_ids[]" value="<?= $l['id'] ?>" class="w-3.5 h-3.5 text-green-500 rounded lottery-cb">
                         <img src="<?= getFlagForCountry($l['flag_emoji'] ?? '', $l['name']) ?>" class="inline-block w-4 h-3 object-cover rounded border">
                         <span class="truncate"><?= htmlspecialchars($l['name']) ?></span>
                         <?php if (isset($overByLottery[$l['id']])): ?>
@@ -191,7 +198,7 @@ require_once 'includes/header.php';
                 </div>
             </div>
             <?php endforeach; ?>
-            <p class="text-xs text-gray-400 mt-2"><i class="fas fa-info-circle mr-1"></i>⚡ = มีอัตราเกินแล้ว | หวยจาง = ยังไม่มีอัตราจ่าย (ต้องตั้งอัตราจ่ายก่อน)</p>
+            <p class="text-xs text-gray-400 mt-2"><i class="fas fa-info-circle mr-1"></i>⚡ = หวยทถูกกำหนดตั้งค่าอัตราจ่ายเกินไว้แล้ว</p>
         </div>
 
         <div class="flex justify-end">
@@ -270,12 +277,12 @@ require_once 'includes/header.php';
 
 <script>
 function toggleAll(master) {
-    document.querySelectorAll('.lottery-cb:not(:disabled)').forEach(cb => cb.checked = master.checked);
+    document.querySelectorAll('.lottery-cb').forEach(cb => cb.checked = master.checked);
 }
 
 function toggleCategory(btn) {
     const parent = btn.closest('.mb-3');
-    const cbs = parent.querySelectorAll('.lottery-cb:not(:disabled)');
+    const cbs = parent.querySelectorAll('.lottery-cb');
     const allChecked = [...cbs].every(cb => cb.checked);
     cbs.forEach(cb => cb.checked = !allChecked);
 }
