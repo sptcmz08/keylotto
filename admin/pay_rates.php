@@ -172,7 +172,7 @@ require_once 'includes/header.php';
         <!-- Lottery Checklist -->
         <div class="border rounded-lg p-3 mb-4">
             <div class="flex items-center justify-between mb-3">
-                <span class="text-sm font-bold text-gray-700"><i class="fas fa-check-square mr-1 text-green-600"></i>เลือกหวยที่ต้องการใช้อัตราจ่ายนี้</span>
+                <span class="text-sm font-bold text-gray-700"><i class="fas fa-check-square mr-1 text-green-600"></i>เลือกหวยที่ต้องการใช้อัตราจ่ายนี้ <span class="text-xs text-gray-500 font-normal ml-1">(ทั้งหมด <?= count($lotteries) ?> รายการ)</span></span>
                 <label class="flex items-center space-x-2 text-sm cursor-pointer bg-green-100 px-3 py-1 rounded-full hover:bg-green-200 transition">
                     <input type="checkbox" id="selectAll" class="w-4 h-4 text-green-500 rounded" onchange="toggleAll(this)">
                     <span class="text-green-700 font-medium">เลือกทั้งหมด</span>
