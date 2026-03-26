@@ -41,7 +41,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['form_action'] ?? '') === '
 }
 
 // Get all lotteries grouped by category
-$lotteries = $pdo->query("SELECT lt.*, lc.name as category_name FROM lottery_types lt JOIN lottery_categories lc ON lt.category_id = lc.id WHERE lt.is_active = 1 ORDER BY lc.sort_order, lt.sort_order")->fetchAll();
+$lotteries = $pdo->query("SELECT lt.*, lc.name as category_name FROM lottery_types lt JOIN lottery_categories lc ON lt.category_id = lc.id ORDER BY lc.sort_order, lt.sort_order")->fetchAll();
 $categories = [];
 foreach ($lotteries as $l) {
     $categories[$l['category_name']][] = $l;
@@ -181,6 +181,7 @@ require_once 'includes/header.php';
                     ?>
                     <label class="flex items-center space-x-1.5 text-xs p-1.5 rounded hover:bg-green-50 cursor-pointer <?= $hasRate ? '' : 'opacity-40' ?>">
                         <input type="checkbox" name="lottery_ids[]" value="<?= $l['id'] ?>" class="w-3.5 h-3.5 text-green-500 rounded lottery-cb" <?= !$hasRate ? 'disabled title="ยังไม่มีอัตราจ่าย"' : '' ?>>
+                        <img src="<?= getFlagForCountry($l['flag_emoji'] ?? '', $l['name']) ?>" class="inline-block w-4 h-3 object-cover rounded border">
                         <span class="truncate"><?= htmlspecialchars($l['name']) ?></span>
                         <?php if (isset($overByLottery[$l['id']])): ?>
                         <span class="text-red-500 text-[9px]">⚡</span>
