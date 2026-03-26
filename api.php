@@ -98,7 +98,7 @@ try {
             $betNumber = date('YmdHis') . rand(10, 99);
             
             // คำนวณ drawDate ตาม draw_schedule
-            $drawSchedule = $lottery['draw_schedule'] ?? 'daily';
+            $drawSchedule = normalizeSchedule($lottery['draw_schedule'] ?? 'daily');
             $today = date('Y-m-d');
             $yesterday = date('Y-m-d', strtotime('-1 day'));
             $tomorrow = date('Y-m-d', strtotime('+1 day'));

@@ -44,26 +44,23 @@ $SLUG_TO_LOTTERY_NAME = [
     'hanoi-asean'        => 'ฮานอยอาเซียน',
     'hanoi-hd'           => 'ฮานอย HD',
     'hanoi-tv'           => 'ฮานอย TV',
-    'hanoi-star'         => 'ฮานอยสตาร์',
+    'hanoi-star'         => 'ฮานอย สตาร์',
     'hanoi-samakki'      => 'ฮานอยสามัคคี',
-    'hanoi-chinese-ny'   => 'ฮานอยตรุษจีน',
     'hanoi-pattana'      => 'ฮานอยพัฒนา',
-    'hanoi-extra'        => 'ฮานอย EXTRA',
+    'hanoi-extra'        => 'ฮานอย Extra',
     'lao-vip'            => 'ลาว VIP',
     'lao-star'           => 'ลาวสตาร์',
     'lao-star-vip'       => 'ลาวสตาร์ VIP',
     'lao-samakki'        => 'ลาวสามัคคี',
     'lao-samakki-vip'    => 'ลาวสามัคคี VIP',
     'lao-pattana'        => 'ลาวพัฒนา',
-    'lao-pratuchai'      => 'ลาวประตูชัย',
-    'lao-santiphap'      => 'ลาวสันติภาพ',
-    'lao-prachachon'     => 'ประชาชนลาว',
-    'lao-extra'          => 'ลาว EXTRA',
+    'lao-extra'          => 'ลาว Extra',
     'lao-tv'             => 'ลาว TV',
     'lao-hd'             => 'ลาว HD',
     'lao-tai'            => 'ลาวใต้',
     'lao-asean'          => 'ลาวอาเซียน',
     'lao-redcross'       => 'ลาวกาชาด',
+    'malaysia'           => 'หวยมาเลเซีย',
 
     // === หุ้น VIP (จาก Raakaadee) ===
     'dowjones-vip'           => 'ดาวโจนส์ VIP',
@@ -73,15 +70,14 @@ $SLUG_TO_LOTTERY_NAME = [
     'nikkei-morning-vip'     => 'นิเคอิเช้า VIP',
     'nikkei-afternoon-vip'   => 'นิเคอิบ่าย VIP',
     'china-morning-vip'      => 'จีนเช้า VIP',
-    'china-afternoon-vip'    => 'จีนบ่าย VIP',
     'hangseng-morning-vip'   => 'ฮั่งเส็งเช้า VIP',
-    'hangseng-afternoon-vip' => 'ฮั่งเส็งบ่าย VIP',
+    'hangseng-afternoon-vip' => 'อั่งเส็งบ่าย VIP',
     'taiwan-vip'             => 'ไต้หวัน VIP',
     'singapore-vip'          => 'สิงคโปร์ VIP',
     'uk-vip'                 => 'อังกฤษ VIP',
     'korea-vip'              => 'เกาหลี VIP',
 
-    // === หุ้นปกติ (จาก Raakaadee — แทน ManyCai) ===
+    // === หุ้นปกติ (จาก Raakaadee) ===
     'nikkei-morning'     => 'นิเคอิ - เช้า',
     'nikkei-afternoon'   => 'นิเคอิ - บ่าย',
     'china-morning'      => 'หุ้นจีน - เช้า',
@@ -100,14 +96,11 @@ $SLUG_TO_LOTTERY_NAME = [
     'thai-stock'         => 'หุ้นไทย - เย็น',
 
     // === หวยไทย ===
-    'thai'               => 'รัฐบาลไทย',
-    'baac'               => 'ธกส',
-    'gsb'                => 'ออมสิน',
-    'gsb-1'              => 'ออมสิน',
-    'gsb-2'              => 'ออมสิน',
-
-    // === อื่นๆ ===
-    'rasi-12'            => 'หวย 12 ราศี',
+    'thai'               => 'หวยรัฐบาลไทย',
+    'baac'               => 'หวย ธกส.',
+    'gsb'                => 'หวยออมสิน',
+    'gsb-1'              => 'หวยออมสิน',
+    'gsb-2'              => 'หวยออมสิน',
 ];
 
 // =============================================

@@ -159,13 +159,39 @@ function validateCsrf() {
 // Draw Schedule — คำนวณวันที่งวดปัจจุบัน
 // =============================================
 /**
+ * แปลง draw_schedule จาก format ใหม่เป็น format มาตรฐาน
+ * 1st_16th → 1,16 | 16th → 16 | mon_wed_fri → mon,wed,fri | weekday → mon,tue,wed,thu,fri
+ */
+function normalizeSchedule($schedule) {
+    if (empty($schedule) || $schedule === 'daily') return $schedule;
+    
+    // weekday → mon-fri
+    if ($schedule === 'weekday') return 'mon,tue,wed,thu,fri';
+    
+    // 1st_16th → 1,16 | 16th → 16
+    if (preg_match('/\d+(st|nd|rd|th)/', $schedule)) {
+        $parts = preg_split('/[_,]/', $schedule);
+        $days = [];
+        foreach ($parts as $p) {
+            $d = intval(preg_replace('/[^0-9]/', '', $p));
+            if ($d > 0) $days[] = $d;
+        }
+        return implode(',', $days);
+    }
+    
+    // mon_wed_fri → mon,wed,fri (underscore → comma)
+    if (preg_match('/^[a-z]{3}(_[a-z]{3})*$/i', $schedule)) {
+        return str_replace('_', ',', strtolower($schedule));
+    }
+    
+    return $schedule;
+}
+
+/**
  * คำนวณวันที่งวดปัจจุบันหรือล่าสุด ตาม draw_schedule
- * 
- * @param string $schedule  'daily', '1,16', 'mon,wed,fri', etc.
- * @param string|null $refDate  วันอ้างอิง (default: วันนี้)
- * @return string  Y-m-d format
  */
 function getCurrentDrawDate($schedule, $refDate = null) {
+    $schedule = normalizeSchedule($schedule);
     $ref = $refDate ? strtotime($refDate) : time();
     $refYmd = date('Y-m-d', $ref);
     
@@ -230,6 +256,7 @@ function getCurrentDrawDate($schedule, $refDate = null) {
  * คำนวณวันที่งวดถัดไป
  */
 function getNextDrawDate($schedule, $refDate = null) {
+    $schedule = normalizeSchedule($schedule);
     $ref = $refDate ? strtotime($refDate) : time();
     
     if (empty($schedule) || $schedule === 'daily') {

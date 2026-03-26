@@ -367,7 +367,7 @@ require_once 'includes/header.php';
                     // หลังผลออก/เลย close_time → สลับแสดงงวดถัดไป + ซ่อนเลขเก่า
                     // หวยรายสัปดาห์ (mon-fri) แสดงผลปกติเหมือน daily
                     $roundDate = $lt['current_round_date'];
-                    $ltSchedule = $lt['draw_schedule'] ?? 'daily';
+                    $ltSchedule = normalizeSchedule($lt['draw_schedule'] ?? 'daily');
                     $showingNextRound = false;
                     $isMonthlySchedule = preg_match('/^\d+(,\d+)*$/', $ltSchedule); // เช่น 1,16
                     

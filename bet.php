@@ -444,7 +444,7 @@ $tomorrow = date('Y-m-d', strtotime('+1 day'));
 $now = new DateTime();
 $openTime = $lottery['open_time'] ?? null;
 $closeTime = $lottery['close_time'] ?? null;
-$drawSchedule = $lottery['draw_schedule'] ?? 'daily';
+$drawSchedule = normalizeSchedule($lottery['draw_schedule'] ?? 'daily');
 
 if ($drawSchedule === 'daily' || empty($drawSchedule)) {
     // === หวยรายวัน: ใช้ logic เดิม ===
