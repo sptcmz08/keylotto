@@ -126,11 +126,11 @@ require_once 'includes/header.php';
                 </tr>
             </thead>
             <tbody>
-                <?php foreach ($lotteries as $l):
+                <?php $rowNum = 1; foreach ($lotteries as $l):
                     $flagUrl = getFlagForCountry($l['flag_emoji'], $l['name']);
                 ?>
                 <tr class="border-b hover:bg-gray-50 transition">
-                    <td class="px-3 py-2 text-xs text-gray-400"><?= $l['id'] ?></td>
+                    <td class="px-3 py-2 text-xs text-gray-400"><?= $rowNum++ ?></td>
                     <td class="px-3 py-2"><img src="<?= $flagUrl ?>" class="w-8 h-5 object-cover rounded border"></td>
                     <td class="px-3 py-2 font-medium text-gray-800"><?= htmlspecialchars($l['name']) ?></td>
                     <td class="px-3 py-2 text-xs text-gray-500"><?= $categoryIcons[$l['category_name']] ?? '🏳️' ?> <?= htmlspecialchars($l['category_name']) ?></td>

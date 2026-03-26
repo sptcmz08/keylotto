@@ -172,14 +172,17 @@ require_once 'includes/header.php';
 
                     <td class="px-3 py-2 text-right text-xs font-bold text-green-700"><?= formatMoney($b['net_amount']) ?></td>
                     <td class="px-3 py-2 text-center">
-                        <?php 
-                        switch ($b['status']) {
-                            case 'won': echo '<span class="text-[12px] text-green-600 font-bold">ถูกรางวัล</span>'; break;
-                            case 'lost': echo '<span class="text-[12px] text-red-400">ไม่ถูก</span>'; break;
-                            case 'cancelled': echo '<span class="text-[12px] text-red-500 font-bold">ยกเลิก</span>'; break;
-                            default: echo '<span class="text-[12px] text-blue-500">รอผล</span>'; break;
-                        }
-                        ?>
+                        <form method="POST" class="inline">
+                            <?= csrfField() ?>
+                            <input type="hidden" name="form_action" value="update_status">
+                            <input type="hidden" name="id" value="<?= $b['id'] ?>">
+                            <select name="status" onchange="this.form.submit()" class="border rounded px-1 py-0.5 text-[11px] outline-none <?= $b['status'] === 'won' ? 'text-green-600' : ($b['status'] === 'cancelled' ? 'text-red-500' : 'text-gray-600') ?>">
+                                <option value="pending" <?= $b['status'] === 'pending' ? 'selected' : '' ?>>รอผล</option>
+                                <option value="won" <?= $b['status'] === 'won' ? 'selected' : '' ?>>ถูกรางวัล</option>
+                                <option value="lost" <?= $b['status'] === 'lost' ? 'selected' : '' ?>>ไม่ถูก</option>
+                                <option value="cancelled" <?= $b['status'] === 'cancelled' ? 'selected' : '' ?>>ยกเลิก</option>
+                            </select>
+                        </form>
                     </td>
                     <td class="px-3 py-2 text-center whitespace-nowrap">
                         <button onclick="viewBetDetail(<?= $b['id'] ?>)" class="text-blue-500 hover:text-blue-700 mr-1" title="ดูรายละเอียด"><i class="fas fa-eye"></i></button>
