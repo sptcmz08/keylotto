@@ -363,8 +363,13 @@ require_once 'includes/header.php';
                     $hasResultForRound = $lt['has_result_current_round'];
                     $hasAnyResult = !empty($lt['three_top']);
                     
-                    // แสดงวันที่งวดปัจจุบัน
-                    $displayDate = date('d-m-Y', strtotime($lt['current_round_date']));
+                    // แสดงวันที่งวด — หวยไม่ใช่รายวัน: ถ้ามีผลงวดนี้แล้ว → แสดงงวดถัดไป
+                    $roundDate = $lt['current_round_date'];
+                    $ltSchedule = $lt['draw_schedule'] ?? 'daily';
+                    if ($ltSchedule !== 'daily' && !empty($ltSchedule) && $hasResultForRound) {
+                        $roundDate = getNextDrawDate($ltSchedule);
+                    }
+                    $displayDate = date('d-m-Y', strtotime($roundDate));
                     
                     // สถานะ realtime 5 ระดับ (อิงจากงวดปัจจุบัน):
                     // 1. ปิดรับแทง (แดง) = Admin กดปิด

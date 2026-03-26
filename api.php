@@ -97,50 +97,72 @@ try {
             $netAmount = $totalAmount;
             $betNumber = date('YmdHis') . rand(10, 99);
             
-            // คำนวณ drawDate จาก open_time/close_time (ไม่ใช้ lottery_types.draw_date ที่อาจ stale)
+            // คำนวณ drawDate ตาม draw_schedule
+            $drawSchedule = $lottery['draw_schedule'] ?? 'daily';
             $today = date('Y-m-d');
             $yesterday = date('Y-m-d', strtotime('-1 day'));
             $tomorrow = date('Y-m-d', strtotime('+1 day'));
             $now = new DateTime();
-            $openTime = $lottery['open_time'] ?? null;
             $closeTime = $lottery['close_time'] ?? null;
             
-            if ($openTime && $closeTime) {
-                $closeHour = intval(substr($closeTime, 0, 2));
-                $nowHour = intval(date('H'));
-                
-                // กรณีหวยข้ามเที่ยงคืน: close_time < 03:00
-                // เช่น ดาวโจนส์ VIP close=00:10
-                if ($closeHour < 3) {
-                    // หวยข้ามเที่ยงคืน → draw_date เป็นของเมื่อวานเสมอ
-                    // (เปิดรับก่อนเที่ยงคืน ปิดหลังเที่ยงคืน → งวดเดียวกัน = วันเมื่อวาน)
-                    if ($nowHour < 6) {
-                        // ตอนนี้ 00:00-05:59 → งวดเป็นของเมื่อวาน
-                        $drawDate = $yesterday;
+            if ($drawSchedule === 'daily' || empty($drawSchedule)) {
+                // === หวยรายวัน: ใช้ logic เดิม (open_time/close_time) ===
+                $openTime = $lottery['open_time'] ?? null;
+                if ($openTime && $closeTime) {
+                    $closeHour = intval(substr($closeTime, 0, 2));
+                    $nowHour = intval(date('H'));
+                    
+                    // กรณีหวยข้ามเที่ยงคืน: close_time < 03:00
+                    if ($closeHour < 3) {
+                        if ($nowHour < 6) {
+                            $drawDate = $yesterday;
+                        } else {
+                            $drawDate = $today;
+                        }
                     } else {
-                        // ตอนนี้ 06:00+ → งวดเป็นของวันนี้ (จะเปิดรับตอน 20:00+)
-                        $drawDate = $today;
+                        $openDT = new DateTime($today . ' ' . $openTime);
+                        $closeDT = new DateTime($today . ' ' . $closeTime);
+                        
+                        if ($closeDT <= $openDT) {
+                            if ($now < $closeDT) {
+                                $drawDate = $today;
+                            } else {
+                                $drawDate = $tomorrow;
+                            }
+                        } else {
+                            if ($now > $closeDT) {
+                                $drawDate = $tomorrow;
+                            } else {
+                                $drawDate = $today;
+                            }
+                        }
                     }
                 } else {
-                    $openDT = new DateTime($today . ' ' . $openTime);
-                    $closeDT = new DateTime($today . ' ' . $closeTime);
-                    
-                    if ($closeDT <= $openDT) {
-                        if ($now < $closeDT) {
-                            $drawDate = $today;
-                        } else {
-                            $drawDate = $tomorrow;
-                        }
-                    } else {
-                        if ($now > $closeDT) {
-                            $drawDate = $tomorrow;
-                        } else {
-                            $drawDate = $today;
-                        }
-                    }
+                    $drawDate = $today;
                 }
             } else {
-                $drawDate = $today;
+                // === หวยไม่ใช่รายวัน (เช่น 1,16 / mon,wed,fri) ===
+                // หาวัน draw ปัจจุบัน (งวดล่าสุดที่ ≤ วันนี้)
+                $currentRound = getCurrentDrawDate($drawSchedule);
+                
+                // ถ้าวันนี้ไม่ใช่วัน draw → งวดถัดไป
+                if ($currentRound !== $today) {
+                    $drawDate = getNextDrawDate($drawSchedule);
+                } else {
+                    // วันนี้เป็นวัน draw → เช็คว่าเลย close_time หรือยัง
+                    if ($closeTime) {
+                        $closeDT = new DateTime($today . ' ' . $closeTime);
+                        if ($now > $closeDT) {
+                            // เลย close_time แล้ว → งวดถัดไป
+                            $drawDate = getNextDrawDate($drawSchedule);
+                        } else {
+                            // ยังไม่ปิดรับ → งวดนี้
+                            $drawDate = $today;
+                        }
+                    } else {
+                        $drawDate = $today;
+                    }
+                }
             }
 
             // =============================================
