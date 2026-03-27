@@ -490,14 +490,14 @@ require_once 'includes/header.php';
                 <tr>
                     <td>
                         <?php 
-                        // สามารถแทงได้เมื่อ: ไม่โดนปิดมือ (isBetClosed) และยังไม่ถึงเวลาออกผล/ยังรอออกผลอยู่
-                        $canBet = !$isBetClosed && in_array($statusClass, ['status-waiting', 'status-drawing', 'status-open']);
+                        // สามารถแทงได้เมื่อ: ไม่โดนปิดมือ, ยังไม่เลย close_time, และยังรอออกผลอยู่
+                        $canBet = !$isBetClosed && !$pastCloseTime && in_array($statusClass, ['status-waiting', 'status-drawing', 'status-open']);
                         
                         // ถ้ารอออกผลงวดถัดไป (รายเดือน 1,16) ก็แทงได้
                         if ($showingNextRound) $canBet = true;
                         
-                        // ถ้าใกล้ออกผล (status-drawing) แต่เลย close_time ไปแล้ว = แทงไม่ได้
-                        if ($statusClass === 'status-drawing' && $pastCloseTime) {
+                        // ถ้า pastCloseTime แน่นอน = ปิดรับ
+                        if ($pastCloseTime) {
                             $canBet = false;
                         }
                         
