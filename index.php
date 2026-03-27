@@ -489,10 +489,30 @@ require_once 'includes/header.php';
                 ?>
                 <tr>
                     <td>
+                        <?php 
+                        // สามารถแทงได้เมื่อ: ไม่โดนปิดมือ (isBetClosed) และยังไม่ถึงเวลาออกผล/ยังรอออกผลอยู่
+                        $canBet = !$isBetClosed && in_array($statusClass, ['status-waiting', 'status-drawing', 'status-open']);
+                        
+                        // ถ้ารอออกผลงวดถัดไป (รายเดือน 1,16) ก็แทงได้
+                        if ($showingNextRound) $canBet = true;
+                        
+                        // ถ้าใกล้ออกผล (status-drawing) แต่เลย close_time ไปแล้ว = แทงไม่ได้
+                        if ($statusClass === 'status-drawing' && $pastCloseTime) {
+                            $canBet = false;
+                        }
+                        
+                        if ($canBet): 
+                        ?>
                         <a href="bet.php?id=<?= $lt['id'] ?>" class="flex items-center space-x-2 hover:opacity-80">
                             <img src="<?= $flagUrl ?>" alt="flag" class="flag-img">
                             <span class="lottery-name"><?= htmlspecialchars($lotteryName) ?></span>
                         </a>
+                        <?php else: ?>
+                        <div class="flex items-center space-x-2 opacity-60 cursor-not-allowed" title="ปิดรับแทงแล้ว">
+                            <img src="<?= $flagUrl ?>" alt="flag" class="flag-img">
+                            <span class="lottery-name"><?= htmlspecialchars($lotteryName) ?></span>
+                        </div>
+                        <?php endif; ?>
                     </td>
                     <td class="text-center text-gray-600 text-[12px]"><?= $displayDate ?></td>
                     <td class="text-center">
