@@ -403,47 +403,65 @@ require_once 'includes/header.php';
         <table class="wl-table">
             <thead><tr>
                 <th style="width:30px;">#</th>
-                <?php foreach ($betTypes as $bt): ?><th colspan="2"><?= $betTypeLabels[$bt] ?></th><?php endforeach; ?>
                 <th style="background:#1b5e20; min-width:90px;">รวม</th>
+                <?php foreach ($betTypes as $bt): ?><th colspan="2"><?= $betTypeLabels[$bt] ?></th><?php endforeach; ?>
             </tr></thead>
             <tbody>
-                <?php $colSpan = 1 + count($betTypes) * 2 + 1; ?>
-                <tr class="wl-summary wl-summary-buy">
-                    <td class="label-cell label-buy">&#x1F4B0; ซื้อ</td>
+                <?php
+                $colSpan = 2 + count($betTypes) * 2;
+                // Commission: sum discount from bets table
+                $commStmt = $pdo->prepare("SELECT COALESCE(SUM(discount_amount),0) as total_discount FROM bets WHERE draw_date = ? AND lottery_type_id = ? AND status != 'cancelled'");
+                $commStmt->execute([$selectedDate, $selectedLottery]);
+                $totalDiscount = floatval($commStmt->fetchColumn());
+                $grandReceive = $grandBuy - $totalDiscount;
+                ?>
+                <!-- ซื้อ -->
+                <tr class="wl-summary" style="background:#f0fff0;">
+                    <td class="label-cell" style="color:#1b5e20;">&#x1F4B0; ซื้อ</td>
+                    <td class="num-cell sum-num" style="background:#c8e6c9; font-size:17px; color:#1b5e20;"><?= number_format($grandBuy,2) ?></td>
+                    <?php foreach ($betTypes as $bt): ?>
+                    <td class="num-cell sum-num" colspan="2"><?= number_format($summary[$bt]['buy'],2) ?></td>
+                    <?php endforeach; ?>
+                </tr>
+                <!-- คอมฯ -->
+                <tr class="wl-summary" style="background:#fff8e1;">
+                    <td class="label-cell" style="color:#e65100;">คอมฯ</td>
+                    <td class="num-cell sum-num" style="color:#e65100;"><?= $totalDiscount > 0 ? number_format(-$totalDiscount,2) : '0.00' ?></td>
+                    <?php foreach ($betTypes as $bt): ?>
+                    <td class="num-cell" colspan="2" style="color:#e65100;"><?= $totalDiscount > 0 ? number_format(-$totalDiscount / count($betTypes),2) : '0.00' ?></td>
+                    <?php endforeach; ?>
+                </tr>
+                <!-- รับ -->
+                <tr class="wl-summary" style="background:#e8f5e9;">
+                    <td class="label-cell" style="color:#1b5e20;">&#x1F4E5; รับ</td>
+                    <td class="num-cell sum-num" style="background:#a5d6a7; font-size:17px; color:#1b5e20; font-weight:bold;"><?= number_format($grandReceive,2) ?></td>
                     <?php foreach ($betTypes as $bt): ?>
                     <td class="num-cell sum-num pos" colspan="2"><?= number_format($summary[$bt]['buy'],2) ?></td>
                     <?php endforeach; ?>
-                    <td class="num-cell sum-num" style="background:#c8e6c9; font-size:17px; color:#1b5e20;"><?= number_format($grandBuy,2) ?></td>
                 </tr>
-                <tr class="wl-summary wl-summary-recv">
-                    <td class="label-cell label-buy">&#x1F4E5; รับ</td>
-                    <?php foreach ($betTypes as $bt): ?>
-                    <td class="num-cell sum-num pos" colspan="2"><?= number_format($summary[$bt]['buy'],2) ?></td>
-                    <?php endforeach; ?>
-                    <td class="num-cell sum-num" style="background:#c8e6c9; font-size:17px; color:#1b5e20;"><?= number_format($grandBuy,2) ?></td>
-                </tr>
-                <tr class="wl-summary wl-summary-pay">
-                    <td class="label-cell label-pay">&#x1F4B8; จ่าย</td>
+                <!-- จ่าย -->
+                <tr class="wl-summary" style="background:#fff0f0;">
+                    <td class="label-cell" style="color:#b71c1c;">&#x1F4B8; จ่าย</td>
+                    <td class="num-cell sum-num" style="background:#ffcdd2; font-size:17px; color:#b71c1c;"><?= $grandWorstPayout > 0 ? number_format(-$grandWorstPayout,2) : '&mdash;' ?></td>
                     <?php foreach ($betTypes as $bt): ?>
                     <td class="num-cell sum-num neg" colspan="2"><?= $summary[$bt]['worst_payout']>0 ? number_format(-$summary[$bt]['worst_payout'],2) : '&mdash;' ?></td>
                     <?php endforeach; ?>
-                    <td class="num-cell sum-num" style="background:#ffcdd2; font-size:17px; color:#b71c1c;"><?= $grandWorstPayout > 0 ? number_format(-$grandWorstPayout,2) : '&mdash;' ?></td>
                 </tr>
-                <tr class="wl-summary wl-summary-fight">
-                    <td class="label-cell label-fight">&#x1F6E1; ตั้งสู้ <button class="btn-save-fight" onclick="saveFightLimits()">&#x1F4BE; บันทึก</button></td>
+                <!-- ตั้งสู้ -->
+                <tr class="wl-summary" style="background:#fffde7;">
+                    <td class="label-cell" style="color:#e65100;">&#x1F6E1; ตั้งสู้ <button class="btn-save-fight" onclick="saveFightLimits()">&#x1F4BE; บันทึก</button></td>
+                    <td></td>
                     <?php foreach ($betTypes as $bt): ?>
                     <td style="text-align:center; padding:5px 4px;" colspan="2">
                         <input type="text" class="fight-input" id="fight-<?= $bt ?>" value="<?= number_format($fightLimits[$bt],0,'','') ?>">
                     </td>
                     <?php endforeach; ?>
-                    <td></td>
                 </tr>
                 <tr style="height:4px; background: linear-gradient(to right,#00a65a,#43a047);"><td colspan="<?= $colSpan ?>"></td></tr>
 
                 <?php if ($maxDataRows === 0): ?>
                 <tr><td colspan="<?= $colSpan ?>" style="padding:20px; text-align:center; color:#999;">ไม่มีข้อมูลในงวดนี้</td></tr>
                 <?php else:
-                    $fightLimitsJs = json_encode($fightLimits);
                     for ($i = 0; $i < $maxDataRows; $i++):
                         // Check if any column exceeds fight limit
                         $hasExceed = false;
@@ -454,6 +472,7 @@ require_once 'includes/header.php';
                 ?>
                 <tr class="<?= $hasExceed ? 'exceed-limit' : ($i%2===0?'wl-row-even':'wl-row-odd') ?>" onmouseover="this.style.background='#e3f2fd'" onmouseout="this.style.background=''">
                     <td class="row-num-col"><?= $i+1 ?></td>
+                    <td></td>
                     <?php foreach ($betTypes as $bt):
                         $d = $betTypeRows[$bt][$i] ?? null;
                         $limit = $fightLimits[$bt];
@@ -464,14 +483,13 @@ require_once 'includes/header.php';
                         <span class="number-badge"><?= htmlspecialchars($d['number']) ?></span>
                     </td>
                     <td class="data-amount" onclick="drillDownType('<?= htmlspecialchars($d['number']) ?>','<?= $bt ?>')"
-                        <?= $exceeds ? 'style="background:#ffcdd2; color:#b71c1c;"' : '' ?>>
-                        <?= number_format($d['amount'],2) ?>
+                        <?php if ($exceeds): ?>style="background:#fff59d; color:#b71c1c;"<?php endif; ?>>
+                        <?= $d['payout'] > 0 ? number_format(-$d['payout'],2) : number_format($d['amount'],2) ?>
                     </td>
                     <?php else: ?>
                     <td></td><td></td>
                     <?php endif; ?>
                     <?php endforeach; ?>
-                    <td></td>
                 </tr>
                 <?php endfor; endif; ?>
             </tbody>
