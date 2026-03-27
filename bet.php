@@ -98,8 +98,8 @@ if (!$lotteryId) {
                 }
             }
             
-            $openISO = $openDT->format('Y-m-d\TH:i:s');
-            $closeISO = $closeDT->format('Y-m-d\TH:i:s');
+            $openISO = $openDT->format('Y-m-d\TH:i:s+07:00');
+            $closeISO = $closeDT->format('Y-m-d\TH:i:s+07:00');
             $openDisplay = $openDT->format('d/m/y H:i:s');
         } else {
             $drawDate = $today;
@@ -278,11 +278,10 @@ if (!$lotteryId) {
         // เลยเวลาปิดแล้ว
         if (minPastClose <= CLOSE_GRACE_MINUTES) {
             // เพิ่งปิด ≤ 10 นาที → แสดงสีเทา
-            const remain = Math.ceil(CLOSE_GRACE_MINUTES - minPastClose);
             return { status: 'closed', label: 'ปิดรับแล้ว', hide: false };
         }
         
-        // เลย 10 นาทีแล้ว → ซ่อนไปเลย จนกว่า 2 AM จะ reload หน้าใหม่
+        // เลย 10 นาทีแล้ว → ซ่อนไปเลย จนกว่าตี 4 จะ reload หน้าใหม่
         return { status: 'waiting', label: 'รอเปิดรอบใหม่', hide: true };
     }
 
@@ -313,7 +312,7 @@ if (!$lotteryId) {
                 return;
             }
             
-            card.style.display = '';
+            card.style.display = 'flex'; // Ensure it's visible if not hidden
             statusEl.textContent = 'สถานะ';
             textEl.textContent = info.label;
             
@@ -335,7 +334,11 @@ if (!$lotteryId) {
         // จัดเรียงในแต่ละหมวด: เขียว(0) → เหลือง(1) → เทา(2)
         document.querySelectorAll('.category-section .grid').forEach(grid => {
             const items = Array.from(grid.children);
-            items.sort((a, b) => (a.dataset.sortOrder || '1') - (b.dataset.sortOrder || '1'));
+            items.sort((a, b) => {
+                const orderA = parseInt(a.dataset.sortOrder || '1');
+                const orderB = parseInt(b.dataset.sortOrder || '1');
+                return orderA - orderB;
+            });
             items.forEach(item => grid.appendChild(item));
         });
     }
