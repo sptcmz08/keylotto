@@ -269,45 +269,38 @@ require_once 'includes/header.php';
     .date-dropdown a:hover { background: #e8f5e9; }
     .date-dropdown a.active { background: #fff9c4; font-weight: bold; }
     .status-badge { font-size: 10px; padding: 2px 8px; border-radius: 10px; font-weight: bold; color: #fff; }
-    .wl-table { border-collapse: collapse; width: 100%; font-size: 14px; font-family: Tahoma, Arial, sans-serif; }
-    .wl-table th, .wl-table td { border: 1px solid #a5d6a7; padding: 5px 7px; }
-    .wl-table thead th { background: #00a65a; color: #fff; font-weight: bold; text-align: center; padding: 8px 6px; white-space: nowrap; font-size: 14px; letter-spacing: 0.3px; }
-    .wl-summary td { font-weight: bold; white-space: nowrap; padding: 7px 8px; }
-    .wl-summary-buy   { background: #f0fff0; }
-    .wl-summary-recv  { background: #e8f5e9; }
-    .wl-summary-pay   { background: #fff0f0; }
-    .wl-summary-fight { background: #fffde7; }
-    .label-cell { text-align: left; padding-left: 10px !important; min-width: 100px; font-size: 14px; font-weight: bold; }
-    .label-buy   { color: #1b5e20; }
-    .label-pay   { color: #b71c1c; }
-    .label-fight { color: #e65100; }
-    .neg { color: #c62828; font-weight: bold; }
-    .pos { color: #1b5e20; font-weight: bold; }
-    .num-cell { text-align: right; font-family: 'Courier New', monospace; font-size: 15px; padding-right: 10px !important; }
-    .sum-num  { font-size: 16px; font-family: 'Courier New', monospace; font-weight: bold; }
+    .wl-table { border-collapse: collapse; width: 100%; font-size: 13px; font-family: Tahoma, Arial, sans-serif; }
+    .wl-table th, .wl-table td { border: 1px solid #c8e6c9; padding: 4px 6px; }
+    .wl-table thead th { background: #00a65a; color: #fff; font-weight: bold; text-align: center; padding: 6px; white-space: nowrap; font-size: 13px; }
+    .wl-summary td { font-weight: bold; white-space: nowrap; padding: 4px 8px; font-size: 13px; }
+    .label-cell { text-align: left; padding-left: 8px !important; min-width: 70px; font-size: 13px; font-weight: bold; }
+    .neg { color: #c62828; }
+    .pos { color: #1b5e20; }
+    .num-cell { text-align: right; font-family: 'Courier New', monospace; font-size: 13px; padding-right: 8px !important; }
+    .sum-num  { font-family: 'Courier New', monospace; font-weight: bold; }
     .number-badge {
-        display: inline-block; background: #e8f5e9; border: 1px solid #66bb6a;
-        border-radius: 4px; padding: 3px 8px; font-family: 'Courier New', monospace;
-        font-weight: bold; font-size: 16px; min-width: 40px; text-align: center;
-        cursor: pointer; transition: all 0.15s; letter-spacing: 1px;
+        display: inline-block; background: #e8f5e9; border: 1px solid #a5d6a7;
+        border-radius: 3px; padding: 2px 6px; font-family: 'Courier New', monospace;
+        font-weight: bold; font-size: 13px; min-width: 28px; text-align: center;
+        cursor: pointer; transition: all 0.15s;
     }
-    .number-badge:hover { background: #43a047; color: #fff; border-color: #2e7d32; transform: scale(1.08); }
+    .number-badge:hover { background: #66bb6a; color: #fff; }
     .filter-bar { background: #f5f5f5; border: 1px solid #ddd; border-radius: 4px; padding: 4px 8px; margin-bottom: 6px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12px; }
     .filter-bar select { border: 1px solid #ccc; border-radius: 3px; padding: 2px 4px; font-size: 12px; }
     .btn-refresh { background: #fff; border: 1px solid #00a65a; color: #00a65a; padding: 3px 12px; border-radius: 3px; font-size: 12px; cursor: pointer; font-weight: bold; }
     .btn-refresh:hover { background: #e8f5e9; }
-    .fight-input { width: 80px; text-align: center; border: 1px solid #ffa726; border-radius: 3px; padding: 3px 4px; font-size: 14px; font-weight: bold; background: #fffde7; }
-    .btn-save-fight { background: #e65100; color: #fff; border: none; padding: 3px 12px; border-radius: 3px; font-size: 12px; cursor: pointer; font-weight: bold; }
-    .btn-save-fight:hover { background: #bf360c; }
+    .fight-input { width: 70px; text-align: center; border: 1px solid #ffa726; border-radius: 2px; padding: 2px 4px; font-size: 13px; font-weight: bold; background: #fffde7; }
+    .btn-save-fight { background: #00a65a; color: #fff; border: none; padding: 3px 10px; border-radius: 3px; font-size: 12px; cursor: pointer; font-weight: bold; }
+    .btn-save-fight:hover { background: #2e7d32; }
     .wl-row-even { background: #fff; }
-    .wl-row-odd { background: #f9fff9; }
-    .exceed-limit { background: #ffebee !important; }
+    .wl-row-odd { background: #f9fef9; }
+    .exceed-limit { background: #fff9c4 !important; }
     .data-amount {
-        font-size: 15px; font-family: 'Courier New', monospace; font-weight: bold;
-        color: #c62828; cursor: pointer; text-align: right; padding-right: 10px !important;
+        font-size: 13px; font-family: 'Courier New', monospace; font-weight: bold;
+        color: #c62828; cursor: pointer; text-align: right; padding-right: 8px !important;
     }
-    .data-amount:hover { color: #1565c0; }
-    .row-num-col { text-align: center; color: #bbb; font-size: 12px; width: 28px; }
+    .data-amount:hover { text-decoration: underline; }
+    .row-num-col { text-align: center; color: #999; font-size: 12px; width: 26px; }
     /* Drill-down modal */
     .drill-modal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 9999; }
     .drill-content { background: #fff; margin: 2% auto; max-width: 95%; width: 1100px; border-radius: 8px; box-shadow: 0 8px 32px rgba(0,0,0,0.3); overflow: hidden; max-height: 85vh; display: flex; flex-direction: column; }
@@ -416,15 +409,15 @@ require_once 'includes/header.php';
                 $grandReceive = $grandBuy - $totalDiscount;
                 ?>
                 <!-- ซื้อ -->
-                <tr class="wl-summary" style="background:#f0fff0;">
+                <tr class="wl-summary">
                     <td class="label-cell" style="color:#1b5e20;">ซื้อ</td>
-                    <td class="num-cell sum-num" style="background:#c8e6c9; font-size:17px; color:#1b5e20;"><?= number_format($grandBuy,2) ?></td>
+                    <td class="num-cell sum-num" style="color:#1b5e20;"><?= number_format($grandBuy,2) ?></td>
                     <?php foreach ($betTypes as $bt): ?>
                     <td class="num-cell sum-num" colspan="2"><?= number_format($summary[$bt]['buy'],2) ?></td>
                     <?php endforeach; ?>
                 </tr>
                 <!-- คอมฯ -->
-                <tr class="wl-summary" style="background:#fff8e1;">
+                <tr class="wl-summary">
                     <td class="label-cell" style="color:#e65100;">คอมฯ</td>
                     <td class="num-cell sum-num" style="color:#e65100;"><?= $totalDiscount > 0 ? number_format(-$totalDiscount,2) : '0.00' ?></td>
                     <?php foreach ($betTypes as $bt): ?>
@@ -434,21 +427,21 @@ require_once 'includes/header.php';
                 <!-- รับ -->
                 <tr class="wl-summary" style="background:#e8f5e9;">
                     <td class="label-cell" style="color:#1b5e20;">รับ</td>
-                    <td class="num-cell sum-num" style="background:#a5d6a7; font-size:17px; color:#1b5e20; font-weight:bold;"><?= number_format($grandReceive,2) ?></td>
+                    <td class="num-cell sum-num" style="color:#1b5e20; font-weight:bold;"><?= number_format($grandReceive,2) ?></td>
                     <?php foreach ($betTypes as $bt): ?>
                     <td class="num-cell sum-num pos" colspan="2"><?= number_format($summary[$bt]['buy'],2) ?></td>
                     <?php endforeach; ?>
                 </tr>
                 <!-- จ่าย -->
-                <tr class="wl-summary" style="background:#fff0f0;">
-                    <td class="label-cell" style="color:#b71c1c;">จ่าย</td>
-                    <td class="num-cell sum-num" style="background:#ffcdd2; font-size:17px; color:#b71c1c;"><?= $grandWorstPayout > 0 ? number_format(-$grandWorstPayout,2) : '&mdash;' ?></td>
+                <tr class="wl-summary">
+                    <td class="label-cell" style="color:#c62828;">จ่าย</td>
+                    <td class="num-cell sum-num neg"><?= $grandWorstPayout > 0 ? number_format(-$grandWorstPayout,2) : '&mdash;' ?></td>
                     <?php foreach ($betTypes as $bt): ?>
                     <td class="num-cell sum-num neg" colspan="2"><?= $summary[$bt]['worst_payout']>0 ? number_format(-$summary[$bt]['worst_payout'],2) : '&mdash;' ?></td>
                     <?php endforeach; ?>
                 </tr>
                 <!-- ตั้งสู้ -->
-                <tr class="wl-summary" style="background:#fffde7;">
+                <tr class="wl-summary">
                     <td class="label-cell" style="color:#e65100;">ตั้งสู้ <button class="btn-save-fight" onclick="saveFightLimits()">บันทึก</button></td>
                     <td></td>
                     <?php foreach ($betTypes as $bt): ?>
