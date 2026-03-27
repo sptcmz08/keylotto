@@ -372,8 +372,16 @@ function processResults($pdo, $results, $source) {
         // Fallback: try matching by ManyCai lottery_name → slug → Key name
         if (!$keyLotteryName && !$slug) {
             // Direct ManyCai results have lottery_name but no slug
-            // Try each mapping
+            $isVipText = stripos($lotteryName, 'vip') !== false || stripos($lotteryName, 'พิเศษ') !== false;
+            
             foreach ($SLUG_TO_LOTTERY_NAME as $s => $name) {
+                $isVipKey = stripos($name, 'vip') !== false || stripos($name, 'พิเศษ') !== false;
+                
+                // Prevent VIP text matching Normal key, and vice versa
+                if ($isVipText !== $isVipKey) {
+                    continue;
+                }
+                
                 if (stripos($lotteryName, $name) !== false || stripos($name, $lotteryName) !== false) {
                     $keyLotteryName = $name;
                     $slug = $s;

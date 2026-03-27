@@ -179,24 +179,28 @@ THAI_MONTHS = {
 
 
 def match_slug(text):
-    """Match text against known lottery names — longest match first, prioritizing VIP"""
+    """Match text against known lottery names — longest match first, isolating VIP"""
     text_clean = re.sub(r'\s+', ' ', text.strip())
     text_lower = text_clean.lower()
     
-    # If text contains VIP, try to match VIP keys first
-    if 'vip' in text_lower:
-        for key in sorted([k for k in LOTTERY_MAPPINGS.keys() if 'vip' in k.lower()], key=len, reverse=True):
+    is_vip_text = 'vip' in text_lower or 'พิเศษ' in text_lower
+    
+    # 1. Separate keys into VIP and Normal
+    vip_keys = [k for k in LOTTERY_MAPPINGS.keys() if 'vip' in k.lower() or 'พิเศษ' in k.lower()]
+    normal_keys = [k for k in LOTTERY_MAPPINGS.keys() if k not in vip_keys]
+    
+    # 2. Match based on text type
+    if is_vip_text:
+        # Only try to match VIP keys
+        for key in sorted(vip_keys, key=len, reverse=True):
+            if key in text_clean:
+                return LOTTERY_MAPPINGS[key], key
+    else:
+        # Only try to match Normal keys
+        for key in sorted(normal_keys, key=len, reverse=True):
             if key in text_clean:
                 return LOTTERY_MAPPINGS[key], key
                 
-    # Then normal keys
-    for key in sorted(LOTTERY_MAPPINGS.keys(), key=len, reverse=True):
-        if key in text_clean:
-            # Prevent VIP text from matching normal keys if somehow missed
-            if 'vip' in text_lower and 'vip' not in key.lower() and key in text_clean:
-                continue
-            return LOTTERY_MAPPINGS[key], key
-            
     return None, None
 
 
