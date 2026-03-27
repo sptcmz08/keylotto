@@ -492,7 +492,6 @@ require_once 'includes/header.php';
                         $statusClass = 'status-waiting'; $statusLabel = 'รอออกผล';
                     }
                     } // end if/else showingNextRound
-                <?php
                     // หวยที่เลย close_time ไปเกิน 10 นาที → ซ่อนเลย
                     $minutesPastClose = $pastCloseTime && $closeTime ? (($now - $closeTime) / 60) : 0;
                     $shouldHide = $pastCloseTime && !$hasResultForRound && $minutesPastClose > 10 && !$showingNextRound;
