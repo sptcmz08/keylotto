@@ -16,7 +16,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'drill_down') {
     $drawDate = $_GET['date'] ?? '';
     
     $stmt = $pdo->prepare("
-        SELECT bi.number, bi.bet_type, bi.amount, bi.pay_rate AS item_pay_rate,
+        SELECT bi.number, bi.bet_type, bi.amount, bi.adjusted_pay_rate AS item_pay_rate,
                b.bet_number, b.created_at, b.note,
                pr.pay_rate
         FROM bet_items bi
@@ -175,8 +175,12 @@ foreach ($betTypes as $bt) {
             $btData[] = ['number' => $num, 'amount' => $types[$bt]['amount'], 'payout' => $payout];
         }
     }
-    // Sort by payout desc (เลขที่จ่ายสูงสุดขึ้นก่อน — worst case)
-    usort($btData, fn($a, $b) => $b['payout'] <=> $a['payout']);
+    // Sort by amount desc (คนแทงเยอะสุด) or payout desc based on filter
+    if ($sortBy === 'payout_desc') {
+        usort($btData, fn($a, $b) => $b['payout'] <=> $a['payout']);
+    } else if ($sortBy === 'amount_desc') {
+        usort($btData, fn($a, $b) => $b['amount'] <=> $a['amount']);
+    }
     $betTypeRows[$bt] = $btData;
 }
 $maxDataRows = !empty($betTypeRows) ? max(array_map('count', $betTypeRows)) : 0;
@@ -379,8 +383,7 @@ require_once 'includes/header.php';
             <tbody>
                 <?php $colSpan = 1 + count($betTypes) * 2; ?>
                 <tr class="wl-summary"><td class="label-cell">ซื้อ</td><?php foreach ($betTypes as $bt): ?><td class="num-cell" colspan="2"><?= number_format($summary[$bt]['buy'],2) ?></td><?php endforeach; ?></tr>
-                <tr class="wl-summary"><td class="label-cell" style="color:#d32f2f">คอมฯ</td><?php foreach ($betTypes as $bt): ?><td class="num-cell" colspan="2">0.00</td><?php endforeach; ?></tr>
-                <tr class="wl-summary" style="background:#e8f5e9"><td class="label-cell">กิน</td><?php foreach ($betTypes as $bt): ?><td class="num-cell" colspan="2"><?= number_format($summary[$bt]['buy'],2) ?></td><?php endforeach; ?></tr>
+                <tr class="wl-summary" style="background:#e8f5e9"><td class="label-cell">รับ</td><?php foreach ($betTypes as $bt): ?><td class="num-cell" colspan="2"><?= number_format($summary[$bt]['buy'],2) ?></td><?php endforeach; ?></tr>
                 <tr class="wl-summary"><td class="label-cell" style="color:#d32f2f">จ่าย</td><?php foreach ($betTypes as $bt): ?><td class="num-cell neg" colspan="2"><?= $summary[$bt]['worst_payout']>0 ? number_format(-$summary[$bt]['worst_payout'],2) : '0.00' ?></td><?php endforeach; ?></tr>
                 <tr class="wl-summary" style="background:#e8f5e9"><td class="label-cell">ตั้งสู้ <button class="btn-save-fight" onclick="saveFightLimits()">บันทึก</button></td><?php foreach ($betTypes as $bt): ?><td style="text-align:center" colspan="2"><input type="text" class="fight-input" id="fight-<?= $bt ?>" value="<?= number_format($fightLimits[$bt],0,'','') ?>"></td><?php endforeach; ?></tr>
                 <tr style="height:3px; background:#00a65a"><td colspan="<?= $colSpan ?>"></td></tr>
@@ -516,19 +519,21 @@ function drillDown(number) {
                 ${BET_TYPE_LABELS[bt]} — ${items.length} รายการ — รวม ${subtotal.toLocaleString('en-US',{minimumFractionDigits:2})} บาท
             </div>`;
             html += '<table class="drill-table"><thead><tr>';
-            html += '<th>#</th><th>วันที่</th><th>เลขที่โพย</th><th>หมายเลข</th><th>จำนวน</th><th>เรทจ่าย</th><th>หมายเหตุ</th>';
+            html += '<th style="width:30px">#</th><th>ชื่อใช้งาน</th><th>วันที่-เวลา</th><th>ประเภท</th><th>หมายเลข</th><th>เรทจ่าย</th><th>จำนวน</th>';
             html += '</tr></thead><tbody>';
             items.forEach((item, i) => {
                 const dt = new Date(item.created_at);
-                const dateStr = dt.toLocaleDateString('th-TH') + ' ' + dt.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'});
+                const dateStr = dt.toLocaleDateString('th-TH',{day:'2-digit',month:'2-digit',year:'2-digit'}) + ' ' + dt.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'});
+                const rate = parseFloat(item.item_pay_rate || item.pay_rate || 0);
+                const customer = item.note || '-';
                 html += `<tr>
-                    <td style="text-align:center">${i+1}</td>
+                    <td style="text-align:center;color:#999">${i+1}</td>
+                    <td style="font-weight:bold;color:#1565c0">${customer}</td>
                     <td style="text-align:center;white-space:nowrap">${dateStr}</td>
-                    <td style="text-align:center;font-weight:bold">${item.bet_number}</td>
-                    <td style="text-align:center;font-weight:bold;font-family:monospace">${item.number}</td>
-                    <td style="text-align:right;font-weight:bold">${parseFloat(item.amount).toLocaleString('en-US',{minimumFractionDigits:2})}</td>
-                    <td style="text-align:center">${item.pay_rate || '-'}</td>
-                    <td>${item.note || ''}</td>
+                    <td style="text-align:center">${BET_TYPE_LABELS[bt]}</td>
+                    <td style="text-align:center;font-weight:bold;font-family:monospace;font-size:14px">${item.number}</td>
+                    <td style="text-align:center">${rate.toFixed(2)}</td>
+                    <td style="text-align:right;font-weight:bold;color:#d32f2f">${parseFloat(item.amount).toLocaleString('en-US',{minimumFractionDigits:2})}</td>
                 </tr>`;
             });
             html += '</tbody></table>';
@@ -577,10 +582,10 @@ function drillDownType(number, betType) {
             
             let html = `<div style="background:#e8f5e9;padding:8px 16px;font-size:14px;font-weight:bold;border-bottom:2px solid #00a65a;display:flex;justify-content:space-between;align-items:center;">
                 <span>รวม ${items.length} รายการ</span>
-                <span>ยอดซื้อ: <span style="color:#1b5e20">${subtotal.toLocaleString('en-US',{minimumFractionDigits:2})}</span> — ยอดจ่าย: <span style="color:#d32f2f">${subtotalPayout.toLocaleString('en-US',{minimumFractionDigits:2})}</span></span>
+                <span>ยอดซื้อ: <span style="color:#1b5e20">${subtotal.toLocaleString('en-US',{minimumFractionDigits:2})}</span> — ยอดที่จะเสียหากถูก: <span style="color:#d32f2f">${subtotalPayout.toLocaleString('en-US',{minimumFractionDigits:2})}</span></span>
             </div>`;
             html += '<table class="drill-table"><thead><tr>';
-            html += '<th style="width:30px">#</th><th>ลูกค้า</th><th>วันที่</th><th>ประเภท</th><th>หมายเลข</th><th>เรทจ่าย</th><th>จำนวน</th><th>ยอดจ่าย</th><th>เลขที่โพย</th>';
+            html += '<th style="width:30px">#</th><th>ชื่อใช้งาน</th><th>วันที่-เวลา</th><th>ประเภท</th><th>หมายเลข</th><th>เรทจ่าย</th><th>จำนวน</th>';
             html += '</tr></thead><tbody>';
             items.forEach((item, i) => {
                 const dt = new Date(item.created_at);
@@ -595,17 +600,13 @@ function drillDownType(number, betType) {
                     <td style="text-align:center">${BET_TYPE_LABELS[betType]}</td>
                     <td style="text-align:center;font-weight:bold;font-family:monospace;font-size:14px">${item.number}</td>
                     <td style="text-align:center">${rate.toFixed(2)}</td>
-                    <td style="text-align:right;font-weight:bold">${parseFloat(item.amount).toLocaleString('en-US',{minimumFractionDigits:2})}</td>
-                    <td style="text-align:right;color:#d32f2f">${payout.toLocaleString('en-US',{minimumFractionDigits:2})}</td>
-                    <td style="text-align:center;font-size:11px;color:#666">${item.bet_number}</td>
+                    <td style="text-align:right;font-weight:bold;color:#d32f2f">${parseFloat(item.amount).toLocaleString('en-US',{minimumFractionDigits:2})}</td>
                 </tr>`;
             });
             // Summary row
             html += `<tr class="drill-total">
                 <td colspan="6" style="text-align:right;padding-right:10px">รวม ${items.length} รายการ</td>
-                <td style="text-align:right">${subtotal.toLocaleString('en-US',{minimumFractionDigits:2})}</td>
-                <td style="text-align:right;color:#d32f2f">${subtotalPayout.toLocaleString('en-US',{minimumFractionDigits:2})}</td>
-                <td></td>
+                <td style="text-align:right;color:#d32f2f">${subtotal.toLocaleString('en-US',{minimumFractionDigits:2})}</td>
             </tr>`;
             html += '</tbody></table>';
             
