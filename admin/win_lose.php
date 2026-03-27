@@ -404,26 +404,30 @@ require_once 'includes/header.php';
             <thead><tr>
                 <th style="width:30px;">#</th>
                 <?php foreach ($betTypes as $bt): ?><th colspan="2"><?= $betTypeLabels[$bt] ?></th><?php endforeach; ?>
+                <th style="background:#1b5e20; min-width:90px;">รวม</th>
             </tr></thead>
             <tbody>
-                <?php $colSpan = 1 + count($betTypes) * 2; ?>
+                <?php $colSpan = 1 + count($betTypes) * 2 + 1; ?>
                 <tr class="wl-summary wl-summary-buy">
                     <td class="label-cell label-buy">&#x1F4B0; ซื้อ</td>
                     <?php foreach ($betTypes as $bt): ?>
                     <td class="num-cell sum-num pos" colspan="2"><?= number_format($summary[$bt]['buy'],2) ?></td>
                     <?php endforeach; ?>
+                    <td class="num-cell sum-num" style="background:#c8e6c9; font-size:17px; color:#1b5e20;"><?= number_format($grandBuy,2) ?></td>
                 </tr>
                 <tr class="wl-summary wl-summary-recv">
                     <td class="label-cell label-buy">&#x1F4E5; รับ</td>
                     <?php foreach ($betTypes as $bt): ?>
                     <td class="num-cell sum-num pos" colspan="2"><?= number_format($summary[$bt]['buy'],2) ?></td>
                     <?php endforeach; ?>
+                    <td class="num-cell sum-num" style="background:#c8e6c9; font-size:17px; color:#1b5e20;"><?= number_format($grandBuy,2) ?></td>
                 </tr>
                 <tr class="wl-summary wl-summary-pay">
                     <td class="label-cell label-pay">&#x1F4B8; จ่าย</td>
                     <?php foreach ($betTypes as $bt): ?>
                     <td class="num-cell sum-num neg" colspan="2"><?= $summary[$bt]['worst_payout']>0 ? number_format(-$summary[$bt]['worst_payout'],2) : '&mdash;' ?></td>
                     <?php endforeach; ?>
+                    <td class="num-cell sum-num" style="background:#ffcdd2; font-size:17px; color:#b71c1c;"><?= $grandWorstPayout > 0 ? number_format(-$grandWorstPayout,2) : '&mdash;' ?></td>
                 </tr>
                 <tr class="wl-summary wl-summary-fight">
                     <td class="label-cell label-fight">&#x1F6E1; ตั้งสู้ <button class="btn-save-fight" onclick="saveFightLimits()">&#x1F4BE; บันทึก</button></td>
@@ -432,6 +436,7 @@ require_once 'includes/header.php';
                         <input type="text" class="fight-input" id="fight-<?= $bt ?>" value="<?= number_format($fightLimits[$bt],0,'','') ?>">
                     </td>
                     <?php endforeach; ?>
+                    <td></td>
                 </tr>
                 <tr style="height:4px; background: linear-gradient(to right,#00a65a,#43a047);"><td colspan="<?= $colSpan ?>"></td></tr>
 
@@ -466,6 +471,7 @@ require_once 'includes/header.php';
                     <td></td><td></td>
                     <?php endif; ?>
                     <?php endforeach; ?>
+                    <td></td>
                 </tr>
                 <?php endfor; endif; ?>
             </tbody>
