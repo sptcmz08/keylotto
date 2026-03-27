@@ -250,7 +250,7 @@ require_once 'includes/header.php';
 ?>
 
 <style>
-    .wl-page { font-family: Tahoma, Arial, sans-serif; font-size: 13px; }
+    .wl-page { font-family: Tahoma, Arial, sans-serif; font-size: 14px; }
     .flag-sm { width: 22px; height: 14px; object-fit: cover; border-radius: 2px; border: 1px solid rgba(0,0,0,0.15); vertical-align: middle; }
     .flag-xs { width: 18px; height: 12px; object-fit: cover; border-radius: 2px; border: 1px solid rgba(0,0,0,0.1); vertical-align: middle; }
     .wl-header-bar { background: #00a65a; padding: 6px 12px; display: flex; align-items: center; gap: 12px; border-radius: 4px 4px 0 0; position: relative; }
@@ -269,36 +269,51 @@ require_once 'includes/header.php';
     .date-dropdown a:hover { background: #e8f5e9; }
     .date-dropdown a.active { background: #fff9c4; font-weight: bold; }
     .status-badge { font-size: 10px; padding: 2px 8px; border-radius: 10px; font-weight: bold; color: #fff; }
-    .wl-table { border-collapse: collapse; width: 100%; font-size: 13px; font-family: Tahoma, Arial, sans-serif; }
-    .wl-table th, .wl-table td { border: 1px solid #a5d6a7; padding: 4px 6px; }
-    .wl-table thead th { background: #00a65a; color: #fff; font-weight: bold; text-align: center; padding: 6px; white-space: nowrap; font-size: 13px; }
-    .wl-summary { background: #f0fff0; }
-    .wl-summary td { font-weight: bold; white-space: nowrap; font-size: 13px; }
-    .wl-summary .label-cell { background: #e8f5e9; text-align: left; padding-left: 8px; font-size: 14px; color: #2e7d32; }
-    .neg { color: #d32f2f; }
-    .pos { color: #1b5e20; }
-    .num-cell { text-align: right; font-family: 'Courier New', monospace; font-size: 13px; }
-    .number-badge { display: inline-block; background: #e8f5e9; border: 1px solid #a5d6a7; border-radius: 3px; padding: 2px 6px; font-family: monospace; font-weight: bold; font-size: 14px; min-width: 32px; text-align: center; cursor: pointer; transition: all 0.15s; }
-    .number-badge:hover { background: #66bb6a; color: #fff; transform: scale(1.05); }
+    .wl-table { border-collapse: collapse; width: 100%; font-size: 14px; font-family: Tahoma, Arial, sans-serif; }
+    .wl-table th, .wl-table td { border: 1px solid #a5d6a7; padding: 5px 7px; }
+    .wl-table thead th { background: #00a65a; color: #fff; font-weight: bold; text-align: center; padding: 8px 6px; white-space: nowrap; font-size: 14px; letter-spacing: 0.3px; }
+    .wl-summary td { font-weight: bold; white-space: nowrap; padding: 7px 8px; }
+    .wl-summary-buy   { background: #f0fff0; }
+    .wl-summary-recv  { background: #e8f5e9; }
+    .wl-summary-pay   { background: #fff0f0; }
+    .wl-summary-fight { background: #fffde7; }
+    .label-cell { text-align: left; padding-left: 10px !important; min-width: 100px; font-size: 14px; font-weight: bold; }
+    .label-buy   { color: #1b5e20; }
+    .label-pay   { color: #b71c1c; }
+    .label-fight { color: #e65100; }
+    .neg { color: #c62828; font-weight: bold; }
+    .pos { color: #1b5e20; font-weight: bold; }
+    .num-cell { text-align: right; font-family: 'Courier New', monospace; font-size: 15px; padding-right: 10px !important; }
+    .sum-num  { font-size: 16px; font-family: 'Courier New', monospace; font-weight: bold; }
+    .number-badge {
+        display: inline-block; background: #e8f5e9; border: 1px solid #66bb6a;
+        border-radius: 4px; padding: 3px 8px; font-family: 'Courier New', monospace;
+        font-weight: bold; font-size: 16px; min-width: 40px; text-align: center;
+        cursor: pointer; transition: all 0.15s; letter-spacing: 1px;
+    }
+    .number-badge:hover { background: #43a047; color: #fff; border-color: #2e7d32; transform: scale(1.08); }
     .filter-bar { background: #f5f5f5; border: 1px solid #ddd; border-radius: 4px; padding: 4px 8px; margin-bottom: 6px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12px; }
     .filter-bar select { border: 1px solid #ccc; border-radius: 3px; padding: 2px 4px; font-size: 12px; }
     .btn-refresh { background: #fff; border: 1px solid #00a65a; color: #00a65a; padding: 3px 12px; border-radius: 3px; font-size: 12px; cursor: pointer; font-weight: bold; }
     .btn-refresh:hover { background: #e8f5e9; }
-    .fight-input { width: 70px; text-align: center; border: 1px solid #ccc; border-radius: 2px; padding: 2px 4px; font-size: 13px; }
-    .btn-save-fight { background: #00a65a; color: #fff; border: none; padding: 3px 12px; border-radius: 3px; font-size: 12px; cursor: pointer; font-weight: bold; }
+    .fight-input { width: 80px; text-align: center; border: 1px solid #ffa726; border-radius: 3px; padding: 3px 4px; font-size: 14px; font-weight: bold; background: #fffde7; }
+    .btn-save-fight { background: #e65100; color: #fff; border: none; padding: 3px 12px; border-radius: 3px; font-size: 12px; cursor: pointer; font-weight: bold; }
+    .btn-save-fight:hover { background: #bf360c; }
     .wl-row-even { background: #fff; }
     .wl-row-odd { background: #f9fff9; }
-    .clickable-amount { cursor: pointer; }
-    .clickable-amount:hover { color: #1565c0; font-weight: bold; }
     .exceed-limit { background: #ffebee !important; }
-    .data-amount { font-size: 13px; cursor: pointer; }
+    .data-amount {
+        font-size: 15px; font-family: 'Courier New', monospace; font-weight: bold;
+        color: #c62828; cursor: pointer; text-align: right; padding-right: 10px !important;
+    }
     .data-amount:hover { color: #1565c0; }
+    .row-num-col { text-align: center; color: #bbb; font-size: 12px; width: 28px; }
     /* Drill-down modal */
     .drill-modal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 9999; }
     .drill-content { background: #fff; margin: 2% auto; max-width: 95%; width: 1100px; border-radius: 8px; box-shadow: 0 8px 32px rgba(0,0,0,0.3); overflow: hidden; max-height: 85vh; display: flex; flex-direction: column; }
-    .drill-header { background: #00a65a; color: #fff; padding: 10px 16px; font-weight: bold; font-size: 14px; display: flex; justify-content: space-between; align-items: center; }
+    .drill-header { background: #00a65a; color: #fff; padding: 10px 16px; font-weight: bold; font-size: 15px; display: flex; justify-content: space-between; align-items: center; }
     .drill-body { overflow-y: auto; padding: 0; flex: 1; }
-    .drill-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .drill-table { width: 100%; border-collapse: collapse; font-size: 14px; }
     .drill-table th { background: #e8f5e9; padding: 8px 10px; border: 1px solid #c8e6c9; font-weight: bold; text-align: center; position: sticky; top: 0; font-size: 13px; }
     .drill-table td { padding: 6px 10px; border: 1px solid #e0e0e0; }
     .drill-table tr:hover { background: #f5f5f5; }
@@ -392,11 +407,33 @@ require_once 'includes/header.php';
             </tr></thead>
             <tbody>
                 <?php $colSpan = 1 + count($betTypes) * 2; ?>
-                <tr class="wl-summary"><td class="label-cell">ซื้อ</td><?php foreach ($betTypes as $bt): ?><td class="num-cell" colspan="2"><?= number_format($summary[$bt]['buy'],2) ?></td><?php endforeach; ?></tr>
-                <tr class="wl-summary" style="background:#e8f5e9"><td class="label-cell">รับ</td><?php foreach ($betTypes as $bt): ?><td class="num-cell" colspan="2"><?= number_format($summary[$bt]['buy'],2) ?></td><?php endforeach; ?></tr>
-                <tr class="wl-summary"><td class="label-cell" style="color:#d32f2f">จ่าย</td><?php foreach ($betTypes as $bt): ?><td class="num-cell neg" colspan="2"><?= $summary[$bt]['worst_payout']>0 ? number_format(-$summary[$bt]['worst_payout'],2) : '0.00' ?></td><?php endforeach; ?></tr>
-                <tr class="wl-summary" style="background:#e8f5e9"><td class="label-cell">ตั้งสู้ <button class="btn-save-fight" onclick="saveFightLimits()">บันทึก</button></td><?php foreach ($betTypes as $bt): ?><td style="text-align:center" colspan="2"><input type="text" class="fight-input" id="fight-<?= $bt ?>" value="<?= number_format($fightLimits[$bt],0,'','') ?>"></td><?php endforeach; ?></tr>
-                <tr style="height:3px; background:#00a65a"><td colspan="<?= $colSpan ?>"></td></tr>
+                <tr class="wl-summary wl-summary-buy">
+                    <td class="label-cell label-buy">&#x1F4B0; ซื้อ</td>
+                    <?php foreach ($betTypes as $bt): ?>
+                    <td class="num-cell sum-num pos" colspan="2"><?= number_format($summary[$bt]['buy'],2) ?></td>
+                    <?php endforeach; ?>
+                </tr>
+                <tr class="wl-summary wl-summary-recv">
+                    <td class="label-cell label-buy">&#x1F4E5; รับ</td>
+                    <?php foreach ($betTypes as $bt): ?>
+                    <td class="num-cell sum-num pos" colspan="2"><?= number_format($summary[$bt]['buy'],2) ?></td>
+                    <?php endforeach; ?>
+                </tr>
+                <tr class="wl-summary wl-summary-pay">
+                    <td class="label-cell label-pay">&#x1F4B8; จ่าย</td>
+                    <?php foreach ($betTypes as $bt): ?>
+                    <td class="num-cell sum-num neg" colspan="2"><?= $summary[$bt]['worst_payout']>0 ? number_format(-$summary[$bt]['worst_payout'],2) : '&mdash;' ?></td>
+                    <?php endforeach; ?>
+                </tr>
+                <tr class="wl-summary wl-summary-fight">
+                    <td class="label-cell label-fight">&#x1F6E1; ตั้งสู้ <button class="btn-save-fight" onclick="saveFightLimits()">&#x1F4BE; บันทึก</button></td>
+                    <?php foreach ($betTypes as $bt): ?>
+                    <td style="text-align:center; padding:5px 4px;" colspan="2">
+                        <input type="text" class="fight-input" id="fight-<?= $bt ?>" value="<?= number_format($fightLimits[$bt],0,'','') ?>">
+                    </td>
+                    <?php endforeach; ?>
+                </tr>
+                <tr style="height:4px; background: linear-gradient(to right,#00a65a,#43a047);"><td colspan="<?= $colSpan ?>"></td></tr>
 
                 <?php if ($maxDataRows === 0): ?>
                 <tr><td colspan="<?= $colSpan ?>" style="padding:20px; text-align:center; color:#999;">ไม่มีข้อมูลในงวดนี้</td></tr>
@@ -411,7 +448,7 @@ require_once 'includes/header.php';
                         }
                 ?>
                 <tr class="<?= $hasExceed ? 'exceed-limit' : ($i%2===0?'wl-row-even':'wl-row-odd') ?>" onmouseover="this.style.background='#e3f2fd'" onmouseout="this.style.background=''">
-                    <td style="text-align:center; color:#999; font-size:12px"><?= $i+1 ?></td>
+                    <td class="row-num-col"><?= $i+1 ?></td>
                     <?php foreach ($betTypes as $bt):
                         $d = $betTypeRows[$bt][$i] ?? null;
                         $limit = $fightLimits[$bt];
@@ -421,7 +458,10 @@ require_once 'includes/header.php';
                     <td style="text-align:center;" onclick="drillDownType('<?= htmlspecialchars($d['number']) ?>','<?= $bt ?>')">
                         <span class="number-badge"><?= htmlspecialchars($d['number']) ?></span>
                     </td>
-                    <td class="num-cell data-amount neg" onclick="drillDownType('<?= htmlspecialchars($d['number']) ?>','<?= $bt ?>')"><?= number_format($d['amount'],2) ?></td>
+                    <td class="data-amount" onclick="drillDownType('<?= htmlspecialchars($d['number']) ?>','<?= $bt ?>')"
+                        <?= $exceeds ? 'style="background:#ffcdd2; color:#b71c1c;"' : '' ?>>
+                        <?= number_format($d['amount'],2) ?>
+                    </td>
                     <?php else: ?>
                     <td></td><td></td>
                     <?php endif; ?>
@@ -441,6 +481,18 @@ require_once 'includes/header.php';
     </div>
     <?php endif; ?>
 </div>
+
+<!-- Notes Section -->
+    <div style="margin-top:12px; padding:10px 14px; background:#fffde7; border:1px solid #ffe082; border-radius:6px; font-size:13px; color:#5d4037;">
+        <div style="font-weight:bold; font-size:14px; margin-bottom:6px; color:#e65100;">&#x1F4DD; หมายเหตุ</div>
+        <ul style="margin:0; padding-left:18px; line-height:1.8;">
+            <li><span style="color:#c62828; font-weight:bold;">ตัวเลขสีแดง</span> คือยอดที่ต้องจ่ายหากเลขนั้นถูกรางวัล</li>
+            <li><span style="font-weight:bold;">วงเล็บ (#)</span> = ลำดับเลขที่มียอดแทงเยอะสุด</li>
+            <li><span style="font-weight:bold;">กดที่เลข</span> เพื่อดูรายละเอียดโพยที่แทงเลขนี้</li>
+            <li><span style="color:#e65100; font-weight:bold;">ตั้งสู้</span> = ยอดรับสูงสุดต่อ <u>1 เลข ต่อประเภท</u> (ไม่ใช่ยอดรวม) &mdash; เช่น ตั้งสู้ 2 ตัวบน = 1,000 หมายถึงแต่ละเลขรับได้ไม่เกิน 1,000 บาท</li>
+            <li>เลขที่<span style="background:#ffcdd2; padding:1px 6px; border-radius:3px; font-weight:bold;">ไฮไลท์แดง</span> = ยอดรวมเกินตั้งสู้ที่กำหนดไว้</li>
+        </ul>
+    </div>
 
 <!-- Drill-down Modal -->
 <div class="drill-modal" id="drillModal" onclick="if(event.target===this)closeDrill()">

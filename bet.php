@@ -989,6 +989,19 @@ const PAY_RATES = {};
 PAY_RATES['<?= $r['bet_type'] ?>'] = <?= $r['pay_rate'] ?>;
 <?php endforeach; ?>
 
+// Fight Limits map: key = bet_type, value = max_amount per number
+const FIGHT_LIMITS = {};
+<?php
+try {
+    $flStmtBet = $pdo->prepare("SELECT bet_type, max_amount FROM fight_limits WHERE lottery_type_id = ? AND max_amount > 0");
+    $flStmtBet->execute([$lotteryId]);
+    foreach ($flStmtBet->fetchAll() as $fl): ?>
+FIGHT_LIMITS['<?= $fl['bet_type'] ?>'] = <?= floatval($fl['max_amount']) ?>;
+<?php endforeach;
+} catch (Exception $e) {} // table may not exist
+?>
+
+
 function showBlockedToast(msg, type) {
     Swal.fire({
         toast: true,
@@ -1424,6 +1437,40 @@ function addBetItem() {
 
     // ใช้ cleanNumbers แทน numbers (ลบเลขปิดรับออก)
     numbers = cleanNumbers;
+
+    // =============================================
+    // ตรวจสอบตั้งสู้ (fight_limits) — เตือนล่วงหน้า
+    // =============================================
+    if (Object.keys(FIGHT_LIMITS).length > 0) {
+        const fightWarnings = [];
+        numbers.forEach(num => {
+            let betTypes = [];
+            if (currentBetType === '2' || currentBetType === '6' || currentBetType === '19') {
+                if (top > 0) betTypes.push({key: '2top', label: '2 ตัวบน', amount: top});
+                if (bot > 0) betTypes.push({key: '2bot', label: '2 ตัวล่าง', amount: bot});
+            } else if (currentBetType === '3') {
+                if (top > 0) betTypes.push({key: '3top', label: '3 ตัวบน', amount: top});
+                if (bot > 0) betTypes.push({key: '3tod', label: '3 ตัวโต๊ด', amount: bot});
+            } else if (currentBetType === 'run' || currentBetType === 'win') {
+                if (top > 0) betTypes.push({key: 'run_top', label: 'วิ่งบน', amount: top});
+                if (bot > 0) betTypes.push({key: 'run_bot', label: 'วิ่งล่าง', amount: bot});
+            }
+            betTypes.forEach(bt => {
+                if (FIGHT_LIMITS[bt.key] && bt.amount > FIGHT_LIMITS[bt.key]) {
+                    fightWarnings.push(`<b>${num}</b> (${bt.label}) แทง ${bt.amount.toLocaleString()} — <span style="color:#e65100">รับได้สูงสุด ${FIGHT_LIMITS[bt.key].toLocaleString()}</span>`);
+                }
+            });
+        });
+        if (fightWarnings.length > 0) {
+            Swal.fire({
+                icon: 'warning',
+                title: '⚠️ เกินตั้งสู้!',
+                html: '<div style="text-align:left;font-size:13px;">' + fightWarnings.join('<br>') + '<br><br><span style="color:#999">ระบบจะตรวจสอบอีกครั้งตอนบันทึก</span></div>',
+                confirmButtonColor: '#e65100',
+                confirmButtonText: 'รับทราบ'
+            });
+        }
+    }
 
     let typeLabel1 = currentBetType === 'run' ? 'เลขวิ่ง' : (currentBetType === 'win' ? 'วินเลข' : currentBetType + ' ตัว');
     if (currentBetType === '6') typeLabel1 = '6 กลับ';

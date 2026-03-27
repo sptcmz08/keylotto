@@ -54,6 +54,49 @@ try {
                 exit;
             }
 
+            // =============================================
+            // ตรวจสอบปิดรับ (bet_closed flag + close_time)
+            // =============================================
+            if (!empty($lottery['bet_closed'])) {
+                echo json_encode(['error' => '❌ ' . $lottery['name'] . ' ปิดรับแทงแล้ว (แอดมินปิด)']);
+                exit;
+            }
+
+            $closeTime = $lottery['close_time'] ?? null;
+            if ($closeTime) {
+                $nowDT = new DateTime();
+                $drawSchedule = normalizeSchedule($lottery['draw_schedule'] ?? 'daily');
+
+                if ($drawSchedule === 'daily' || empty($drawSchedule)) {
+                    $closeHour = intval(substr($closeTime, 0, 2));
+                    // หวยข้ามเที่ยงคืน: close < 03:00 → close วันถัดไป
+                    if ($closeHour < 3) {
+                        $nowHour = intval(date('H'));
+                        if ($nowHour < 6) {
+                            $closeDT = new DateTime(date('Y-m-d') . ' ' . $closeTime);
+                        } else {
+                            $closeDT = new DateTime(date('Y-m-d', strtotime('+1 day')) . ' ' . $closeTime);
+                        }
+                    } else {
+                        $closeDT = new DateTime(date('Y-m-d') . ' ' . $closeTime);
+                    }
+                } else {
+                    // หวยไม่ใช่รายวัน
+                    $currentRound = getCurrentDrawDate($drawSchedule);
+                    if ($currentRound === date('Y-m-d')) {
+                        $closeDT = new DateTime(date('Y-m-d') . ' ' . $closeTime);
+                    } else {
+                        $nextRound = getNextDrawDate($drawSchedule);
+                        $closeDT = new DateTime($nextRound . ' ' . $closeTime);
+                    }
+                }
+
+                if ($nowDT > $closeDT) {
+                    echo json_encode(['error' => '❌ ' . $lottery['name'] . ' ปิดรับแทงแล้ว (เลยเวลา ' . $closeTime . ')']);
+                    exit;
+                }
+            }
+
             // Server-side validation: digit count + negative amounts
             $validLengths = [
                 '3top' => 3, '3tod' => 3,
@@ -500,6 +543,30 @@ try {
                 }
             } else {
                 echo json_encode(['status' => 'ok']);
+            }
+            break;
+
+        // ==========================================
+        // API: ตรวจสอบตั้งสู้ (fight_limits) — ดูยอดคงเหลือ
+        // ==========================================
+        case 'check_fight_limit':
+            $lotteryId = intval($_GET['lottery_type_id'] ?? 0);
+            if (!$lotteryId) {
+                echo json_encode(['limits' => []]);
+                break;
+            }
+            
+            try {
+                // ดึง fight_limits ทุก bet_type ของหวยนี้
+                $flStmt = $pdo->prepare("SELECT bet_type, max_amount FROM fight_limits WHERE lottery_type_id = ? AND max_amount > 0");
+                $flStmt->execute([$lotteryId]);
+                $fightLimits = [];
+                foreach ($flStmt->fetchAll() as $fl) {
+                    $fightLimits[$fl['bet_type']] = floatval($fl['max_amount']);
+                }
+                echo json_encode(['limits' => $fightLimits]);
+            } catch (Exception $e) {
+                echo json_encode(['limits' => []]);
             }
             break;
 
