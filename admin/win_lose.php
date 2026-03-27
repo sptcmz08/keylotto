@@ -612,8 +612,8 @@ function drillDown(number) {
                 const dt = new Date(item.created_at.replace(/-/g, '/'));
                 const dateStr = dt.toLocaleDateString('th-TH',{day:'2-digit',month:'2-digit',year:'2-digit'}) + ' ' + dt.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'});
                 const rate = parseFloat(item.item_pay_rate || item.pay_rate || 0);
-                const customer = item.note || '-';
-                const ticketNote = item.created_by || '-';
+                const customer = item.created_by || '-';
+                const ticketNote = item.note || '-';
                 html += `<tr>
                     <td style="text-align:center;color:#999">${i+1}</td>
                     <td style="font-weight:bold;color:#1565c0">${customer}</td>
@@ -676,8 +676,8 @@ function drillDownType(number, betType) {
                 var dt = new Date(item.created_at.replace(/-/g, '/'));
                 var dateStr = dt.toLocaleDateString('th-TH',{day:'2-digit',month:'2-digit',year:'2-digit'}) + ' ' + dt.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'});
                 var rate = parseFloat(item.item_pay_rate || item.pay_rate || 0);
-                var customer = item.note || '-';
-                var ticketNote = item.created_by || '-';
+                var customer = item.created_by || '-';
+                var ticketNote = item.note || '-';
                 html += '<tr>';
                 html += '<td style="text-align:center;color:#999">' + (i+1) + '</td>';
                 html += '<td style="font-weight:bold;color:#1565c0">' + customer + '</td>';
