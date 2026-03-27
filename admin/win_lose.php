@@ -18,6 +18,18 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'drill_down') {
     // Ensure created_by column exists
     try { $pdo->exec("ALTER TABLE bets ADD COLUMN created_by VARCHAR(100) DEFAULT NULL"); } catch (Exception $e) {}
 
+    // Backfill old bets: set created_by from admin username for bets that don't have it
+    try {
+        $nullCount = $pdo->query("SELECT COUNT(*) FROM bets WHERE created_by IS NULL")->fetchColumn();
+        if ($nullCount > 0) {
+            // Get admin user
+            $adminUser = $pdo->query("SELECT username FROM users WHERE role = 'admin' LIMIT 1")->fetchColumn();
+            if ($adminUser) {
+                $pdo->prepare("UPDATE bets SET created_by = ? WHERE created_by IS NULL")->execute([$adminUser]);
+            }
+        }
+    } catch (Exception $e) {}
+
     $stmt = $pdo->prepare("
         SELECT bi.number, bi.bet_type, bi.amount, 
                COALESCE(bi.adjusted_pay_rate, pr.pay_rate, 0) AS item_pay_rate,
