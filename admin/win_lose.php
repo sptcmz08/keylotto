@@ -577,7 +577,7 @@ function drillDown(number) {
     const title = document.getElementById('drillTitle');
     title.textContent = 'รายละเอียดเลข: ' + number;
     body.innerHTML = '<div style="padding:30px;text-align:center;color:#999;"><i class="fas fa-spinner fa-spin"></i> กำลังโหลด...</div>';
-    modal.style.display = '';
+    modal.style.display = 'block';
     document.body.style.overflow = 'hidden';
     
     // Fetch all bet types for this number
@@ -645,7 +645,7 @@ function drillDownType(number, betType) {
     const title = document.getElementById('drillTitle');
     title.textContent = '\u0e23\u0e32\u0e22\u0e01\u0e32\u0e23\u0e41\u0e17\u0e07 ' + BET_TYPE_LABELS[betType] + ' \u0e2b\u0e21\u0e32\u0e22\u0e40\u0e25\u0e02 ' + number;
     body.innerHTML = '<div style="padding:30px;text-align:center;color:#999;font-size:14px;"><i class="fas fa-spinner fa-spin"></i> \u0e01\u0e33\u0e25\u0e31\u0e07\u0e42\u0e2b\u0e25\u0e14...</div>';
-    modal.style.display = '';
+    modal.style.display = 'block';
     document.body.style.overflow = 'hidden';
     
     fetch('win_lose.php?ajax=drill_down&number=' + encodeURIComponent(number) + '&bet_type=' + betType + '&lottery=' + LOTTERY_ID + '&date=' + DRAW_DATE)
