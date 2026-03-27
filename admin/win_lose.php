@@ -15,6 +15,9 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'drill_down') {
     $lotteryId = intval($_GET['lottery'] ?? 0);
     $drawDate = $_GET['date'] ?? '';
     
+    // Ensure created_by column exists
+    try { $pdo->exec("ALTER TABLE bets ADD COLUMN created_by VARCHAR(100) DEFAULT NULL"); } catch (Exception $e) {}
+
     $stmt = $pdo->prepare("
         SELECT bi.number, bi.bet_type, bi.amount, 
                COALESCE(bi.adjusted_pay_rate, pr.pay_rate, 0) AS item_pay_rate,
