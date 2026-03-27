@@ -18,7 +18,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'drill_down') {
     $stmt = $pdo->prepare("
         SELECT bi.number, bi.bet_type, bi.amount, 
                COALESCE(bi.adjusted_pay_rate, pr.pay_rate, 0) AS item_pay_rate,
-               b.bet_number, b.created_at, b.note,
+               b.bet_number, b.created_at, b.note, b.created_by,
                pr.pay_rate
         FROM bet_items bi
         JOIN bets b ON bi.bet_id = b.id
@@ -603,13 +603,14 @@ function drillDown(number) {
                 ${BET_TYPE_LABELS[bt]} — ${items.length} รายการ — รวม ${subtotal.toLocaleString('en-US',{minimumFractionDigits:2})} บาท
             </div>`;
             html += '<table class="drill-table"><thead><tr>';
-            html += '<th style="width:30px">#</th><th>ชื่อใช้งาน</th><th>วันที่-เวลา</th><th>ประเภท</th><th>หมายเลข</th><th>เรทจ่าย</th><th>จำนวน</th>';
+            html += '<th style="width:30px">#</th><th>ชื่อใช้งาน</th><th>วันที่-เวลา</th><th>ประเภท</th><th>หมายเลข</th><th>เรทจ่าย</th><th>จำนวน</th><th>หมายเหตุ</th>';
             html += '</tr></thead><tbody>';
             items.forEach((item, i) => {
                 const dt = new Date(item.created_at.replace(/-/g, '/'));
                 const dateStr = dt.toLocaleDateString('th-TH',{day:'2-digit',month:'2-digit',year:'2-digit'}) + ' ' + dt.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'});
                 const rate = parseFloat(item.item_pay_rate || item.pay_rate || 0);
-                const customer = item.note || '-';
+                const customer = item.created_by || '-';
+                const ticketNote = item.note || '-';
                 html += `<tr>
                     <td style="text-align:center;color:#999">${i+1}</td>
                     <td style="font-weight:bold;color:#1565c0">${customer}</td>
@@ -618,6 +619,7 @@ function drillDown(number) {
                     <td style="text-align:center;font-weight:bold;font-family:monospace;font-size:14px">${item.number}</td>
                     <td style="text-align:center">${rate.toFixed(2)}</td>
                     <td style="text-align:right;font-weight:bold;color:#d32f2f">${parseFloat(item.amount).toLocaleString('en-US',{minimumFractionDigits:2})}</td>
+                    <td style="text-align:left;font-size:11px;color:#666">${ticketNote}</td>
                 </tr>`;
             });
             html += '</tbody></table>';
@@ -671,7 +673,8 @@ function drillDownType(number, betType) {
                 var dt = new Date(item.created_at.replace(/-/g, '/'));
                 var dateStr = dt.toLocaleDateString('th-TH',{day:'2-digit',month:'2-digit',year:'2-digit'}) + ' ' + dt.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'});
                 var rate = parseFloat(item.item_pay_rate || item.pay_rate || 0);
-                var customer = item.note || '-';
+                var customer = item.created_by || '-';
+                var ticketNote = item.note || '-';
                 html += '<tr>';
                 html += '<td style="text-align:center;color:#999">' + (i+1) + '</td>';
                 html += '<td style="font-weight:bold;color:#1565c0">' + customer + '</td>';
@@ -680,7 +683,7 @@ function drillDownType(number, betType) {
                 html += '<td style="text-align:center;font-weight:bold;font-family:monospace;font-size:14px">' + item.number + '</td>';
                 html += '<td style="text-align:center">' + rate.toFixed(2) + '</td>';
                 html += '<td style="text-align:right;font-weight:bold;color:#1b5e20">' + parseFloat(item.amount).toLocaleString('en-US',{minimumFractionDigits:2}) + '</td>';
-                html += '<td style="text-align:left;font-size:11px;color:#666">' + (item.bet_number || '') + '</td>';
+                html += '<td style="text-align:left;font-size:11px;color:#666">' + ticketNote + '</td>';
                 html += '</tr>';
             });
             html += '<tr class="drill-total">';

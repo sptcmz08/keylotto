@@ -426,11 +426,16 @@ try {
 
             $pdo->beginTransaction();
 
+            // Ensure created_by column exists
+            try { $pdo->exec("ALTER TABLE bets ADD COLUMN created_by VARCHAR(100) DEFAULT NULL"); } catch (Exception $e) {}
+
+            $createdBy = $_SESSION['username'] ?? 'system';
+
             $stmt = $pdo->prepare("
-                INSERT INTO bets (bet_number, lottery_type_id, draw_date, total_items, total_amount, discount_amount, net_amount, note, rate_adjusted)
-                VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?)
+                INSERT INTO bets (bet_number, lottery_type_id, draw_date, total_items, total_amount, discount_amount, net_amount, note, rate_adjusted, created_by)
+                VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?)
             ");
-            $stmt->execute([$betNumber, $lotteryId, $drawDate, $totalItems, $totalAmount, $netAmount, $note, $autoRateAdjusted ? 1 : 0]);
+            $stmt->execute([$betNumber, $lotteryId, $drawDate, $totalItems, $totalAmount, $netAmount, $note, $autoRateAdjusted ? 1 : 0, $createdBy]);
             $betId = $pdo->lastInsertId();
 
             $stmtItem = $pdo->prepare("INSERT INTO bet_items (bet_id, number, bet_type, amount, adjusted_pay_rate) VALUES (?, ?, ?, ?, ?)");
