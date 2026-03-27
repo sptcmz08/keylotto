@@ -1117,11 +1117,13 @@ switch ($scraper) {
         scrapeGSB($pdo);
         break;
     case 'all':
-        scrapeRaakaadee($pdo);
+        // ExpHuay เป็นหลัก (HTTP เร็ว, แม่นยำ)
+        scrapeExphuay($pdo);
         echo "\n───────────────────────────────────────\n\n";
         scrapePonhuay24($pdo);
         echo "\n───────────────────────────────────────\n\n";
-        scrapeExphuay($pdo);
+        // Raakaadee เป็นสำรอง (เก็บผลที่ ExpHuay ไม่มี)
+        scrapeRaakaadee($pdo);
         // หวยไทย/ออมสิน — รันเฉพาะวันที่ 1 และ 16 ของเดือน
         $dayOfMonth = intval(date('d'));
         if ($dayOfMonth === 1 || $dayOfMonth === 16) {
