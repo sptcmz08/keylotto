@@ -1,6 +1,7 @@
 <?php
-require_once 'config.php';
-header('Content-Type: text/html; charset=utf-8');
+require_once __DIR__ . '/../auth.php';
+requireLogin();
+require_once __DIR__ . '/../config.php';
 
 $lotteryId = intval($_GET['lottery'] ?? 0);
 $date = $_GET['date'] ?? date('Y-m-d');
