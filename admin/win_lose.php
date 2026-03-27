@@ -16,7 +16,8 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'drill_down') {
     $drawDate = $_GET['date'] ?? '';
     
     $stmt = $pdo->prepare("
-        SELECT bi.number, bi.bet_type, bi.amount, bi.adjusted_pay_rate AS item_pay_rate,
+        SELECT bi.number, bi.bet_type, bi.amount, 
+               COALESCE(bi.adjusted_pay_rate, pr.pay_rate, 0) AS item_pay_rate,
                b.bet_number, b.created_at, b.note,
                pr.pay_rate
         FROM bet_items bi
@@ -132,8 +133,13 @@ try {
 
 // Per-number breakdown
 $numberStmt = $pdo->prepare("
-    SELECT bi.number, bi.bet_type, SUM(bi.amount) as total_amount, SUM(bi.amount * bi.adjusted_pay_rate) as total_payout, COUNT(*) as total_count
-    FROM bet_items bi JOIN bets b ON bi.bet_id = b.id $where
+    SELECT bi.number, bi.bet_type, SUM(bi.amount) as total_amount, 
+           SUM(bi.amount * COALESCE(bi.adjusted_pay_rate, pr.pay_rate, 0)) as total_payout, 
+           COUNT(*) as total_count
+    FROM bet_items bi 
+    JOIN bets b ON bi.bet_id = b.id 
+    LEFT JOIN pay_rates pr ON pr.lottery_type_id = b.lottery_type_id AND pr.bet_type = bi.bet_type
+    $where
     GROUP BY bi.number, bi.bet_type ORDER BY bi.number
 ");
 $numberStmt->execute($params);
