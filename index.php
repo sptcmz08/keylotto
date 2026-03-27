@@ -139,9 +139,10 @@ foreach ($allLotteries as &$l) {
         $l['smart_status'] = 'open';
     }
     
-    // เก็บข้อมูลงวดปัจจุบันไว้ใช้ในส่วน display
+    // เก็บข้อมูลงวดปัจจุบัน + open_time ไว้ใช้ในส่วน display
     $l['current_round_date'] = $currentRoundDate;
     $l['has_result_current_round'] = $hasResultForCurrentRound;
+    $l['is_past_open_time'] = $isPastOpenTime;
     
     $lotteryMap[$l['name']] = $l;
 }
@@ -492,19 +493,15 @@ require_once 'includes/header.php';
                         $statusClass = 'status-waiting'; $statusLabel = 'รอออกผล';
                     }
                     } // end if/else showingNextRound
-                    // หวยที่เลย close_time ไปเกิน 10 นาที → ซ่อนเลย
-                    $minutesPastClose = $pastCloseTime && $closeTime ? (($now - $closeTime) / 60) : 0;
-                    $shouldHide = $pastCloseTime && !$hasResultForRound && $minutesPastClose > 10 && !$showingNextRound;
-                    if ($shouldHide) continue; // ซ่อนหวยที่ปิดเกิน 10 นาที
-                    
-                    // ปิดรับแล้ว (0-10 นาที) → แสดงเทา
+                    // หวยที่เลย close_time → แสดงเทา (ไม่ซ่อน เพื่อไม่ให้หวยหายจากหน้า)
                     $isGreyedOut = $pastCloseTime && !$hasResultForRound && !$showingNextRound;
                 ?>
                 <tr<?= $isGreyedOut ? ' style="opacity:0.45;"' : '' ?>>
                     <td>
                         <?php 
-                        // สามารถแทงได้เมื่อ: ไม่โดนปิดมือ, ยังไม่เลย close_time, และยังรอออกผลอยู่
-                        $canBet = !$isBetClosed && !$pastCloseTime && in_array($statusClass, ['status-waiting', 'status-drawing', 'status-open']);
+                        // สามารถแทงได้เมื่อ: ไม่โดนปิดมือ, เลย open_time แล้ว, ยังไม่เลย close_time, และยังรอออกผลอยู่
+                        $isPastOpenTime = $lt['is_past_open_time'] ?? true;
+                        $canBet = !$isBetClosed && $isPastOpenTime && !$pastCloseTime && in_array($statusClass, ['status-waiting', 'status-drawing', 'status-open']);
                         
                         // ถ้ารอออกผลงวดถัดไป (รายเดือน 1,16) ก็แทงได้
                         if ($showingNextRound) $canBet = true;
