@@ -417,7 +417,7 @@ require_once 'includes/header.php';
                 ?>
                 <!-- ซื้อ -->
                 <tr class="wl-summary" style="background:#f0fff0;">
-                    <td class="label-cell" style="color:#1b5e20;">&#x1F4B0; ซื้อ</td>
+                    <td class="label-cell" style="color:#1b5e20;">ซื้อ</td>
                     <td class="num-cell sum-num" style="background:#c8e6c9; font-size:17px; color:#1b5e20;"><?= number_format($grandBuy,2) ?></td>
                     <?php foreach ($betTypes as $bt): ?>
                     <td class="num-cell sum-num" colspan="2"><?= number_format($summary[$bt]['buy'],2) ?></td>
@@ -433,7 +433,7 @@ require_once 'includes/header.php';
                 </tr>
                 <!-- รับ -->
                 <tr class="wl-summary" style="background:#e8f5e9;">
-                    <td class="label-cell" style="color:#1b5e20;">&#x1F4E5; รับ</td>
+                    <td class="label-cell" style="color:#1b5e20;">รับ</td>
                     <td class="num-cell sum-num" style="background:#a5d6a7; font-size:17px; color:#1b5e20; font-weight:bold;"><?= number_format($grandReceive,2) ?></td>
                     <?php foreach ($betTypes as $bt): ?>
                     <td class="num-cell sum-num pos" colspan="2"><?= number_format($summary[$bt]['buy'],2) ?></td>
@@ -441,7 +441,7 @@ require_once 'includes/header.php';
                 </tr>
                 <!-- จ่าย -->
                 <tr class="wl-summary" style="background:#fff0f0;">
-                    <td class="label-cell" style="color:#b71c1c;">&#x1F4B8; จ่าย</td>
+                    <td class="label-cell" style="color:#b71c1c;">จ่าย</td>
                     <td class="num-cell sum-num" style="background:#ffcdd2; font-size:17px; color:#b71c1c;"><?= $grandWorstPayout > 0 ? number_format(-$grandWorstPayout,2) : '&mdash;' ?></td>
                     <?php foreach ($betTypes as $bt): ?>
                     <td class="num-cell sum-num neg" colspan="2"><?= $summary[$bt]['worst_payout']>0 ? number_format(-$summary[$bt]['worst_payout'],2) : '&mdash;' ?></td>
@@ -449,7 +449,7 @@ require_once 'includes/header.php';
                 </tr>
                 <!-- ตั้งสู้ -->
                 <tr class="wl-summary" style="background:#fffde7;">
-                    <td class="label-cell" style="color:#e65100;">&#x1F6E1; ตั้งสู้ <button class="btn-save-fight" onclick="saveFightLimits()">&#x1F4BE; บันทึก</button></td>
+                    <td class="label-cell" style="color:#e65100;">ตั้งสู้ <button class="btn-save-fight" onclick="saveFightLimits()">บันทึก</button></td>
                     <td></td>
                     <?php foreach ($betTypes as $bt): ?>
                     <td style="text-align:center; padding:5px 4px;" colspan="2">
