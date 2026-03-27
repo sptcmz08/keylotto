@@ -203,7 +203,9 @@ foreach ($betTypes as $bt) {
     // Sort by amount desc (คนแทงเยอะสุด) or payout desc based on filter
     if ($sortBy === 'payout_desc') {
         usort($btData, fn($a, $b) => $b['payout'] <=> $a['payout']);
-    } else if ($sortBy === 'amount_desc') {
+    } else if ($sortBy === 'default') {
+        usort($btData, fn($a, $b) => strcmp($a['number'], $b['number']));
+    } else {
         usort($btData, fn($a, $b) => $b['amount'] <=> $a['amount']);
     }
     $betTypeRows[$bt] = $btData;
@@ -401,15 +403,15 @@ require_once 'includes/header.php';
     </div>
 
     <!-- FILTER BAR -->
-    <form method="GET" class="filter-bar">
+    <form method="GET" class="filter-bar" id="filterForm">
         <label>เรียงลำดับ</label>
-        <select name="sort">
+        <select name="sort" onchange="document.getElementById('filterForm').submit()">
             <option value="amount_desc" <?= $sortBy==='amount_desc'?'selected':'' ?>>ยอดซื้อมากสุด</option>
             <option value="payout_desc" <?= $sortBy==='payout_desc'?'selected':'' ?>>ยอดจ่ายมากสุด</option>
             <option value="default" <?= $sortBy==='default'?'selected':'' ?>>ตามลำดับเลข</option>
         </select>
         <label>จำนวนแสดง</label>
-        <select name="limit">
+        <select name="limit" onchange="document.getElementById('filterForm').submit()">
             <?php foreach ([50,100,200,500,9999] as $lv): ?>
             <option value="<?= $lv ?>" <?= $showLimit==$lv?'selected':'' ?>><?= $lv==9999?'ทั้งหมด':$lv ?></option>
             <?php endforeach; ?>
