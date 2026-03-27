@@ -192,6 +192,19 @@ foreach ($betTypes as $bt) {
         usort($btData, fn($a, $b) => $b['amount'] <=> $a['amount']);
     }
     $betTypeRows[$bt] = $btData;
+
+    // run_top / run_bot: ensure digits 0-9 always present
+    if ($bt === 'run_top' || $bt === 'run_bot') {
+        $existing = array_column($btData, 'number');
+        for ($d = 0; $d <= 9; $d++) {
+            $digit = strval($d);
+            if (!in_array($digit, $existing)) {
+                $betTypeRows[$bt][] = ['number' => $digit, 'amount' => 0, 'payout' => 0];
+            }
+        }
+        // Sort by number asc for run types
+        usort($betTypeRows[$bt], fn($a, $b) => intval($a['number']) <=> intval($b['number']));
+    }
 }
 $maxDataRows = !empty($betTypeRows) ? max(array_map('count', $betTypeRows)) : 0;
 if ($maxDataRows > $showLimit) $maxDataRows = $showLimit;
@@ -416,18 +429,10 @@ require_once 'includes/header.php';
                     <td class="num-cell sum-num" colspan="2"><?= number_format($summary[$bt]['buy'],2) ?></td>
                     <?php endforeach; ?>
                 </tr>
-                <!-- คอมฯ -->
-                <tr class="wl-summary">
-                    <td class="label-cell" style="color:#e65100;">คอมฯ</td>
-                    <td class="num-cell sum-num" style="color:#e65100;"><?= $totalDiscount > 0 ? number_format(-$totalDiscount,2) : '0.00' ?></td>
-                    <?php foreach ($betTypes as $bt): ?>
-                    <td class="num-cell" colspan="2" style="color:#e65100;"><?= $totalDiscount > 0 ? number_format(-$totalDiscount / count($betTypes),2) : '0.00' ?></td>
-                    <?php endforeach; ?>
-                </tr>
                 <!-- รับ -->
                 <tr class="wl-summary" style="background:#e8f5e9;">
                     <td class="label-cell" style="color:#1b5e20;">รับ</td>
-                    <td class="num-cell sum-num" style="color:#1b5e20; font-weight:bold;"><?= number_format($grandReceive,2) ?></td>
+                    <td class="num-cell sum-num" style="color:#1b5e20; font-weight:bold;"><?= number_format($grandBuy,2) ?></td>
                     <?php foreach ($betTypes as $bt): ?>
                     <td class="num-cell sum-num pos" colspan="2"><?= number_format($summary[$bt]['buy'],2) ?></td>
                     <?php endforeach; ?>
