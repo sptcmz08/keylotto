@@ -421,7 +421,7 @@ require_once 'includes/header.php';
                     <td style="text-align:center;" onclick="drillDownType('<?= htmlspecialchars($d['number']) ?>','<?= $bt ?>')">
                         <span class="number-badge"><?= htmlspecialchars($d['number']) ?></span>
                     </td>
-                    <td class="num-cell data-amount neg" onclick="drillDownType('<?= htmlspecialchars($d['number']) ?>','<?= $bt ?>')"><?= number_format(-$d['payout'],2) ?></td>
+                    <td class="num-cell data-amount neg" onclick="drillDownType('<?= htmlspecialchars($d['number']) ?>','<?= $bt ?>')"><?= number_format($d['amount'],2) ?></td>
                     <?php else: ?>
                     <td></td><td></td>
                     <?php endif; ?>
@@ -563,67 +563,62 @@ function drillDown(number) {
     });
 }
 
-// Drill-down: single bet type — แสดงรายละเอียดลูกค้า
+
+// Drill-down: single bet type
 function drillDownType(number, betType) {
     const modal = document.getElementById('drillModal');
     const body = document.getElementById('drillBody');
     const title = document.getElementById('drillTitle');
-    title.textContent = `รายการแทง ${BET_TYPE_LABELS[betType]} หมายเลข ${number}`;
-    body.innerHTML = '<div style="padding:30px;text-align:center;color:#999;font-size:14px;"><i class="fas fa-spinner fa-spin"></i> กำลังโหลด...</div>';
+    title.textContent = '\u0e23\u0e32\u0e22\u0e01\u0e32\u0e23\u0e41\u0e17\u0e07 ' + BET_TYPE_LABELS[betType] + ' \u0e2b\u0e21\u0e32\u0e22\u0e40\u0e25\u0e02 ' + number;
+    body.innerHTML = '<div style="padding:30px;text-align:center;color:#999;font-size:14px;"><i class="fas fa-spinner fa-spin"></i> \u0e01\u0e33\u0e25\u0e31\u0e07\u0e42\u0e2b\u0e25\u0e14...</div>';
     modal.style.display = '';
     document.body.style.overflow = 'hidden';
     
-    fetch(`win_lose.php?ajax=drill_down&number=${encodeURIComponent(number)}&bet_type=${betType}&lottery=${LOTTERY_ID}&date=${DRAW_DATE}`)
+    fetch('win_lose.php?ajax=drill_down&number=' + encodeURIComponent(number) + '&bet_type=' + betType + '&lottery=' + LOTTERY_ID + '&date=' + DRAW_DATE)
         .then(r => r.json())
         .then(data => {
             const items = data.items || [];
             if (items.length === 0) {
-                body.innerHTML = '<div style="padding:30px;text-align:center;color:#999;font-size:14px;">ไม่พบรายการ</div>';
+                body.innerHTML = '<div style="padding:30px;text-align:center;color:#999;font-size:14px;">\u0e44\u0e21\u0e48\u0e1e\u0e1a\u0e23\u0e32\u0e22\u0e01\u0e32\u0e23</div>';
                 return;
             }
             
             let subtotal = 0;
-            let subtotalPayout = 0;
-            items.forEach(i => {
-                subtotal += parseFloat(i.amount);
-                const rate = parseFloat(i.item_pay_rate || i.pay_rate || 0);
-                subtotalPayout += parseFloat(i.amount) * rate;
-            });
+            items.forEach(function(it) { subtotal += parseFloat(it.amount); });
             
-            let html = `<div style="background:#e8f5e9;padding:8px 16px;font-size:14px;font-weight:bold;border-bottom:2px solid #00a65a;display:flex;justify-content:space-between;align-items:center;">
-                <span>รวม ${items.length} รายการ</span>
-                <span>ยอดซื้อ: <span style="color:#1b5e20">${subtotal.toLocaleString('en-US',{minimumFractionDigits:2})}</span> — ยอดที่จะเสียหากถูก: <span style="color:#d32f2f">${subtotalPayout.toLocaleString('en-US',{minimumFractionDigits:2})}</span></span>
-            </div>`;
+            var html = '<div style="background:#e8f5e9;padding:8px 16px;font-size:14px;font-weight:bold;border-bottom:2px solid #00a65a;display:flex;justify-content:space-between;align-items:center;">';
+            html += '<span>\u0e23\u0e27\u0e21 ' + items.length + ' \u0e23\u0e32\u0e22\u0e01\u0e32\u0e23</span>';
+            html += '<span>\u0e22\u0e2d\u0e14\u0e0b\u0e37\u0e49\u0e2d: <span style="color:#1b5e20">' + subtotal.toLocaleString('en-US',{minimumFractionDigits:2}) + '</span></span>';
+            html += '</div>';
             html += '<table class="drill-table"><thead><tr>';
-            html += '<th style="width:30px">#</th><th>ชื่อใช้งาน</th><th>วันที่-เวลา</th><th>ประเภท</th><th>หมายเลข</th><th>เรทจ่าย</th><th>จำนวน</th>';
+            html += '<th style="width:30px">#</th><th>\u0e0a\u0e37\u0e48\u0e2d\u0e43\u0e0a\u0e49\u0e07\u0e32\u0e19</th><th>\u0e27\u0e31\u0e19\u0e17\u0e35\u0e48</th><th>\u0e1b\u0e23\u0e30\u0e40\u0e20\u0e17</th><th>\u0e2b\u0e21\u0e32\u0e22\u0e40\u0e25\u0e02</th><th>\u0e40\u0e23\u0e17\u0e08\u0e48\u0e32\u0e22</th><th>\u0e08\u0e33\u0e19\u0e27\u0e19</th><th>\u0e2b\u0e21\u0e32\u0e22\u0e40\u0e2b\u0e15\u0e38</th>';
             html += '</tr></thead><tbody>';
-            items.forEach((item, i) => {
-                const dt = new Date(item.created_at.replace(/-/g, '/'));
-                const dateStr = dt.toLocaleDateString('th-TH',{day:'2-digit',month:'2-digit',year:'2-digit'}) + ' ' + dt.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'});
-                const rate = parseFloat(item.item_pay_rate || item.pay_rate || 0);
-                const payout = parseFloat(item.amount) * rate;
-                const customer = item.note || '-';
-                html += `<tr>
-                    <td style="text-align:center;color:#999">${i+1}</td>
-                    <td style="font-weight:bold;color:#1565c0">${customer}</td>
-                    <td style="text-align:center;white-space:nowrap">${dateStr}</td>
-                    <td style="text-align:center">${BET_TYPE_LABELS[betType]}</td>
-                    <td style="text-align:center;font-weight:bold;font-family:monospace;font-size:14px">${item.number}</td>
-                    <td style="text-align:center">${rate.toFixed(2)}</td>
-                    <td style="text-align:right;font-weight:bold;color:#d32f2f">${parseFloat(item.amount).toLocaleString('en-US',{minimumFractionDigits:2})}</td>
-                </tr>`;
+            items.forEach(function(item, i) {
+                var dt = new Date(item.created_at.replace(/-/g, '/'));
+                var dateStr = dt.toLocaleDateString('th-TH',{day:'2-digit',month:'2-digit',year:'2-digit'}) + ' ' + dt.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'});
+                var rate = parseFloat(item.item_pay_rate || item.pay_rate || 0);
+                var customer = item.note || '-';
+                html += '<tr>';
+                html += '<td style="text-align:center;color:#999">' + (i+1) + '</td>';
+                html += '<td style="font-weight:bold;color:#1565c0">' + customer + '</td>';
+                html += '<td style="text-align:center;white-space:nowrap">' + dateStr + '</td>';
+                html += '<td style="text-align:center">' + BET_TYPE_LABELS[betType] + '</td>';
+                html += '<td style="text-align:center;font-weight:bold;font-family:monospace;font-size:14px">' + item.number + '</td>';
+                html += '<td style="text-align:center">' + rate.toFixed(2) + '</td>';
+                html += '<td style="text-align:right;font-weight:bold;color:#1b5e20">' + parseFloat(item.amount).toLocaleString('en-US',{minimumFractionDigits:2}) + '</td>';
+                html += '<td style="text-align:left;font-size:11px;color:#666">' + (item.bet_number || '') + '</td>';
+                html += '</tr>';
             });
-            // Summary row
-            html += `<tr class="drill-total">
-                <td colspan="6" style="text-align:right;padding-right:10px">รวม ${items.length} รายการ</td>
-                <td style="text-align:right;color:#d32f2f">${subtotal.toLocaleString('en-US',{minimumFractionDigits:2})}</td>
-            </tr>`;
+            html += '<tr class="drill-total">';
+            html += '<td colspan="6" style="text-align:right;padding-right:10px">\u0e23\u0e27\u0e21 ' + items.length + ' \u0e23\u0e32\u0e22\u0e01\u0e32\u0e23</td>';
+            html += '<td style="text-align:right;color:#1b5e20">' + subtotal.toLocaleString('en-US',{minimumFractionDigits:2}) + '</td>';
+            html += '<td></td>';
+            html += '</tr>';
             html += '</tbody></table>';
-            
             body.innerHTML = html;
         })
-        .catch(e => {
-            body.innerHTML = '<div style="padding:30px;text-align:center;color:#d32f2f;">เกิดข้อผิดพลาด: ' + e.message + '</div>';
+        .catch(function(e) {
+            body.innerHTML = '<div style="padding:30px;text-align:center;color:#d32f2f;">\u0e40\u0e01\u0e34\u0e14\u0e02\u0e49\u0e2d\u0e1c\u0e34\u0e14\u0e1e\u0e25\u0e32\u0e14: ' + e.message + '</div>';
         });
 }
 
@@ -631,7 +626,7 @@ function closeDrill() {
     document.getElementById('drillModal').style.display = 'none';
     document.body.style.overflow = '';
 }
-document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDrill(); });
+document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeDrill(); });
 </script>
 
 <?php require_once 'includes/footer.php'; ?>
