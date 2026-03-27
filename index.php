@@ -387,6 +387,12 @@ require_once 'includes/header.php';
                     }
                     $displayDate = date('d-m-Y', strtotime($roundDate));
                     
+                    // === Default values (ต้องกำหนดก่อน if/else) ===
+                    $pastCloseTime = false;
+                    $closeTime = null;
+                    $isBetClosed = !empty($lt['bet_closed']);
+                    $hoursPastClose = 0;
+                    
                     // === ถ้าแสดงงวดถัดไป (หวยรายเดือน) → บังคับ "รอออกผล" ===
                     if ($showingNextRound) {
                         $statusClass = 'status-waiting'; $statusLabel = 'รอออกผล';
