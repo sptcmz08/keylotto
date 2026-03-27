@@ -132,7 +132,7 @@ try {
 
 // Per-number breakdown
 $numberStmt = $pdo->prepare("
-    SELECT bi.number, bi.bet_type, SUM(bi.amount) as total_amount, COUNT(*) as total_count
+    SELECT bi.number, bi.bet_type, SUM(bi.amount) as total_amount, SUM(bi.amount * bi.adjusted_pay_rate) as total_payout, COUNT(*) as total_count
     FROM bet_items bi JOIN bets b ON bi.bet_id = b.id $where
     GROUP BY bi.number, bi.bet_type ORDER BY bi.number
 ");
@@ -142,7 +142,11 @@ $numberMap = [];
 foreach ($numberStmt->fetchAll() as $r) {
     $num = $r['number'];
     if (!isset($numberMap[$num])) $numberMap[$num] = [];
-    $numberMap[$num][$r['bet_type']] = ['amount' => floatval($r['total_amount']), 'count' => intval($r['total_count'])];
+    $numberMap[$num][$r['bet_type']] = [
+        'amount' => floatval($r['total_amount']), 
+        'payout' => floatval($r['total_payout']), 
+        'count' => intval($r['total_count'])
+    ];
 }
 
 $betTypes = ['3top', '3tod', '2top', '2bot', 'run_top', 'run_bot'];
@@ -155,7 +159,7 @@ foreach ($numberMap as $num => $types) {
     foreach ($betTypes as $bt) {
         if (isset($types[$bt])) {
             $summary[$bt]['buy'] += $types[$bt]['amount'];
-            $thisPayout = $types[$bt]['amount'] * ($rates[$bt] ?? 0);
+            $thisPayout = $types[$bt]['payout'];
             if ($thisPayout > $summary[$bt]['worst_payout']) {
                 $summary[$bt]['worst_payout'] = $thisPayout;
             }
@@ -171,7 +175,7 @@ foreach ($betTypes as $bt) {
     $btData = [];
     foreach ($numberMap as $num => $types) {
         if (isset($types[$bt]) && $types[$bt]['amount'] > 0) {
-            $payout = $types[$bt]['amount'] * ($rates[$bt] ?? 0);
+            $payout = $types[$bt]['payout'];
             $btData[] = ['number' => $num, 'amount' => $types[$bt]['amount'], 'payout' => $payout];
         }
     }
@@ -522,7 +526,7 @@ function drillDown(number) {
             html += '<th style="width:30px">#</th><th>ชื่อใช้งาน</th><th>วันที่-เวลา</th><th>ประเภท</th><th>หมายเลข</th><th>เรทจ่าย</th><th>จำนวน</th>';
             html += '</tr></thead><tbody>';
             items.forEach((item, i) => {
-                const dt = new Date(item.created_at);
+                const dt = new Date(item.created_at.replace(/-/g, '/'));
                 const dateStr = dt.toLocaleDateString('th-TH',{day:'2-digit',month:'2-digit',year:'2-digit'}) + ' ' + dt.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'});
                 const rate = parseFloat(item.item_pay_rate || item.pay_rate || 0);
                 const customer = item.note || '-';
@@ -588,7 +592,7 @@ function drillDownType(number, betType) {
             html += '<th style="width:30px">#</th><th>ชื่อใช้งาน</th><th>วันที่-เวลา</th><th>ประเภท</th><th>หมายเลข</th><th>เรทจ่าย</th><th>จำนวน</th>';
             html += '</tr></thead><tbody>';
             items.forEach((item, i) => {
-                const dt = new Date(item.created_at);
+                const dt = new Date(item.created_at.replace(/-/g, '/'));
                 const dateStr = dt.toLocaleDateString('th-TH',{day:'2-digit',month:'2-digit',year:'2-digit'}) + ' ' + dt.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'});
                 const rate = parseFloat(item.item_pay_rate || item.pay_rate || 0);
                 const payout = parseFloat(item.amount) * rate;
