@@ -486,8 +486,16 @@ require_once 'includes/header.php';
                         $statusClass = 'status-waiting'; $statusLabel = 'รอออกผล';
                     }
                     } // end if/else showingNextRound
+                <?php
+                    // หวยที่เลย close_time ไปเกิน 10 นาที → ซ่อนเลย
+                    $minutesPastClose = $pastCloseTime && $closeTime ? (($now - $closeTime) / 60) : 0;
+                    $shouldHide = $pastCloseTime && !$hasResultForRound && $minutesPastClose > 10 && !$showingNextRound;
+                    if ($shouldHide) continue; // ซ่อนหวยที่ปิดเกิน 10 นาที
+                    
+                    // ปิดรับแล้ว (0-10 นาที) → แสดงเทา
+                    $isGreyedOut = $pastCloseTime && !$hasResultForRound && !$showingNextRound;
                 ?>
-                <tr>
+                <tr<?= $isGreyedOut ? ' style="opacity:0.45;"' : '' ?>>
                     <td>
                         <?php 
                         // สามารถแทงได้เมื่อ: ไม่โดนปิดมือ, ยังไม่เลย close_time, และยังรอออกผลอยู่
@@ -508,7 +516,7 @@ require_once 'includes/header.php';
                             <span class="lottery-name"><?= htmlspecialchars($lotteryName) ?></span>
                         </a>
                         <?php else: ?>
-                        <div class="flex items-center space-x-2 opacity-60 cursor-not-allowed" title="ปิดรับแทงแล้ว">
+                        <div class="flex items-center space-x-2 cursor-not-allowed" title="ปิดรับแทงแล้ว">
                             <img src="<?= $flagUrl ?>" alt="flag" class="flag-img">
                             <span class="lottery-name"><?= htmlspecialchars($lotteryName) ?></span>
                         </div>
@@ -526,7 +534,11 @@ require_once 'includes/header.php';
                         <?php endif; ?>
                     </td>
                     <td class="text-center">
-                        <span class="<?= $statusClass ?>"><?= $statusLabel ?></span>
+                        <?php if ($isGreyedOut): ?>
+                            <span class="status-suspended">ปิดรับแล้ว</span>
+                        <?php else: ?>
+                            <span class="<?= $statusClass ?>"><?= $statusLabel ?></span>
+                        <?php endif; ?>
                     </td>
                 </tr>
                 <?php endforeach; ?>
