@@ -512,6 +512,28 @@ try {
         case 'cancel_bet':
             $betId = intval($data['bet_id'] ?? 0);
             if (!$betId) { echo json_encode(['error' => 'ไม่ได้ระบุโพย']); break; }
+            
+            // เช็คว่าหวยยังเปิดรับอยู่ไหม — ปิดแล้วต้องยกเลิกผ่านหลังบ้านเท่านั้น
+            $betCheck = $pdo->prepare("
+                SELECT b.draw_date, lt.close_time, lt.open_time
+                FROM bets b JOIN lottery_types lt ON b.lottery_type_id = lt.id
+                WHERE b.id = ?
+            ");
+            $betCheck->execute([$betId]);
+            $betInfo = $betCheck->fetch();
+            
+            if ($betInfo && $betInfo['close_time']) {
+                $closeDT = new DateTime($betInfo['draw_date'] . ' ' . $betInfo['close_time']);
+                $openH = intval(substr($betInfo['open_time'] ?? '06:00', 0, 2));
+                $closeH = intval(substr($betInfo['close_time'], 0, 2));
+                if ($closeH < $openH) $closeDT->modify('+1 day');
+                
+                if (new DateTime() > $closeDT) {
+                    echo json_encode(['error' => 'หวยปิดรับแล้ว ยกเลิกได้เฉพาะแอดมินหลังบ้านเท่านั้น']);
+                    break;
+                }
+            }
+            
             $stmt = $pdo->prepare("UPDATE bets SET status = 'cancelled' WHERE id = ? AND status = 'pending'");
             $stmt->execute([$betId]);
             if ($stmt->rowCount() > 0) {

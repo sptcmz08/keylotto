@@ -566,7 +566,8 @@ $drawDate = date('d-m-Y', strtotime($calcDrawDate));
 // Fetch recent 15 bills
 $stmtBills = $pdo->query("
     SELECT b.id, b.bet_number, b.created_at, b.total_items, b.net_amount, b.status, b.note,
-           lt.name as lottery_name, lc.name as category_name
+           lt.name as lottery_name, lc.name as category_name,
+           lt.close_time, lt.open_time, b.draw_date
     FROM bets b
     JOIN lottery_types lt ON b.lottery_type_id = lt.id
     JOIN lottery_categories lc ON lt.category_id = lc.id
@@ -967,10 +968,30 @@ require_once 'includes/header.php';
                         <button onclick="viewRecentBetDetail(<?= $bill['id'] ?>)" class="text-blue-500 hover:text-blue-700 mr-1" title="ดูรายละเอียด">
                             <i class="fas fa-eye"></i>
                         </button>
-                        <?php if (!$isCancelled): ?>
-                        <button onclick="deleteBill(<?= $bill['id'] ?>)" class="text-red-500 hover:text-red-700" title="ลบโพย">
-                            <i class="fas fa-trash"></i>
-                        </button>
+                        <?php
+                        // เช็คว่าหวยยังเปิดรับอยู่ไหม
+                        $billCloseTime = $bill['close_time'] ?? null;
+                        $billDrawDate = $bill['draw_date'] ?? date('Y-m-d');
+                        $billLotteryClosed = false;
+                        if ($billCloseTime) {
+                            $billCloseDT = new DateTime($billDrawDate . ' ' . $billCloseTime);
+                            $billOpenH = intval(substr($bill['open_time'] ?? '06:00', 0, 2));
+                            $billCloseH = intval(substr($billCloseTime, 0, 2));
+                            // หวยข้ามเที่ยงคืน
+                            if ($billCloseH < $billOpenH) {
+                                $billCloseDT->modify('+1 day');
+                            }
+                            $billLotteryClosed = new DateTime() > $billCloseDT;
+                        }
+                        ?>
+                        <?php if (!$isCancelled && $bill['status'] === 'pending'): ?>
+                            <?php if (!$billLotteryClosed): ?>
+                            <button onclick="deleteBill(<?= $bill['id'] ?>)" class="text-red-500 hover:text-red-700" title="ยกเลิกโพย">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                            <?php else: ?>
+                            <span class="text-gray-400 text-[10px]">ปิดรับแล้ว</span>
+                            <?php endif; ?>
                         <?php endif; ?>
                     </td>
                 </tr>
