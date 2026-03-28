@@ -943,7 +943,36 @@ function scrapeSmart($pdo) {
 
     echo "📋 ยังขาดผล {$missingCount} หวย\n";
 
-    // ดึงจากแหล่งแรก
+    // === Catch-up เมื่อวาน (smart mode) ===
+    $yesterday = date('Y-m-d', strtotime($today . ' -1 day'));
+    $missingYestStmt = $pdo->prepare("
+        SELECT COUNT(*) FROM lottery_types lt
+        WHERE lt.is_active = 1
+        AND NOT EXISTS (
+            SELECT 1 FROM results r
+            WHERE r.lottery_type_id = lt.id AND r.draw_date = ?
+        )
+    ");
+    $missingYestStmt->execute([$yesterday]);
+    $missingYestCount = (int)$missingYestStmt->fetchColumn();
+    if ($missingYestCount > 5) {
+        echo "
+🔄 ยังขาดผลเมื่อวาน ({$yesterday}) {$missingYestCount} รายการ → ดึง...
+";
+        $stderrY = tempnam(sys_get_temp_dir(), 'smart_y_');
+        $outY = [];
+        exec("{$PYTHON_PATH} \"{$SCRIPT_DIR}/scrape_exphuay.py\" --date={$yesterday} 2>{$stderrY}", $outY, $exitCode);
+        @unlink($stderrY);
+        $dataY = json_decode(implode("
+", $outY), true);
+        if ($dataY && !empty($dataY['success'])) {
+            $statsY = processResults($pdo, $dataY['results'] ?? [], 'exphuay');
+            echo "📊 เมื่อวาน: ✅ {$statsY['success']} ใหม่
+";
+        }
+    }
+
+        // ดึงจากแหล่งแรก
     echo "\n─── แหล่งที่ 1: {$sourceFirst} ───\n";
     $stats1 = runSmartSource($pdo, $sourceFirst);
     
