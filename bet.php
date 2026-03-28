@@ -78,6 +78,7 @@ if (!$lotteryId) {
             $closeDT = new DateTime($today . ' ' . $closeTime);
             
             if ($closeDT <= $openDT) {
+                // หวยข้ามเที่ยงคืน (close_time < open_time เช่น open 15:00 close 01:00)
                 if ($now < $closeDT) {
                     $drawDate = $today;
                     $openDT->modify('-1 day');
@@ -85,14 +86,36 @@ if (!$lotteryId) {
                     $drawDate = $tomorrow;
                     $closeDT->modify('+1 day');
                 } else {
-                    $drawDate = $tomorrow;
-                    $closeDT->modify('+1 day');
+                    // ช่วงระหว่าง close → open (เช่น 01:00-15:00)
+                    $graceMinutes = 10;
+                    $closePlusGrace = clone $closeDT;
+                    $closePlusGrace->modify("+{$graceMinutes} minutes");
+                    
+                    if ($now > $closePlusGrace) {
+                        // เลย grace → สลับไปรอบถัดไป
+                        $drawDate = $tomorrow;
+                        $closeDT->modify('+1 day');
+                    } else {
+                        // ยังอยู่ใน grace → ค้างเทาไว้
+                        $drawDate = $today;
+                        $openDT->modify('-1 day');
+                    }
                 }
             } else {
-                if ($now > $closeDT) {
+                // หวยปกติ (close_time > open_time เช่น open 09:00 close 12:00)
+                $graceMinutes = 10;
+                $closePlusGrace = clone $closeDT;
+                $closePlusGrace->modify("+{$graceMinutes} minutes");
+                
+                if ($now > $closePlusGrace) {
+                    // เลย close + 10 นาที → สลับไปรอบพรุ่งนี้
                     $drawDate = $tomorrow;
                     $openDT->modify('+1 day');
                     $closeDT->modify('+1 day');
+                } elseif ($now > $closeDT) {
+                    // เพิ่งปิด ≤ 10 นาที → คง close_time เดิมไว้ (ให้ JS แสดงเทา)
+                    $drawDate = $today;
+                    // ไม่ shift → JS เห็น close_time ผ่านแล้ว → แสดงการ์ดเทา
                 } else {
                     $drawDate = $today;
                 }
