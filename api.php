@@ -424,10 +424,11 @@ try {
                 }
             } catch (Exception $e) {} // table may not exist yet
 
-            $pdo->beginTransaction();
 
-            // Ensure created_by column exists
+            // Ensure created_by column exists (outside transaction — ALTER TABLE causes implicit commit)
             try { $pdo->exec("ALTER TABLE bets ADD COLUMN created_by VARCHAR(100) DEFAULT NULL"); } catch (Exception $e) {}
+
+            $pdo->beginTransaction();
 
             $createdBy = $_SESSION['username'] ?? 'system';
 
