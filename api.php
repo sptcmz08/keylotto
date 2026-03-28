@@ -413,12 +413,16 @@ try {
                         
                         if ($newTotal > $fightLimits[$bt]) {
                             $remaining = max(0, $fightLimits[$bt] - $existing);
-                            $fightRejected[] = $num . " (" . $betTypeLabelsMap[$bt] . ") เกินตั้งสู้ " . number_format($fightLimits[$bt]) . " แทงได้อีก " . number_format($remaining);
+                            if ($remaining <= 0) {
+                                $fightRejected[] = "เลข " . $num . " (" . ($betTypeLabelsMap[$bt] ?? $bt) . ") ปิดรับ";
+                            } else {
+                                $fightRejected[] = "เลข " . $num . " (" . ($betTypeLabelsMap[$bt] ?? $bt) . ") เต็มแล้ว รับได้อีก " . number_format($remaining) . " บาท";
+                            }
                         }
                     }
                     
                     if (!empty($fightRejected)) {
-                        echo json_encode(['error' => "⚠️ เกินตั้งสู้:\n" . implode("\n", $fightRejected)]);
+                        echo json_encode(['error' => "⚠️ เลขเต็ม:\n" . implode("\n", $fightRejected)]);
                         exit;
                     }
                 }
