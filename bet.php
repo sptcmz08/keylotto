@@ -1817,9 +1817,22 @@ async function saveBet() {
             } else if (tc === '19') {
                 if (g.amountTop > 0) flatItems.push({ number: num, type: '2top', amount: g.amountTop });
                 if (g.amountBot > 0) flatItems.push({ number: num, type: '2bot', amount: g.amountBot });
-            } else if (tc === 'run' || tc === 'win') {
+            } else if (tc === 'run') {
                 if (g.amountTop > 0) flatItems.push({ number: num, type: 'run_top', amount: g.amountTop });
                 if (g.amountBot > 0) flatItems.push({ number: num, type: 'run_bot', amount: g.amountBot });
+            } else if (tc === 'win') {
+                // วินเลข: mapping ตามจำนวนหลัก
+                const len = num.length;
+                if (len === 2) {
+                    if (g.amountTop > 0) flatItems.push({ number: num, type: '2top', amount: g.amountTop });
+                    if (g.amountBot > 0) flatItems.push({ number: num, type: '2bot', amount: g.amountBot });
+                } else if (len === 3) {
+                    if (g.amountTop > 0) flatItems.push({ number: num, type: '3top', amount: g.amountTop });
+                    if (g.amountBot > 0) flatItems.push({ number: num, type: '3tod', amount: g.amountBot });
+                } else {
+                    if (g.amountTop > 0) flatItems.push({ number: num, type: 'run_top', amount: g.amountTop });
+                    if (g.amountBot > 0) flatItems.push({ number: num, type: 'run_bot', amount: g.amountBot });
+                }
             }
         });
     });

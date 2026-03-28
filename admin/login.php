@@ -19,6 +19,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($user['role'] !== 'admin') {
             $error = 'ไม่มีสิทธิ์เข้าถึงส่วนผู้ดูแลระบบ';
         } else {
+            session_regenerate_id(true);
             $_SESSION['user_id'] = $user['id'];
             $_SESSION['username'] = $user['username'];
             $_SESSION['user_name'] = $user['name'];
@@ -52,7 +53,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <i class="fas fa-clover text-white text-3xl"></i>
                 </div>
                 <h1 class="text-2xl font-bold text-white">imzshop97</h1>
-                <p class="text-white/70 text-sm mt-1"></p>
             </div>
 
             <!-- Form -->

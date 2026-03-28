@@ -189,7 +189,7 @@ require_once 'includes/header.php';
                         <?php if ($b['status'] !== 'cancelled'): ?>
                         <button onclick="confirmCancel(<?= $b['id'] ?>, '<?= htmlspecialchars($b['bet_number']) ?>')" class="text-orange-500 hover:text-orange-700 mr-1" title="ยกเลิกโพย"><i class="fas fa-ban"></i></button>
                         <?php endif; ?>
-                        <button onclick="confirmDelete(<?= $b['id'] ?>, '<?= htmlspecialchars($b['bet_number']) ?>')" class="text-red-400 hover:text-red-600" title="ลบบิล"><i class="fas fa-trash-alt"></i></button>
+                        <button onclick="confirmDelete(<?= $b['id'] ?>, '<?= htmlspecialchars($b['bet_number']) ?>')" class="text-red-400 hover:text-red-600" title="ยกเลิกโพย (Admin)"><i class="fas fa-trash-alt"></i></button>
                         <!-- Hidden forms for submission -->
                         <form id="cancelForm_<?= $b['id'] ?>" method="POST" class="hidden">
                             <?= csrfField() ?>
@@ -272,14 +272,14 @@ function confirmCancel(id, betNumber) {
 
 function confirmDelete(id, betNumber) {
     Swal.fire({
-        title: 'ลบบิลถาวร?',
-        html: `<p class="text-gray-600">โพยเลขที่ <strong>#${betNumber}</strong></p><p class="text-sm text-red-500 mt-2">⚠️ ลบแล้วจะไม่สามารถกู้คืนได้</p>`,
-        icon: 'error',
+        title: 'ยกเลิกโพยนี้?',
+        html: `<p class="text-gray-600">โพยเลขที่ <strong>#${betNumber}</strong></p><p class="text-sm text-red-500 mt-2">⚠️ สถานะจะถูกเปลี่ยนเป็น "ยกเลิก" และสามารถกู้คืนได้ผ่านฐานข้อมูล</p>`,
+        icon: 'warning',
         showCancelButton: true,
         confirmButtonColor: '#ef4444',
         cancelButtonColor: '#6b7280',
-        confirmButtonText: '<i class="fas fa-trash-alt mr-1"></i>ลบถาวร',
-        cancelButtonText: 'ยกเลิก',
+        confirmButtonText: '<i class="fas fa-trash-alt mr-1"></i>ดำเนินการยกเลิก',
+        cancelButtonText: 'ยกเลิกคำสั่ง',
         reverseButtons: true,
     }).then((result) => {
         if (result.isConfirmed) {

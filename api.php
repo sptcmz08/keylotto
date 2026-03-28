@@ -22,14 +22,11 @@ if (!$action && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $data['action'] ?? '';
 }
 
-// Auth check: write operations require login
-$writeActions = ['save_bet', 'cancel_bet'];
-if (in_array($action, $writeActions)) {
-    if (!isLoggedIn()) {
-        http_response_code(401);
-        echo json_encode(['error' => 'กรุณาเข้าสู่ระบบก่อน']);
-        exit;
-    }
+// Auth check: ALL API actions require login
+if (!isLoggedIn()) {
+    http_response_code(401);
+    echo json_encode(['error' => 'กรุณาเข้าสู่ระบบก่อน']);
+    exit;
 }
 
 try {
