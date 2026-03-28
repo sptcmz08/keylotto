@@ -507,7 +507,7 @@ require_once 'includes/header.php';
                     } elseif ($hasResultForRound && $hasPending) {
                         $statusClass = 'status-processing'; $statusLabel = '<i class="fas fa-spinner fa-spin mr-1"></i> กำลังประมวลผล';
                     } elseif ($pastCloseTime && !$hasResultForRound && $hoursPastClose >= 2) {
-                        $statusClass = 'status-closed'; $statusLabel = 'ไม่ออกผล';
+                        $statusClass = 'status-suspended'; $statusLabel = 'งดออกผล';
                     } elseif ($pastCloseTime && !$hasResultForRound) {
                         $statusClass = 'status-drawing'; $statusLabel = '<i class="fas fa-spinner fa-spin mr-1"></i> กำลังออกผล';
                     } elseif (!$pastCloseTime && $closeTime && ($closeTime - $now) < 900) {

@@ -295,6 +295,8 @@ def scrape_exphuay(target_date=None, debug=False):
         return None, None
 
     # === Strategy 1: /result page (fast, 1 request, today only) ===
+    # ExpHuay แสดงผลหุ้นบน /result page เฉพาะหลังถึงเวลาออกผลแล้วเท่านั้น
+    # cron (smart mode) รันทุก 1 นาที → retry จนกว่าจะเจอ
     if target_date == today:
         results = scrape_result_page(target_date, debug)
         if results:
@@ -302,17 +304,23 @@ def scrape_exphuay(target_date=None, debug=False):
                 found_on_result = {r['slug'] for r in results}
                 all_slugs = set(EXPHUAY_LOTTERIES.values())
                 missing = all_slugs - found_on_result
-                print(f'[ExpHuay] 📊 /result page: {len(results)} found, {len(missing)} missing → trying backward for missing...', file=sys.stderr)
-        # DON'T return early — continue to backward pages for missing slugs
+                if missing:
+                    print(f'[ExpHuay] 📊 /result page: {len(results)} found, {len(missing)} ยังไม่ถึงเวลา (retry รอบถัดไป)', file=sys.stderr)
+            return {
+                'success': True,
+                'results': results,
+                'total': len(results),
+                'scraped_at': datetime.now().isoformat(),
+                'source': 'exphuay.com/result',
+            }
+        if debug:
+            print(f'[ExpHuay] ⚠️ /result page returned 0 results, trying backward pages...', file=sys.stderr)
     
-    # === Strategy 2: backward pages (only for missing slugs) ===
+    # === Strategy 2: backward pages (fallback สำหรับวันอื่น หรือ /result ว่าง) ===
     skipped = 0
     failed = 0
-    found_slugs = {r['slug'] for r in results}  # slugs already found from /result
 
     for exphuay_slug, key_slug in EXPHUAY_LOTTERIES.items():
-        if key_slug in found_slugs:
-            continue  # already got from /result page
         url = f'{BACKWARD_BASE}/{exphuay_slug}'
         if debug:
             print(f'[ExpHuay] 🌐 {exphuay_slug} → {key_slug}...', file=sys.stderr)
