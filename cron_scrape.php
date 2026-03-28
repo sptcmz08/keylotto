@@ -847,7 +847,9 @@ function scrapeExphuay($pdo) {
     echo "📈 ExpHuay Scraper (ทุกหวย — HTTP เร็ว)...\n";
 
     $today = date('Y-m-d', time() - 4 * 3600);
+    $yesterday = date('Y-m-d', strtotime($today . ' -1 day'));
 
+    // === Step 1: ดึงผลวันนี้ ===
     $stderrFile = tempnam(sys_get_temp_dir(), 'exphuay_');
     $output = [];
     $exitCode = 0;
@@ -858,16 +860,50 @@ function scrapeExphuay($pdo) {
     $data = json_decode($jsonOutput, true);
 
     if (!$data || empty($data['success'])) {
-        echo "❌ ExpHuay: " . ($data['error'] ?? 'No data') . "\n";
+        echo "⚠️ ExpHuay วันนี้: " . ($data['error'] ?? 'No data') . "\n";
         logScrape($pdo, 'ALL', 'exphuay', 'failed', $data['error'] ?? 'No data');
-        return;
+    } else {
+        $results = $data['results'] ?? [];
+        echo "📊 ExpHuay วันนี้: " . count($results) . " results found\n";
+        $stats = processResults($pdo, $results, 'exphuay');
+        echo "📊 วันนี้ Done! ✅ {$stats['success']} ใหม่, ⏭️ {$stats['skipped']} ข้าม\n";
     }
 
-    $results = $data['results'] ?? [];
-    echo "📊 ExpHuay: " . count($results) . " results found\n";
+    // === Step 2: ดึงผลเมื่อวาน (catch-up สำหรับหุ้นที่ปิดดึก) ===
+    $missingYesterday = $pdo->prepare("
+        SELECT COUNT(*) FROM lottery_types lt
+        WHERE lt.is_active = 1
+        AND NOT EXISTS (
+            SELECT 1 FROM results r
+            WHERE r.lottery_type_id = lt.id AND r.draw_date = ?
+        )
+    ");
+    $missingYesterday->execute([$yesterday]);
+    $missingCount = (int)$missingYesterday->fetchColumn();
 
-    $stats = processResults($pdo, $results, 'exphuay');
-    echo "\n📊 ExpHuay Done! ✅ {$stats['success']} ใหม่, ⏭️ {$stats['skipped']} ข้าม, ❌ {$stats['failed']} ล้มเหลว\n";
+    if ($missingCount > 5) {
+        echo "\n🔄 ยังขาดผลเมื่อวาน ({$yesterday}) {$missingCount} รายการ → ดึง backward...\n";
+        $stderrFile2 = tempnam(sys_get_temp_dir(), 'exphuay_y_');
+        $output2 = [];
+        exec("{$PYTHON_PATH} \"{$SCRIPT_DIR}/scrape_exphuay.py\" --date={$yesterday} 2>{$stderrFile2}", $output2, $exitCode);
+        @unlink($stderrFile2);
+
+        $jsonOutput2 = implode("\n", $output2);
+        $data2 = json_decode($jsonOutput2, true);
+
+        if ($data2 && !empty($data2['success'])) {
+            $results2 = $data2['results'] ?? [];
+            echo "📊 ExpHuay เมื่อวาน: " . count($results2) . " results found\n";
+            $stats2 = processResults($pdo, $results2, 'exphuay');
+            echo "📊 เมื่อวาน Done! ✅ {$stats2['success']} ใหม่, ⏭️ {$stats2['skipped']} ข้าม\n";
+        } else {
+            echo "⚠️ ExpHuay เมื่อวาน: ไม่มีข้อมูล\n";
+        }
+    } else {
+        echo "✅ ผลเมื่อวาน ({$yesterday}) ครบแล้ว → ข้าม\n";
+    }
+
+    echo "\n📊 ExpHuay All Done!\n";
 }
 
 // =============================================
