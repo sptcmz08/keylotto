@@ -372,13 +372,27 @@ require_once 'includes/header.php';
                     $showingNextRound = false;
                     $isMonthlySchedule = preg_match('/^\d+(,\d+)*$/', $ltSchedule);
                     
-                    // Universal Reset: round < today => next round
-                    if ($roundDate < date('Y-m-d')) {
+                    // Check if today is a draw day
+                    $todayIsDrawDay = true;
+                    $isNonDrawDay = false;
+                    if ($ltSchedule !== 'daily' && $ltSchedule !== '') {
+                        $todayDrawCheck = getCurrentDrawDate($ltSchedule, date('Y-m-d'));
+                        $todayIsDrawDay = ($todayDrawCheck === date('Y-m-d'));
+                    }
+                    
+                    // Non-draw day (e.g. stock on weekend): keep last round date, hide results, show suspended
+                    if ($roundDate < date('Y-m-d') && !$todayIsDrawDay) {
+                        $isNonDrawDay = true;
+                        $hasResultForRound = false; // hide old results
+                    }
+                    
+                    // Draw day but round < today: switch to next round (daily lotteries after midnight)
+                    if ($roundDate < date('Y-m-d') && $todayIsDrawDay) {
                         $showingNextRound = true;
                     }
                     
                     // Monthly: result out today or past close_time today
-                    if ($isMonthlySchedule && !$showingNextRound) {
+                    if ($isMonthlySchedule && !$showingNextRound && !$isNonDrawDay) {
                         if ($hasResultForRound) {
                             $showingNextRound = true;
                         } elseif ($roundDate === date('Y-m-d') && !empty($lt['close_time'])) {
@@ -402,7 +416,9 @@ require_once 'includes/header.php';
                     $hoursPastClose = 0;
                     
                     // === ถ้าแสดงงวดถัดไป (หวยรายเดือน) → บังคับ "รอออกผล" ===
-                    if ($showingNextRound) {
+                    if ($isNonDrawDay) {
+                        $statusClass = 'status-suspended'; $statusLabel = 'งดออกผล';
+                    } elseif ($showingNextRound) {
                         $statusClass = 'status-waiting'; $statusLabel = 'รอออกผล';
                     } else {
                     // สถานะ realtime 5 ระดับ (อิงจากงวดปัจจุบัน):
