@@ -663,12 +663,12 @@ require_once 'includes/header.php';
                 <!-- Win Number Panel (วินเลข) -->
                 <div id="winPanel" class="mb-4 p-3 bg-[#fffde7] border border-[#ffca28] rounded-lg" style="display:none;">
                     <div class="flex gap-4 mb-3 text-sm">
-                        <label class="flex items-center gap-1"><input type="radio" name="winDigit" value="2" checked> <span>จับวิน 2 ตัว</span></label>
-                        <label class="flex items-center gap-1"><input type="radio" name="winDigit" value="3"> <span>จับวิน 3 ตัว</span></label>
+                        <label class="flex items-center gap-1"><input type="radio" name="winDigit" value="2" checked onchange="resetWinPanel()"> <span>จับวิน 2 ตัว</span></label>
+                        <label class="flex items-center gap-1"><input type="radio" name="winDigit" value="3" onchange="resetWinPanel()"> <span>จับวิน 3 ตัว</span></label>
                     </div>
                     <div class="flex gap-4 mb-3 text-sm">
-                        <label class="flex items-center gap-1"><input type="radio" name="winDouble" value="no" checked> <span>จับวินไม่รวมเลขเบิ้ล</span></label>
-                        <label class="flex items-center gap-1"><input type="radio" name="winDouble" value="yes"> <span>จับวินรวมเลขเบิ้ล</span></label>
+                        <label class="flex items-center gap-1"><input type="radio" name="winDouble" value="no" checked onchange="resetWinPanel()"> <span>จับวินไม่รวมเลขเบิ้ล</span></label>
+                        <label class="flex items-center gap-1"><input type="radio" name="winDouble" value="yes" onchange="resetWinPanel()"> <span>จับวินรวมเลขเบิ้ล</span></label>
                     </div>
                     <p class="text-[12px] text-gray-500 mb-2">กรุณาเลือกตัวเลขที่ต้องการจับวิน 2 - 7 ตัวเลข</p>
                     <div class="grid grid-cols-5 gap-2 max-w-[280px] mb-3" id="winGrid">
@@ -1564,6 +1564,17 @@ function cancelBet() {
 // ==========================================
 let winSelectedDigits = [];
 
+function resetWinPanel() {
+    // ล้างเลขวินทั้งหมด (ตัวเลขที่เลือก + ผลลัพธ์ + selectedNums)
+    winSelectedDigits = [];
+    document.querySelectorAll('.win-digit').forEach(b => {
+        b.className = 'win-digit py-2 text-center text-lg font-bold border-2 border-gray-300 rounded bg-white hover:bg-yellow-100 transition';
+    });
+    document.getElementById('winResults').innerHTML = '';
+    selectedNums = [];
+    renderSelectedNumbers();
+}
+
 function toggleWinDigit(d) {
     const idx = winSelectedDigits.indexOf(d);
     const btn = document.getElementById('wdig-' + d);
@@ -1853,6 +1864,8 @@ async function saveBet() {
         renderBetItems(); renderSelectedNumbers();
         clearSavedState();
         document.getElementById('betNote').value = '';
+        // Reset win panel หลังบันทึกสำเร็จ
+        resetWinPanel();
     });
 }
 
