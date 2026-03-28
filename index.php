@@ -370,9 +370,15 @@ require_once 'includes/header.php';
                     $roundDate = $lt['current_round_date'];
                     $ltSchedule = normalizeSchedule($lt['draw_schedule'] ?? 'daily');
                     $showingNextRound = false;
-                    $isMonthlySchedule = preg_match('/^\d+(,\d+)*$/', $ltSchedule); // เช่น 1,16
+                    $isMonthlySchedule = preg_match('/^\d+(,\d+)*$/', $ltSchedule);
                     
-                    if ($isMonthlySchedule) {
+                    // Universal Reset: round < today => next round
+                    if ($roundDate < date('Y-m-d')) {
+                        $showingNextRound = true;
+                    }
+                    
+                    // Monthly: result out today or past close_time today
+                    if ($isMonthlySchedule && !$showingNextRound) {
                         if ($hasResultForRound) {
                             $showingNextRound = true;
                         } elseif ($roundDate === date('Y-m-d') && !empty($lt['close_time'])) {
@@ -381,10 +387,11 @@ require_once 'includes/header.php';
                                 $showingNextRound = true;
                             }
                         }
-                        if ($showingNextRound) {
-                            $roundDate = getNextDrawDate($ltSchedule);
-                            $hasResultForRound = false; // ซ่อนเลขเก่า
-                        }
+                    }
+                    
+                    if ($showingNextRound) {
+                        $roundDate = getNextDrawDate($ltSchedule);
+                        $hasResultForRound = false;
                     }
                     $displayDate = date('d-m-Y', strtotime($roundDate));
                     
