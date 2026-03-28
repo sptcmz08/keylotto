@@ -185,7 +185,7 @@ require_once 'includes/header.php';
                     <td class="px-3 py-2 text-center text-xs"><?= $l['result_time'] ? date('H:i', strtotime($l['result_time'])) : '-' ?></td>
                     <td class="px-3 py-2 text-center text-xs">
                         <?php
-                        $schedLabels = ['daily'=>'ทุกวัน','weekday'=>'จ-ศ','mon_wed_fri'=>'จ/พ/ศ','1st_16th'=>'1,16','16th'=>'16'];
+                        $schedLabels = ['daily'=>'ทุกวัน','weekday'=>'จ-ศ','sun_thu'=>'อา-พฤ','mon_wed_fri'=>'จ/พ/ศ','1st_16th'=>'1,16','16th'=>'16'];
                         $sch = $l['draw_schedule'] ?? 'daily';
                         echo $schedLabels[$sch] ?? $sch;
                         ?>
@@ -271,6 +271,7 @@ require_once 'includes/header.php';
                     <select name="draw_schedule" id="drawSchedule" class="w-full border rounded-lg px-3 py-2 text-sm focus:border-green-500 outline-none">
                         <option value="daily">ทุกวัน</option>
                         <option value="weekday">จันทร์-ศุกร์</option>
+                        <option value="sun_thu">อาทิตย์-พฤหัสบดี (อียิปต์)</option>
                         <option value="mon_wed_fri">จันทร์/พุธ/ศุกร์</option>
                         <option value="1st_16th">วันที่ 1, 16</option>
                         <option value="16th">วันที่ 16</option>

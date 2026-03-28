@@ -168,6 +168,9 @@ function normalizeSchedule($schedule) {
     // weekday → mon-fri
     if ($schedule === 'weekday') return 'mon,tue,wed,thu,fri';
     
+    // sun_thu → sun-thu (Egypt stock)
+    if ($schedule === 'sun_thu') return 'sun,mon,tue,wed,thu';
+    
     // 1st_16th → 1,16 | 16th → 16
     if (preg_match('/\d+(st|nd|rd|th)/', $schedule)) {
         $parts = preg_split('/[_,]/', $schedule);
