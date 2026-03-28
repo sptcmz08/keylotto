@@ -6,7 +6,7 @@ $currentPage = $currentPage ?? '';
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= $pageTitle ?? 'คีย์หวย' ?></title>
+    <title><?= $pageTitle ?? 'imzshop97' ?></title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -67,7 +67,7 @@ $currentPage = $currentPage ?? '';
 
     <!-- Mobile Header -->
     <div class="md:hidden bg-[#1aa34a] text-white p-3 flex items-center justify-between shadow-md">
-        <div class="font-bold text-lg"><i class="fas fa-clover mr-2"></i>คีย์หวย</div>
+        <div class="font-bold text-lg"><i class="fas fa-clover mr-2"></i>imzshop97</div>
         <div class="flex items-center space-x-3 text-sm">
             <span><?= htmlspecialchars($_SESSION['username'] ?? 'User') ?> <i class="fas fa-user-circle"></i></span>
             <a href="logout.php" title="ออกจากระบบ" class="bg-red-500 bg-opacity-80 px-2 py-1 rounded hover:bg-red-600 transition"><i class="fas fa-sign-out-alt"></i></a>

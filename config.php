@@ -9,7 +9,7 @@ define('DB_PASS', '43q5r*j8U');
 define('DB_CHARSET', 'utf8mb4');
 
 // Site config
-define('SITE_NAME', 'คีย์หวย');
+define('SITE_NAME', 'imzshop97');
 define('SITE_URL', '/');
 
 // Start session

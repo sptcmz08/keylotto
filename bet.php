@@ -1,5 +1,5 @@
 <?php
-$pageTitle = 'คีย์หวย - แทงหวย';
+$pageTitle = 'imzshop97 - แทงหวย';
 $currentPage = 'bet';
 require_once 'auth.php';
 requireLogin();

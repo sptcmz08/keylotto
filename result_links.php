@@ -1,5 +1,5 @@
 <?php
-$pageTitle = 'คีย์หวย - ลิงค์ดูผล';
+$pageTitle = 'imzshop97 - ลิงค์ดูผล';
 $currentPage = 'links';
 require_once 'auth.php';
 requireLogin();

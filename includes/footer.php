@@ -2,7 +2,7 @@
 
     <!-- Footer -->
     <footer class="bg-gray-800 text-gray-400 text-center py-4 text-sm mb-16 md:mb-0">
-        <p>&copy; <?= date('Y') ?> คีย์หวย - ระบบจัดการหวยออนไลน์</p>
+        <p>&copy; <?= date('Y') ?> imzshop97 - ระบบจัดการหวยออนไลน์</p>
     </footer>
 </body>
 </html>

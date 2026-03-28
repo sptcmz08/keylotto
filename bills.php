@@ -1,5 +1,5 @@
 <?php
-$pageTitle = 'คีย์หวย - รายการโพย';
+$pageTitle = 'imzshop97 - รายการโพย';
 $currentPage = 'bills';
 require_once 'auth.php';
 requireLogin();
