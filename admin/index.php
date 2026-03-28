@@ -95,8 +95,8 @@ $adminTitle = 'Dashboard';
 
 // Stats
 $totalLotteries = $pdo->query("SELECT COUNT(*) FROM lottery_types WHERE is_active = 1")->fetchColumn();
-$todayBets = $pdo->query("SELECT COUNT(*) FROM bets WHERE DATE(created_at) = CURDATE()")->fetchColumn();
-$todayAmount = $pdo->query("SELECT COALESCE(SUM(net_amount), 0) FROM bets WHERE DATE(created_at) = CURDATE()")->fetchColumn();
+$todayBets = $pdo->query("SELECT COUNT(*) FROM bets WHERE DATE(created_at) = CURDATE() AND status != 'cancelled'")->fetchColumn();
+$todayAmount = $pdo->query("SELECT COALESCE(SUM(net_amount), 0) FROM bets WHERE DATE(created_at) = CURDATE() AND status != 'cancelled'")->fetchColumn();
 $totalResults = $pdo->query("SELECT COUNT(*) FROM results")->fetchColumn();
 $totalLinks = $pdo->query("SELECT COUNT(*) FROM result_links")->fetchColumn();
 $totalRates = $pdo->query("SELECT COUNT(DISTINCT lottery_type_id) FROM pay_rates")->fetchColumn();

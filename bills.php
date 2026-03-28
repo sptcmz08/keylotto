@@ -521,13 +521,15 @@ require_once 'includes/header.php';
         <?php if (empty($betsByLottery)): ?>
         <div class="py-12 text-center text-gray-400"><i class="fas fa-inbox text-3xl mb-3 block"></i>ยังไม่มีรายการโพย</div>
         <?php else: foreach ($betsByLottery as $lotteryName => $lBets):
-            $grpTotal = array_sum(array_column($lBets, 'total_items'));
-            $grpAmount = array_sum(array_column($lBets, 'total_amount'));
+            $activeBets = array_filter($lBets, fn($b) => $b['status'] !== 'cancelled');
+            $grpTotal = array_sum(array_column($activeBets, 'total_items'));
+            $grpAmount = array_sum(array_column($activeBets, 'total_amount'));
 
-            $grpNet = array_sum(array_column($lBets, 'net_amount'));
-            $grpWin = array_sum(array_column($lBets, 'win_amount'));
+            $grpNet = array_sum(array_column($activeBets, 'net_amount'));
+            $grpWin = array_sum(array_column($activeBets, 'win_amount'));
             $grpWonCount = count(array_filter($lBets, fn($b) => $b['status'] === 'won'));
             $grpLostCount = count(array_filter($lBets, fn($b) => $b['status'] === 'lost'));
+            $grpCancelledCount = count(array_filter($lBets, fn($b) => $b['status'] === 'cancelled'));
         ?>
         <div class="mb-3">
             <div class="text-sm font-bold text-[#2e7d32] py-1 border-b border-[#2e7d32] flex justify-between items-center">
