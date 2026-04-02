@@ -2,8 +2,11 @@ import fs from 'fs';
 import fsp from 'fs/promises';
 import path from 'path';
 import puppeteer from 'puppeteer';
+import { fileURLToPath } from 'url';
 
 const [, , inputPath, outputPath] = process.argv;
+const scriptDir = path.dirname(fileURLToPath(import.meta.url));
+const rootDir = path.resolve(scriptDir, '..');
 
 if (!inputPath || !outputPath) {
   console.error('Usage: node scripts/render_line_result_image.js <input.json> <output.png>');
@@ -26,7 +29,6 @@ const renderNumberCard = (label, value, tone) => `
 `;
 
 const findChromeExecutable = () => {
-  const rootDir = process.cwd();
   const cacheDir = path.join(rootDir, '.cache', 'puppeteer');
   const directCandidates = [
     path.join(cacheDir, 'chrome', 'linux-146.0.7680.153', 'chrome-linux64', 'chrome'),
@@ -70,7 +72,6 @@ const findChromeExecutable = () => {
 };
 
 const ensureWritableBrowserDirs = async () => {
-  const rootDir = process.cwd();
   const baseCacheDir = path.join(rootDir, '.cache');
   const cacheDir = path.join(baseCacheDir, 'puppeteer');
   const configDir = path.join(baseCacheDir, 'xdg-config');
