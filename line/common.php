@@ -140,6 +140,117 @@ function lineAutoSendEnabled(PDO $pdo): bool
     return lineGetSetting($pdo, 'auto_send_results', '1') !== '0';
 }
 
+function lineTemplatesDir(): string
+{
+    return __DIR__ . '/templates';
+}
+
+function lineEnsureTemplatesDir(): bool
+{
+    $dir = lineTemplatesDir();
+    if (is_dir($dir)) {
+        return true;
+    }
+
+    return mkdir($dir, 0775, true) || is_dir($dir);
+}
+
+function lineTemplateImagePath(int $lotteryTypeId): ?string
+{
+    if ($lotteryTypeId <= 0) {
+        return null;
+    }
+
+    $pattern = lineTemplatesDir() . '/lottery-type-' . $lotteryTypeId . '.*';
+    foreach (glob($pattern) ?: [] as $filePath) {
+        if (is_file($filePath)) {
+            return $filePath;
+        }
+    }
+
+    return null;
+}
+
+function lineTemplateImageUrl(PDO $pdo, int $lotteryTypeId): ?string
+{
+    $filePath = lineTemplateImagePath($lotteryTypeId);
+    if ($filePath === null) {
+        return null;
+    }
+
+    $baseUrl = lineResolvedPublicBaseUrl($pdo);
+    if ($baseUrl === '') {
+        return null;
+    }
+
+    $version = @filemtime($filePath) ?: time();
+    return $baseUrl . '/line/templates/' . rawurlencode(basename($filePath)) . '?v=' . $version;
+}
+
+function lineDeleteTemplateImage(int $lotteryTypeId): bool
+{
+    $deleted = false;
+    foreach (glob(lineTemplatesDir() . '/lottery-type-' . $lotteryTypeId . '.*') ?: [] as $filePath) {
+        if (is_file($filePath) && @unlink($filePath)) {
+            $deleted = true;
+        }
+    }
+
+    return $deleted;
+}
+
+function lineSaveTemplateUpload(int $lotteryTypeId, array $upload): array
+{
+    if ($lotteryTypeId <= 0) {
+        return ['ok' => false, 'message' => 'Lottery type is invalid'];
+    }
+
+    if (($upload['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+        return ['ok' => false, 'message' => 'Please choose an image file to upload'];
+    }
+
+    if (!lineEnsureTemplatesDir()) {
+        return ['ok' => false, 'message' => 'Unable to create template directory'];
+    }
+
+    $tmpPath = $upload['tmp_name'] ?? '';
+    if ($tmpPath === '' || !is_uploaded_file($tmpPath)) {
+        return ['ok' => false, 'message' => 'Uploaded file is invalid'];
+    }
+
+    $finfo = finfo_open(FILEINFO_MIME_TYPE);
+    $mimeType = $finfo ? finfo_file($finfo, $tmpPath) : '';
+    if ($finfo) {
+        finfo_close($finfo);
+    }
+
+    $allowed = [
+        'image/png' => 'png',
+        'image/jpeg' => 'jpg',
+        'image/webp' => 'webp',
+    ];
+
+    $extension = $allowed[$mimeType] ?? null;
+    if ($extension === null) {
+        return ['ok' => false, 'message' => 'Only PNG, JPG, or WEBP images are supported'];
+    }
+
+    lineDeleteTemplateImage($lotteryTypeId);
+
+    $targetPath = lineTemplatesDir() . '/lottery-type-' . $lotteryTypeId . '.' . $extension;
+    if (!move_uploaded_file($tmpPath, $targetPath)) {
+        return ['ok' => false, 'message' => 'Unable to save uploaded image'];
+    }
+
+    @chmod($targetPath, 0664);
+
+    return [
+        'ok' => true,
+        'message' => 'Template image uploaded successfully',
+        'path' => $targetPath,
+    ];
+}
+
 function lineConfigReady(PDO $pdo): bool
 {
     return lineResolvedChannelSecret($pdo) !== '' && lineResolvedChannelAccessToken($pdo) !== '';
@@ -560,6 +671,7 @@ function lineGenerateResultImage(PDO $pdo, array $resultRow): ?array
         'two_bot' => $resultRow['two_bot'] ?? '',
         'summary_text' => lineResultSummaryText($resultRow),
         'generated_at' => date('d-m-Y H:i:s'),
+        'background_image_path' => lineTemplateImagePath($safeLotteryId) ?? '',
     ];
 
     $tempJson = tempnam(sys_get_temp_dir(), 'line_result_');

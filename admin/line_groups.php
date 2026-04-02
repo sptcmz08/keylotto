@@ -91,6 +91,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         lineGroupsRedirectWithFlash('error', 'ส่งรูปผลหวยไม่สำเร็จ (HTTP ' . ($result['status'] ?: 0) . ')');
     }
+
+    if ($action === 'upload_template') {
+        $lotteryTypeId = (int) ($_POST['lottery_type_id'] ?? 0);
+        $upload = lineSaveTemplateUpload($lotteryTypeId, $_FILES['template_image'] ?? []);
+        lineGroupsRedirectWithFlash($upload['ok'] ? 'success' : 'error', $upload['message']);
+    }
+
+    if ($action === 'delete_template') {
+        $lotteryTypeId = (int) ($_POST['lottery_type_id'] ?? 0);
+        if ($lotteryTypeId <= 0) {
+            lineGroupsRedirectWithFlash('error', 'Lottery type is invalid');
+        }
+
+        if (lineDeleteTemplateImage($lotteryTypeId)) {
+            lineGroupsRedirectWithFlash('success', 'Template image removed');
+        }
+
+        lineGroupsRedirectWithFlash('error', 'Template image was not found');
+    }
 }
 
 $flash = $_SESSION['line_groups_flash'] ?? null;
@@ -129,6 +148,22 @@ $recentResults = $pdo->query("
     ORDER BY r.draw_date DESC, r.updated_at DESC, r.id DESC
     LIMIT 30
 ")->fetchAll();
+
+$lotteryTypes = $pdo->query("
+    SELECT
+        lt.id,
+        lt.name AS lottery_name,
+        lc.name AS category_name
+    FROM lottery_types lt
+    JOIN lottery_categories lc ON lt.category_id = lc.id
+    WHERE lt.is_active = 1
+    ORDER BY lc.sort_order ASC, lt.sort_order ASC, lt.id ASC
+")->fetchAll();
+
+$templateUrls = [];
+foreach ($lotteryTypes as $lotteryType) {
+    $templateUrls[(int) $lotteryType['id']] = lineTemplateImageUrl($pdo, (int) $lotteryType['id']);
+}
 
 $savedChannelSecret = lineResolvedChannelSecret($pdo);
 $savedChannelAccessToken = lineResolvedChannelAccessToken($pdo);
@@ -187,6 +222,67 @@ require_once 'includes/header.php';
             </button>
         </div>
     </form>
+</div>
+
+<div class="mb-4 bg-white rounded-xl shadow-sm border overflow-hidden">
+    <div class="px-4 py-3 border-b bg-gray-50 font-semibold text-gray-700">Result Image Templates</div>
+    <div class="px-4 py-3 text-xs text-gray-500 border-b bg-gray-50/60">
+        Upload one base image per lottery. The system will reuse that image and only place the lottery name, draw date, and result numbers on top.
+    </div>
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead class="bg-gray-50 border-b">
+                <tr>
+                    <th class="px-3 py-2 text-left text-xs text-gray-500">Lottery</th>
+                    <th class="px-3 py-2 text-left text-xs text-gray-500">Category</th>
+                    <th class="px-3 py-2 text-left text-xs text-gray-500">Current template</th>
+                    <th class="px-3 py-2 text-left text-xs text-gray-500">Upload / Remove</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php foreach ($lotteryTypes as $lotteryType): ?>
+                <?php $templateUrl = $templateUrls[(int) $lotteryType['id']] ?? null; ?>
+                <tr class="border-b hover:bg-gray-50 align-top">
+                    <td class="px-3 py-3 font-medium text-gray-800"><?= htmlspecialchars($lotteryType['lottery_name']) ?></td>
+                    <td class="px-3 py-3 text-gray-500"><?= htmlspecialchars($lotteryType['category_name']) ?></td>
+                    <td class="px-3 py-3">
+                        <?php if ($templateUrl): ?>
+                        <a href="<?= htmlspecialchars($templateUrl) ?>" target="_blank" class="inline-block">
+                            <img src="<?= htmlspecialchars($templateUrl) ?>" alt="Template preview" class="w-40 h-24 object-cover rounded-lg border border-gray-200 shadow-sm">
+                        </a>
+                        <?php else: ?>
+                        <span class="text-xs text-gray-400">No template uploaded</span>
+                        <?php endif; ?>
+                    </td>
+                    <td class="px-3 py-3 min-w-[320px]">
+                        <form method="POST" enctype="multipart/form-data" class="space-y-2">
+                            <input type="hidden" name="form_action" value="upload_template">
+                            <input type="hidden" name="lottery_type_id" value="<?= (int) $lotteryType['id'] ?>">
+                            <input type="file" name="template_image" accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp" class="block w-full text-xs text-gray-500 border rounded-lg px-3 py-2 bg-white">
+                            <button type="submit" class="bg-[#6a1b9a] text-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-[#4a148c] transition">
+                                <i class="fas fa-upload mr-1"></i> Upload template
+                            </button>
+                        </form>
+                        <?php if ($templateUrl): ?>
+                        <form method="POST" class="mt-2">
+                            <input type="hidden" name="form_action" value="delete_template">
+                            <input type="hidden" name="lottery_type_id" value="<?= (int) $lotteryType['id'] ?>">
+                            <button type="submit" class="bg-red-50 text-red-700 border border-red-200 px-3 py-2 rounded-lg text-sm font-medium hover:bg-red-100 transition">
+                                <i class="fas fa-trash-alt mr-1"></i> Remove template
+                            </button>
+                        </form>
+                        <?php endif; ?>
+                    </td>
+                </tr>
+                <?php endforeach; ?>
+                <?php if (empty($lotteryTypes)): ?>
+                <tr>
+                    <td colspan="4" class="px-3 py-6 text-center text-sm text-gray-400">No active lottery types found</td>
+                </tr>
+                <?php endif; ?>
+            </tbody>
+        </table>
+    </div>
 </div>
 
 <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">

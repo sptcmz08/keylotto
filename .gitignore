@@ -6,6 +6,8 @@ node_modules/
 .env
 line/credentials.php
 line/generated/*.png
+line/templates/*
+!line/templates/.gitkeep
 
 # Archives
 *.zip

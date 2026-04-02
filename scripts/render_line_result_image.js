@@ -182,6 +182,47 @@ const buildEmbeddedFontFace = () => {
   `;
 };
 
+const imageMimeType = (filePath) => {
+  const extension = path.extname(filePath).toLowerCase();
+  if (extension === '.png') {
+    return 'image/png';
+  }
+  if (extension === '.jpg' || extension === '.jpeg') {
+    return 'image/jpeg';
+  }
+  if (extension === '.webp') {
+    return 'image/webp';
+  }
+  return '';
+};
+
+const buildPosterBackground = (backgroundImagePath) => {
+  if (!backgroundImagePath || !fs.existsSync(backgroundImagePath)) {
+    return `
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.03), rgba(0,0,0,0.06)),
+        transparent;
+    `;
+  }
+
+  const mimeType = imageMimeType(backgroundImagePath);
+  if (!mimeType) {
+    return `
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.03), rgba(0,0,0,0.06)),
+        transparent;
+    `;
+  }
+
+  const encoded = fs.readFileSync(backgroundImagePath).toString('base64');
+  return `
+    background:
+      linear-gradient(180deg, rgba(12, 0, 0, 0.16), rgba(0, 0, 0, 0.22)),
+      linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.08)),
+      url("data:${mimeType};base64,${encoded}") center/cover no-repeat;
+  `;
+};
+
 const main = async () => {
   const raw = await fsp.readFile(inputPath, 'utf8');
   const data = JSON.parse(raw);
@@ -189,6 +230,7 @@ const main = async () => {
   await fsp.mkdir(path.dirname(outputPath), { recursive: true });
   const { userDataDir } = await ensureWritableBrowserDirs();
   const embeddedFontFace = buildEmbeddedFontFace();
+  const posterBackground = buildPosterBackground(data.background_image_path);
 
   const html = `
   <!doctype html>
@@ -231,9 +273,7 @@ const main = async () => {
         border-radius: 28px;
         overflow: hidden;
         border: 3px solid rgba(255, 211, 109, 0.48);
-        background:
-          linear-gradient(180deg, rgba(255,255,255,0.03), rgba(0,0,0,0.06)),
-          transparent;
+        ${posterBackground}
         box-shadow:
           inset 0 0 0 3px rgba(255, 214, 116, 0.08),
           0 20px 60px rgba(0,0,0,0.28);
