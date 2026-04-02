@@ -5,7 +5,7 @@
   "main": "scripts/render_line_result_image.js",
   "scripts": {
     "render-line-image": "node scripts/render_line_result_image.js",
-    "install-puppeteer-browser": "npx puppeteer browsers install chrome"
+    "install-puppeteer-browser": "node scripts/install_puppeteer_browser.js"
   },
   "repository": {
     "type": "git",
