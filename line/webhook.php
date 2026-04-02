@@ -17,8 +17,9 @@ if ($method !== 'POST') {
 
 $body = lineRawBody();
 $signature = lineRequestSignature();
+$channelSecret = lineResolvedChannelSecret($pdo);
 
-if (!lineVerifySignature($body, $signature, LINE_CHANNEL_SECRET)) {
+if (!lineVerifySignature($body, $signature, $channelSecret)) {
     lineLog('Invalid webhook signature');
     lineJsonResponse(400, ['status' => 'error', 'message' => 'Invalid signature']);
 }

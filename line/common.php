@@ -71,16 +71,72 @@ function ensureLineTables(PDO $pdo): void
             KEY idx_status (status)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS line_settings (
+            id INT(11) NOT NULL AUTO_INCREMENT,
+            setting_key VARCHAR(100) NOT NULL,
+            setting_value TEXT DEFAULT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            UNIQUE KEY uniq_setting_key (setting_key)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
 }
 
-function lineConfigReady(): bool
+function lineGetSetting(PDO $pdo, string $key, string $default = ''): string
 {
-    return LINE_CHANNEL_SECRET !== '' && LINE_CHANNEL_ACCESS_TOKEN !== '';
+    ensureLineTables($pdo);
+
+    try {
+        $stmt = $pdo->prepare("SELECT setting_value FROM line_settings WHERE setting_key = ? LIMIT 1");
+        $stmt->execute([$key]);
+        $value = $stmt->fetchColumn();
+        return is_string($value) ? $value : $default;
+    } catch (Exception $e) {
+        return $default;
+    }
 }
 
-function linePushTextMessage(string $groupId, string $message): array
+function lineSetSetting(PDO $pdo, string $key, string $value): void
 {
-    if (LINE_CHANNEL_ACCESS_TOKEN === '') {
+    ensureLineTables($pdo);
+
+    $stmt = $pdo->prepare("
+        INSERT INTO line_settings (setting_key, setting_value)
+        VALUES (?, ?)
+        ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
+    ");
+    $stmt->execute([$key, $value]);
+}
+
+function lineResolvedChannelSecret(PDO $pdo): string
+{
+    if (LINE_CHANNEL_SECRET !== '') {
+        return LINE_CHANNEL_SECRET;
+    }
+    return lineGetSetting($pdo, 'channel_secret', '');
+}
+
+function lineResolvedChannelAccessToken(PDO $pdo): string
+{
+    if (LINE_CHANNEL_ACCESS_TOKEN !== '') {
+        return LINE_CHANNEL_ACCESS_TOKEN;
+    }
+    return lineGetSetting($pdo, 'channel_access_token', '');
+}
+
+function lineConfigReady(PDO $pdo): bool
+{
+    return lineResolvedChannelSecret($pdo) !== '' && lineResolvedChannelAccessToken($pdo) !== '';
+}
+
+function linePushTextMessage(PDO $pdo, string $groupId, string $message): array
+{
+    $accessToken = lineResolvedChannelAccessToken($pdo);
+
+    if ($accessToken === '') {
         return [
             'ok' => false,
             'status' => 0,
@@ -103,7 +159,7 @@ function linePushTextMessage(string $groupId, string $message): array
         CURLOPT_POST => true,
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_HTTPHEADER => [
-            'Authorization: Bearer ' . LINE_CHANNEL_ACCESS_TOKEN,
+            'Authorization: Bearer ' . $accessToken,
             'Content-Type: application/json',
         ],
         CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_UNICODE),
@@ -141,9 +197,11 @@ function lineLogPushResult(PDO $pdo, string $groupId, string $message, array $re
     ]);
 }
 
-function lineFetchGroupSummary(string $groupId): ?array
+function lineFetchGroupSummary(PDO $pdo, string $groupId): ?array
 {
-    if (LINE_CHANNEL_ACCESS_TOKEN === '' || $groupId === '') {
+    $accessToken = lineResolvedChannelAccessToken($pdo);
+
+    if ($accessToken === '' || $groupId === '') {
         return null;
     }
 
@@ -151,7 +209,7 @@ function lineFetchGroupSummary(string $groupId): ?array
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_HTTPHEADER => [
-            'Authorization: Bearer ' . LINE_CHANNEL_ACCESS_TOKEN,
+            'Authorization: Bearer ' . $accessToken,
         ],
         CURLOPT_TIMEOUT => 15,
     ]);
@@ -179,7 +237,7 @@ function lineUpsertGroup(PDO $pdo, array $source, ?string $eventType = null): vo
 
     ensureLineTables($pdo);
 
-    $summary = lineFetchGroupSummary($groupId);
+    $summary = lineFetchGroupSummary($pdo, $groupId);
     $groupName = $summary['groupName'] ?? null;
     $rawSource = json_encode($source, JSON_UNESCAPED_UNICODE);
     $isActive = ($eventType === 'leave') ? 0 : 1;

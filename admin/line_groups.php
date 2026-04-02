@@ -13,18 +13,31 @@ $msgType = 'success';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['form_action'] ?? '';
 
-    if ($action === 'send_test') {
+    if ($action === 'save_credentials') {
+        $channelSecret = trim($_POST['channel_secret'] ?? '');
+        $channelAccessToken = trim($_POST['channel_access_token'] ?? '');
+
+        if ($channelSecret === '' || $channelAccessToken === '') {
+            $msg = 'กรุณากรอก Channel secret และ Channel access token ให้ครบ';
+            $msgType = 'error';
+        } else {
+            lineSetSetting($pdo, 'channel_secret', $channelSecret);
+            lineSetSetting($pdo, 'channel_access_token', $channelAccessToken);
+            $msg = 'บันทึก LINE credentials สำเร็จ';
+            $msgType = 'success';
+        }
+    } elseif ($action === 'send_test') {
         $groupId = trim($_POST['group_id'] ?? '');
         $message = trim($_POST['message'] ?? '');
 
         if ($groupId === '' || $message === '') {
             $msg = 'กรุณาเลือกกลุ่มและใส่ข้อความทดสอบ';
             $msgType = 'error';
-        } elseif (!lineConfigReady()) {
+        } elseif (!lineConfigReady($pdo)) {
             $msg = 'ยังไม่ได้ตั้งค่า LINE channel secret และ access token บน server';
             $msgType = 'error';
         } else {
-            $result = linePushTextMessage($groupId, $message);
+            $result = linePushTextMessage($pdo, $groupId, $message);
             lineLogPushResult($pdo, $groupId, $message, $result);
 
             if (!empty($result['ok'])) {
@@ -51,6 +64,9 @@ $recentLogs = $pdo->query("
     LIMIT 20
 ")->fetchAll();
 
+$savedChannelSecret = lineResolvedChannelSecret($pdo);
+$savedChannelAccessToken = lineResolvedChannelAccessToken($pdo);
+
 require_once 'includes/header.php';
 ?>
 
@@ -67,12 +83,32 @@ require_once 'includes/header.php';
     </div>
 </div>
 
-<?php if (!lineConfigReady()): ?>
+<?php if (!lineConfigReady($pdo)): ?>
 <div class="mb-4 p-4 rounded-xl border border-amber-200 bg-amber-50 text-amber-800 text-sm">
     <div class="font-bold mb-1">ยังไม่ได้ตั้งค่า secret / token บน server</div>
-    <div>ให้สร้างไฟล์ <code>line/credentials.php</code> จากตัวอย่าง <code>line/credentials.example.php</code> แล้วใส่ค่าใหม่จาก LINE Developers</div>
+    <div>กรอกค่า Channel secret และ Channel access token ด้านล่าง แล้วกดบันทึกได้เลย</div>
 </div>
 <?php endif; ?>
+
+<div class="mb-4 bg-white rounded-xl shadow-sm border overflow-hidden">
+    <div class="px-4 py-3 border-b bg-gray-50 font-semibold text-gray-700">ตั้งค่า LINE Credentials</div>
+    <form method="POST" class="p-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <input type="hidden" name="form_action" value="save_credentials">
+        <div>
+            <label class="text-xs text-gray-500 block mb-1">Channel secret</label>
+            <input type="text" name="channel_secret" class="w-full border rounded-lg px-3 py-2 text-sm outline-none" value="<?= htmlspecialchars($savedChannelSecret) ?>" placeholder="LINE Channel secret">
+        </div>
+        <div>
+            <label class="text-xs text-gray-500 block mb-1">Channel access token</label>
+            <textarea name="channel_access_token" rows="3" class="w-full border rounded-lg px-3 py-2 text-sm outline-none" placeholder="LINE Channel access token"><?= htmlspecialchars($savedChannelAccessToken) ?></textarea>
+        </div>
+        <div class="lg:col-span-2">
+            <button type="submit" class="bg-[#2e7d32] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#1b5e20] transition">
+                <i class="fas fa-save mr-1"></i> บันทึก LINE Credentials
+            </button>
+        </div>
+    </form>
+</div>
 
 <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
     <div class="xl:col-span-2 bg-white rounded-xl shadow-sm border overflow-hidden">
