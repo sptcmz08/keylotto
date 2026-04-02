@@ -21,11 +21,12 @@ const escapeHtml = (value) =>
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 
-const renderNumberCard = (label, value, tone) => `
-  <div class="number-card ${tone}">
-    <div class="number-label">${escapeHtml(label)}</div>
-    <div class="number-value">${escapeHtml(value || '-')}</div>
-  </div>
+const renderNumberCard = (label, value, tone, accent) => `
+  <section class="number-card ${tone}">
+    <div class="number-card__label">${escapeHtml(label)}</div>
+    <div class="number-card__value">${escapeHtml(value || '-')}</div>
+    <div class="number-card__accent">${escapeHtml(accent)}</div>
+  </section>
 `;
 
 const findChromeExecutable = () => {
@@ -91,12 +92,97 @@ const ensureWritableBrowserDirs = async () => {
   return { userDataDir };
 };
 
+const findThaiFontPath = () => {
+  const candidates = [
+    path.join(rootDir, 'line', 'fonts', 'NotoSansThai-Regular.ttf'),
+    path.join(rootDir, 'line', 'fonts', 'Prompt-Regular.ttf'),
+    '/usr/share/fonts/truetype/noto/NotoSansThai-Regular.ttf',
+    '/usr/share/fonts/opentype/noto/NotoSansThai-Regular.ttf',
+    '/usr/share/fonts/truetype/tlwg/Garuda.ttf',
+    '/usr/share/fonts/truetype/tlwg/Kinnari.ttf',
+    '/usr/share/fonts/truetype/tlwg/Loma.ttf',
+    '/usr/share/fonts/truetype/tlwg/Norasi.ttf',
+    '/usr/share/fonts/truetype/tlwg/Purisa.ttf',
+    '/usr/share/fonts/truetype/tlwg/Sawasdee.ttf',
+    '/usr/share/fonts/truetype/tlwg/Umpush.ttf',
+    '/usr/share/fonts/truetype/tlwg/Waree.ttf',
+    '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+    'C:/Windows/Fonts/tahoma.ttf',
+    'C:/Windows/Fonts/arial.ttf',
+  ];
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  const scanDirs = [
+    path.join(rootDir, 'line', 'fonts'),
+    '/usr/share/fonts',
+    '/usr/local/share/fonts',
+    'C:/Windows/Fonts',
+  ];
+
+  const fontNamePattern = /(thai|sarabun|prompt|kanit|garuda|kinnari|loma|norasi|purisa|sawasdee|waree|umpush|tlwg|noto)/i;
+
+  for (const scanDir of scanDirs) {
+    if (!fs.existsSync(scanDir)) {
+      continue;
+    }
+
+    const stack = [scanDir];
+    while (stack.length > 0) {
+      const current = stack.pop();
+      const entries = fs.readdirSync(current, { withFileTypes: true });
+
+      for (const entry of entries) {
+        const fullPath = path.join(current, entry.name);
+        if (entry.isDirectory()) {
+          stack.push(fullPath);
+          continue;
+        }
+
+        const lowerName = entry.name.toLowerCase();
+        if ((lowerName.endsWith('.ttf') || lowerName.endsWith('.otf')) && fontNamePattern.test(entry.name)) {
+          return fullPath;
+        }
+      }
+    }
+  }
+
+  return null;
+};
+
+const buildEmbeddedFontFace = () => {
+  const fontPath = findThaiFontPath();
+  if (!fontPath) {
+    return '';
+  }
+
+  const extension = path.extname(fontPath).toLowerCase();
+  const mimeType = extension === '.otf' ? 'font/otf' : 'font/ttf';
+  const format = extension === '.otf' ? 'opentype' : 'truetype';
+  const fontData = fs.readFileSync(fontPath).toString('base64');
+
+  return `
+    @font-face {
+      font-family: "LineThai";
+      src: url("data:${mimeType};base64,${fontData}") format("${format}");
+      font-weight: 400 800;
+      font-style: normal;
+      font-display: block;
+    }
+  `;
+};
+
 const main = async () => {
   const raw = await fsp.readFile(inputPath, 'utf8');
   const data = JSON.parse(raw);
 
   await fsp.mkdir(path.dirname(outputPath), { recursive: true });
   const { userDataDir } = await ensureWritableBrowserDirs();
+  const embeddedFontFace = buildEmbeddedFontFace();
 
   const html = `
   <!doctype html>
@@ -104,170 +190,302 @@ const main = async () => {
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
+      ${embeddedFontFace}
       * { box-sizing: border-box; }
+      :root {
+        --bg-top: #f7fcf8;
+        --bg-bottom: #eff7ff;
+        --ink: #163224;
+        --muted: #5a7466;
+        --card: rgba(255, 255, 255, 0.97);
+        --border: rgba(19, 92, 61, 0.12);
+        --green-1: #0e6f46;
+        --green-2: #16955d;
+        --green-3: #1bc270;
+        --gold: #ffc857;
+        --blue: #2e72ff;
+      }
       body {
         margin: 0;
-        font-family: "Prompt", "Noto Sans Thai", sans-serif;
+        font-family: "LineThai", "Noto Sans Thai", "Tahoma", sans-serif;
+        color: var(--ink);
         background:
-          radial-gradient(circle at top left, rgba(28, 179, 92, 0.22), transparent 36%),
-          linear-gradient(180deg, #eef9f0 0%, #f8fbff 100%);
-        color: #163424;
+          radial-gradient(circle at left top, rgba(255, 203, 89, 0.16), transparent 25%),
+          radial-gradient(circle at right bottom, rgba(17, 149, 93, 0.14), transparent 28%),
+          linear-gradient(180deg, var(--bg-top) 0%, var(--bg-bottom) 100%);
       }
       .frame {
-        width: 1040px;
+        width: 1080px;
         margin: 0 auto;
-        padding: 44px;
+        padding: 42px;
       }
       .card {
-        background: rgba(255,255,255,0.96);
-        border: 1px solid rgba(19, 111, 59, 0.16);
-        border-radius: 30px;
-        box-shadow: 0 24px 80px rgba(22, 52, 36, 0.12);
+        position: relative;
+        border-radius: 36px;
         overflow: hidden;
+        background: var(--card);
+        border: 1px solid var(--border);
+        box-shadow: 0 28px 100px rgba(20, 50, 36, 0.12);
       }
       .hero {
-        padding: 34px 38px 26px;
-        background: linear-gradient(135deg, #118847 0%, #13a455 55%, #2ac56d 100%);
+        position: relative;
+        padding: 34px 40px 32px;
+        background:
+          radial-gradient(circle at 88% 12%, rgba(255,255,255,0.20), transparent 18%),
+          linear-gradient(135deg, var(--green-1) 0%, var(--green-2) 48%, var(--green-3) 100%);
         color: #fff;
+      }
+      .hero::after {
+        content: "";
+        position: absolute;
+        right: -22px;
+        bottom: -48px;
+        width: 250px;
+        height: 250px;
+        border-radius: 999px;
+        background: rgba(255,255,255,0.08);
       }
       .eyebrow {
         display: inline-flex;
         align-items: center;
         gap: 10px;
-        font-size: 24px;
-        font-weight: 600;
-        letter-spacing: 0.2px;
-        opacity: 0.96;
-      }
-      .site-badge {
-        display: inline-block;
-        margin-top: 18px;
-        padding: 10px 16px;
-        border-radius: 999px;
-        background: rgba(255,255,255,0.18);
-        font-size: 18px;
-      }
-      .lottery-name {
-        margin: 22px 0 8px;
-        font-size: 54px;
-        line-height: 1.08;
+        font-size: 21px;
         font-weight: 700;
+        letter-spacing: 0.2px;
       }
-      .meta {
+      .eyebrow::before {
+        content: "";
+        width: 14px;
+        height: 14px;
+        border-radius: 999px;
+        background: var(--gold);
+        box-shadow: 0 0 0 6px rgba(255, 200, 87, 0.16);
+      }
+      .hero-meta {
         display: flex;
         justify-content: space-between;
         gap: 20px;
+        align-items: end;
         flex-wrap: wrap;
+        margin-top: 22px;
+      }
+      .site-tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 16px;
+        border-radius: 999px;
+        background: rgba(255,255,255,0.12);
+        border: 1px solid rgba(255,255,255,0.16);
+        font-size: 16px;
+      }
+      .lottery-name {
+        margin: 18px 0 10px;
+        font-size: 58px;
+        line-height: 1.04;
+        font-weight: 800;
+      }
+      .category-name {
+        font-size: 22px;
+        opacity: 0.96;
+      }
+      .draw-pill {
+        padding: 14px 18px;
+        border-radius: 18px;
+        background: rgba(0, 0, 0, 0.14);
+        backdrop-filter: blur(8px);
+        min-width: 240px;
+      }
+      .draw-pill__label {
+        font-size: 14px;
+        opacity: 0.82;
+        margin-bottom: 6px;
+      }
+      .draw-pill__value {
         font-size: 24px;
-        opacity: 0.95;
+        font-weight: 700;
       }
       .content {
-        padding: 34px 38px 40px;
+        padding: 28px 40px 40px;
       }
-      .summary {
+      .highlight {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 20px;
+        padding: 18px 20px;
+        border-radius: 24px;
+        background: linear-gradient(90deg, #f5fdf8 0%, #ebfff2 100%);
+        border: 1px solid #d8f0de;
+      }
+      .highlight__title {
+        font-size: 22px;
+        font-weight: 700;
+        color: #165437;
+      }
+      .highlight__sub {
+        margin-top: 5px;
+        font-size: 16px;
+        color: var(--muted);
+      }
+      .highlight__stamp {
+        padding: 12px 18px;
+        border-radius: 999px;
+        background: #153f2a;
+        color: #d9ffe6;
+        font-size: 16px;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+      .numbers {
+        margin-top: 22px;
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 18px;
       }
       .number-card {
-        border-radius: 24px;
-        padding: 22px 20px 26px;
-        min-height: 182px;
+        position: relative;
+        min-height: 200px;
+        border-radius: 28px;
+        padding: 22px 22px 26px;
+        overflow: hidden;
         display: flex;
         flex-direction: column;
         justify-content: space-between;
       }
-      .number-card.primary { background: linear-gradient(180deg, #ebfff2 0%, #d7f7e2 100%); }
-      .number-card.secondary { background: linear-gradient(180deg, #eef7ff 0%, #dceeff 100%); }
-      .number-card.accent { background: linear-gradient(180deg, #fff7e8 0%, #ffe8b9 100%); }
-      .number-label {
-        font-size: 24px;
-        color: #486154;
-        font-weight: 600;
+      .number-card::after {
+        content: "";
+        position: absolute;
+        right: -20px;
+        bottom: -26px;
+        width: 110px;
+        height: 110px;
+        border-radius: 999px;
+        background: rgba(255,255,255,0.28);
       }
-      .number-value {
-        font-size: 76px;
-        line-height: 1;
+      .number-card.primary {
+        background: linear-gradient(180deg, #ecfdf2 0%, #d9f6e4 100%);
+      }
+      .number-card.secondary {
+        background: linear-gradient(180deg, #eef5ff 0%, #dce9ff 100%);
+      }
+      .number-card.accent {
+        background: linear-gradient(180deg, #fff8ea 0%, #ffe7b6 100%);
+      }
+      .number-card__label,
+      .number-card__value,
+      .number-card__accent {
+        position: relative;
+        z-index: 1;
+      }
+      .number-card__label {
+        font-size: 22px;
+        color: #4a6358;
         font-weight: 700;
-        letter-spacing: 2px;
-        color: #10291b;
+      }
+      .number-card__value {
+        font-size: 88px;
+        line-height: 1;
+        font-weight: 800;
+        letter-spacing: 1px;
+        color: #102f1f;
+      }
+      .number-card__accent {
+        font-size: 15px;
+        color: rgba(16, 47, 31, 0.68);
       }
       .footer {
-        margin-top: 24px;
-        display: flex;
-        justify-content: space-between;
+        margin-top: 22px;
+        display: grid;
+        grid-template-columns: 1.7fr 0.9fr;
         gap: 18px;
-        align-items: center;
       }
-      .summary-box {
-        flex: 1;
-        border-radius: 22px;
-        padding: 18px 20px;
-        background: #f5fbf7;
-        border: 1px solid #ddeee3;
+      .detail-box,
+      .time-box {
+        border-radius: 24px;
+        overflow: hidden;
       }
-      .summary-title {
-        font-size: 18px;
-        color: #567164;
-        margin-bottom: 6px;
+      .detail-box {
+        background: linear-gradient(180deg, #f7fbf8 0%, #eef6f1 100%);
+        border: 1px solid #ddeee2;
+        padding: 22px 22px 24px;
       }
-      .summary-text {
-        font-size: 28px;
-        line-height: 1.35;
-        font-weight: 600;
-        color: #173525;
-      }
-      .stamp {
-        min-width: 250px;
-        padding: 18px 20px;
-        border-radius: 22px;
-        background: linear-gradient(180deg, #163f29 0%, #0f2c1d 100%);
-        color: #d9ffe6;
-      }
-      .stamp .label {
+      .detail-box__label {
         font-size: 16px;
-        opacity: 0.84;
-        margin-bottom: 6px;
+        color: var(--muted);
+        margin-bottom: 10px;
       }
-      .stamp .value {
-        font-size: 20px;
-        line-height: 1.4;
+      .detail-box__value {
+        font-size: 30px;
+        line-height: 1.44;
+        font-weight: 700;
+        color: #173227;
+        word-break: break-word;
+      }
+      .time-box {
+        background:
+          linear-gradient(180deg, #163f29 0%, #0f2c1d 100%);
+        color: #d8ffe5;
+        padding: 22px;
+      }
+      .time-box__label {
+        font-size: 15px;
+        opacity: 0.82;
+        margin-bottom: 8px;
+      }
+      .time-box__value {
+        font-size: 22px;
+        line-height: 1.45;
+        font-weight: 700;
+        word-break: break-word;
       }
     </style>
   </head>
   <body>
     <div class="frame">
       <div class="card">
-        <div class="hero">
+        <section class="hero">
           <div class="eyebrow">ประกาศผลหวย</div>
-          <div class="site-badge">${escapeHtml(data.site_name || '')}</div>
-          <div class="lottery-name">${escapeHtml(data.lottery_name || 'ผลหวย')}</div>
-          <div class="meta">
-            <div>${escapeHtml(data.category_name || '')}</div>
-            <div>งวดวันที่ ${escapeHtml(data.draw_date_display || data.draw_date || '')}</div>
+          <div class="hero-meta">
+            <div>
+              <div class="site-tag">${escapeHtml(data.site_name || '')}</div>
+              <div class="lottery-name">${escapeHtml(data.lottery_name || 'ผลหวย')}</div>
+              <div class="category-name">${escapeHtml(data.category_name || '')}</div>
+            </div>
+            <div class="draw-pill">
+              <div class="draw-pill__label">งวดประจำวันที่</div>
+              <div class="draw-pill__value">${escapeHtml(data.draw_date_display || data.draw_date || '')}</div>
+            </div>
           </div>
-        </div>
-        <div class="content">
-          <div class="summary">
-            ${renderNumberCard('3 ตัวบน', data.three_top, 'primary')}
-            ${renderNumberCard('2 ตัวบน', data.two_top, 'secondary')}
-            ${renderNumberCard('2 ตัวล่าง', data.two_bot, 'accent')}
+        </section>
+
+        <section class="content">
+          <div class="highlight">
+            <div>
+              <div class="highlight__title">ผลออกรอบล่าสุด</div>
+              <div class="highlight__sub">ภาพนี้ถูกสร้างจากข้อมูลผลหวยในระบบเพื่อส่งเข้า LINE กลุ่ม</div>
+            </div>
+            <div class="highlight__stamp">อัปเดตอัตโนมัติ</div>
           </div>
+
+          <div class="numbers">
+            ${renderNumberCard('3 ตัวบน', data.three_top, 'primary', 'Three Top')}
+            ${renderNumberCard('2 ตัวบน', data.two_top, 'secondary', 'Two Top')}
+            ${renderNumberCard('2 ตัวล่าง', data.two_bot, 'accent', 'Two Bottom')}
+          </div>
+
           <div class="footer">
-            <div class="summary-box">
-              <div class="summary-title">สรุปผลล่าสุด</div>
-              <div class="summary-text">${escapeHtml(data.summary_text || '')}</div>
+            <div class="detail-box">
+              <div class="detail-box__label">รายละเอียดผลหวย</div>
+              <div class="detail-box__value">${escapeHtml(data.summary_text || '')}</div>
             </div>
-            <div class="stamp">
-              <div class="label">สร้างภาพเมื่อ</div>
-              <div class="value">${escapeHtml(data.generated_at || '')}</div>
+            <div class="time-box">
+              <div class="time-box__label">สร้างภาพเมื่อ</div>
+              <div class="time-box__value">${escapeHtml(data.generated_at || '')}</div>
             </div>
           </div>
-        </div>
+        </section>
       </div>
     </div>
   </body>
@@ -296,9 +514,14 @@ const main = async () => {
 
   try {
     const page = await browser.newPage();
-    await page.setViewport({ width: 1040, height: 1200, deviceScaleFactor: 2 });
+    await page.setViewport({ width: 1080, height: 1320, deviceScaleFactor: 2 });
     await page.setContent(html, { waitUntil: 'networkidle0' });
-    await new Promise((resolve) => setTimeout(resolve, 1200));
+    await page.evaluate(async () => {
+      if (document.fonts?.ready) {
+        await document.fonts.ready;
+      }
+    });
+    await new Promise((resolve) => setTimeout(resolve, 600));
     await page.screenshot({
       path: outputPath,
       type: 'png',
