@@ -324,6 +324,40 @@ function lineFindTtfFont(): ?string
         }
     }
 
+    $scanDirectories = [
+        __DIR__ . '/fonts',
+        '/usr/share/fonts',
+        '/usr/local/share/fonts',
+        'C:/Windows/Fonts',
+    ];
+
+    foreach ($scanDirectories as $directory) {
+        if (!is_dir($directory)) {
+            continue;
+        }
+
+        try {
+            $iterator = new RecursiveIteratorIterator(
+                new RecursiveDirectoryIterator($directory, FilesystemIterator::SKIP_DOTS)
+            );
+
+            foreach ($iterator as $fileInfo) {
+                if (!$fileInfo->isFile()) {
+                    continue;
+                }
+
+                $extension = strtolower((string) $fileInfo->getExtension());
+                if (!in_array($extension, ['ttf', 'otf'], true)) {
+                    continue;
+                }
+
+                return $fileInfo->getPathname();
+            }
+        } catch (Throwable $e) {
+            continue;
+        }
+    }
+
     return null;
 }
 
@@ -374,14 +408,45 @@ function lineWrapTextForImage(string $text, string $fontFile, int $fontSize, int
 
 function lineRenderResultImageWithGd(array $payload, string $outputPath): bool
 {
-    if (!extension_loaded('gd') || !function_exists('imagettftext')) {
+    if (!extension_loaded('gd')) {
         return false;
     }
 
     $fontFile = lineFindTtfFont();
     if ($fontFile === null) {
-        lineLog('GD renderer skipped: no TTF font found');
-        return false;
+        lineLog('GD renderer fallback: no TTF font found, using built-in font');
+
+        $width = 1040;
+        $height = 900;
+        $image = imagecreatetruecolor($width, $height);
+        if (!$image) {
+            return false;
+        }
+
+        $white = imagecolorallocate($image, 255, 255, 255);
+        $green = imagecolorallocate($image, 18, 144, 75);
+        $light = imagecolorallocate($image, 242, 249, 244);
+        $dark = imagecolorallocate($image, 24, 44, 31);
+        $blue = imagecolorallocate($image, 37, 99, 235);
+
+        imagefill($image, 0, 0, $light);
+        imagefilledrectangle($image, 40, 40, 1000, 170, $green);
+        imagefilledrectangle($image, 40, 200, 1000, 860, $white);
+
+        imagestring($image, 5, 70, 70, 'LOTTERY RESULT', $white);
+        imagestring($image, 4, 70, 110, substr((string) ($payload['site_name'] ?? ''), 0, 50), $white);
+        imagestring($image, 4, 70, 230, 'DATE: ' . (string) ($payload['draw_date_display'] ?? $payload['draw_date'] ?? ''), $dark);
+        imagestring($image, 5, 70, 320, '3 TOP : ' . (string) ($payload['three_top'] ?? '-'), $dark);
+        imagestring($image, 5, 70, 420, '2 TOP : ' . (string) ($payload['two_top'] ?? '-'), $dark);
+        imagestring($image, 5, 70, 520, '2 BOT : ' . (string) ($payload['two_bot'] ?? '-'), $dark);
+        imagestring($image, 4, 70, 650, 'SUMMARY', $blue);
+        imagestring($image, 3, 70, 700, substr((string) ($payload['summary_text'] ?? ''), 0, 120), $dark);
+        imagestring($image, 3, 70, 780, 'Generated: ' . (string) ($payload['generated_at'] ?? ''), $dark);
+
+        $saved = imagepng($image, $outputPath, 6);
+        imagedestroy($image);
+
+        return $saved && file_exists($outputPath);
     }
 
     $width = 1040;
