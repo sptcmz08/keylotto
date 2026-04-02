@@ -13,6 +13,14 @@ if (!inputPath || !outputPath) {
   process.exit(1);
 }
 
+const TEXT = {
+  draw: '\u0e07\u0e27\u0e14',
+  result: '\u0e1c\u0e25\u0e2d\u0e2d\u0e01',
+  top3: '3 \u0e15\u0e31\u0e27\u0e1a\u0e19',
+  top2: '2 \u0e15\u0e31\u0e27\u0e1a\u0e19',
+  bot2: '2 \u0e15\u0e31\u0e27\u0e25\u0e48\u0e32\u0e07',
+};
+
 const escapeHtml = (value) =>
   String(value ?? '')
     .replace(/&/g, '&amp;')
@@ -21,12 +29,11 @@ const escapeHtml = (value) =>
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 
-const renderNumberCard = (label, value, tone, accent) => `
-  <section class="number-card ${tone}">
-    <div class="number-card__label">${escapeHtml(label)}</div>
-    <div class="number-card__value">${escapeHtml(value || '-')}</div>
-    <div class="number-card__accent">${escapeHtml(accent)}</div>
-  </section>
+const renderResultChip = (label, value, tone) => `
+  <div class="result-chip ${tone}">
+    <div class="result-chip__label">${escapeHtml(label)}</div>
+    <div class="result-chip__value">${escapeHtml(value || '-')}</div>
+  </div>
 `;
 
 const findChromeExecutable = () => {
@@ -169,7 +176,7 @@ const buildEmbeddedFontFace = () => {
     @font-face {
       font-family: "LineThai";
       src: url("data:${mimeType};base64,${fontData}") format("${format}");
-      font-weight: 400 800;
+      font-weight: 400 900;
       font-style: normal;
       font-display: block;
     }
@@ -193,300 +200,209 @@ const main = async () => {
     <style>
       ${embeddedFontFace}
       * { box-sizing: border-box; }
-      :root {
-        --bg-top: #f7fcf8;
-        --bg-bottom: #eff7ff;
-        --ink: #163224;
-        --muted: #5a7466;
-        --card: rgba(255, 255, 255, 0.97);
-        --border: rgba(19, 92, 61, 0.12);
-        --green-1: #0e6f46;
-        --green-2: #16955d;
-        --green-3: #1bc270;
-        --gold: #ffc857;
-        --blue: #2e72ff;
-      }
       body {
         margin: 0;
-        font-family: "LineThai", "Noto Sans Thai", "Tahoma", sans-serif;
-        color: var(--ink);
+        font-family: "LineThai", "Tahoma", sans-serif;
         background:
-          radial-gradient(circle at left top, rgba(255, 203, 89, 0.16), transparent 25%),
-          radial-gradient(circle at right bottom, rgba(17, 149, 93, 0.14), transparent 28%),
-          linear-gradient(180deg, var(--bg-top) 0%, var(--bg-bottom) 100%);
+          radial-gradient(circle at 25% 22%, rgba(255, 196, 76, 0.14), transparent 18%),
+          radial-gradient(circle at 78% 68%, rgba(255, 150, 80, 0.12), transparent 20%),
+          linear-gradient(180deg, #7c0606 0%, #980d0d 38%, #7c0606 100%);
+        color: #fff4c8;
+      }
+      body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        background:
+          radial-gradient(circle at center, rgba(255, 208, 98, 0.08) 0 3px, transparent 3px 100%),
+          radial-gradient(circle at center, rgba(255, 208, 98, 0.06) 0 1.5px, transparent 1.5px 100%);
+        background-size: 120px 120px, 40px 40px;
+        background-position: 0 0, 20px 20px;
+        opacity: 0.22;
+        pointer-events: none;
       }
       .frame {
-        width: 1080px;
-        margin: 0 auto;
-        padding: 42px;
+        width: 1280px;
+        height: 720px;
+        padding: 28px 34px;
       }
-      .card {
+      .poster {
         position: relative;
-        border-radius: 36px;
+        width: 100%;
+        height: 100%;
+        border-radius: 28px;
         overflow: hidden;
-        background: var(--card);
-        border: 1px solid var(--border);
-        box-shadow: 0 28px 100px rgba(20, 50, 36, 0.12);
-      }
-      .hero {
-        position: relative;
-        padding: 34px 40px 32px;
+        border: 3px solid rgba(255, 211, 109, 0.48);
         background:
-          radial-gradient(circle at 88% 12%, rgba(255,255,255,0.20), transparent 18%),
-          linear-gradient(135deg, var(--green-1) 0%, var(--green-2) 48%, var(--green-3) 100%);
-        color: #fff;
+          linear-gradient(180deg, rgba(255,255,255,0.03), rgba(0,0,0,0.06)),
+          transparent;
+        box-shadow:
+          inset 0 0 0 3px rgba(255, 214, 116, 0.08),
+          0 20px 60px rgba(0,0,0,0.28);
       }
-      .hero::after {
-        content: "";
-        position: absolute;
-        right: -22px;
-        bottom: -48px;
-        width: 250px;
-        height: 250px;
-        border-radius: 999px;
-        background: rgba(255,255,255,0.08);
-      }
-      .eyebrow {
-        display: inline-flex;
-        align-items: center;
-        gap: 10px;
-        font-size: 21px;
-        font-weight: 700;
-        letter-spacing: 0.2px;
-      }
-      .eyebrow::before {
-        content: "";
-        width: 14px;
-        height: 14px;
-        border-radius: 999px;
-        background: var(--gold);
-        box-shadow: 0 0 0 6px rgba(255, 200, 87, 0.16);
-      }
-      .hero-meta {
+      .top-row {
         display: flex;
         justify-content: space-between;
-        gap: 20px;
-        align-items: end;
-        flex-wrap: wrap;
-        margin-top: 22px;
+        align-items: flex-start;
       }
-      .site-tag {
+      .brand-badge {
         display: inline-flex;
         align-items: center;
         gap: 10px;
-        padding: 10px 16px;
+        padding: 8px 14px;
         border-radius: 999px;
-        background: rgba(255,255,255,0.12);
-        border: 1px solid rgba(255,255,255,0.16);
-        font-size: 16px;
-      }
-      .lottery-name {
-        margin: 18px 0 10px;
-        font-size: 58px;
-        line-height: 1.04;
-        font-weight: 800;
-      }
-      .category-name {
-        font-size: 22px;
-        opacity: 0.96;
-      }
-      .draw-pill {
-        padding: 14px 18px;
-        border-radius: 18px;
-        background: rgba(0, 0, 0, 0.14);
-        backdrop-filter: blur(8px);
-        min-width: 240px;
-      }
-      .draw-pill__label {
-        font-size: 14px;
-        opacity: 0.82;
-        margin-bottom: 6px;
-      }
-      .draw-pill__value {
+        background: rgba(0, 0, 0, 0.18);
+        border: 1px solid rgba(255, 217, 126, 0.28);
+        color: #ffe6a4;
         font-size: 24px;
         font-weight: 700;
       }
-      .content {
-        padding: 28px 40px 40px;
-      }
-      .highlight {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: 20px;
-        padding: 18px 20px;
-        border-radius: 24px;
-        background: linear-gradient(90deg, #f5fdf8 0%, #ebfff2 100%);
-        border: 1px solid #d8f0de;
-      }
-      .highlight__title {
-        font-size: 22px;
-        font-weight: 700;
-        color: #165437;
-      }
-      .highlight__sub {
-        margin-top: 5px;
-        font-size: 16px;
-        color: var(--muted);
-      }
-      .highlight__stamp {
-        padding: 12px 18px;
-        border-radius: 999px;
-        background: #153f2a;
-        color: #d9ffe6;
-        font-size: 16px;
-        font-weight: 700;
-        white-space: nowrap;
-      }
-      .numbers {
-        margin-top: 22px;
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 18px;
-      }
-      .number-card {
-        position: relative;
-        min-height: 200px;
-        border-radius: 28px;
-        padding: 22px 22px 26px;
-        overflow: hidden;
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
-      }
-      .number-card::after {
+      .brand-badge::before {
         content: "";
-        position: absolute;
-        right: -20px;
-        bottom: -26px;
-        width: 110px;
-        height: 110px;
+        width: 16px;
+        height: 16px;
         border-radius: 999px;
-        background: rgba(255,255,255,0.28);
+        background: #ffcf57;
+        box-shadow: 0 0 0 5px rgba(255, 207, 87, 0.14);
       }
-      .number-card.primary {
-        background: linear-gradient(180deg, #ecfdf2 0%, #d9f6e4 100%);
+      .draw-date {
+        padding: 16px 24px;
+        border-radius: 18px;
+        background: rgba(0, 0, 0, 0.22);
+        border: 1px solid rgba(255, 217, 126, 0.18);
+        text-align: center;
       }
-      .number-card.secondary {
-        background: linear-gradient(180deg, #eef5ff 0%, #dce9ff 100%);
+      .draw-date__label {
+        font-size: 26px;
+        color: #ffe2a0;
       }
-      .number-card.accent {
-        background: linear-gradient(180deg, #fff8ea 0%, #ffe7b6 100%);
-      }
-      .number-card__label,
-      .number-card__value,
-      .number-card__accent {
-        position: relative;
-        z-index: 1;
-      }
-      .number-card__label {
-        font-size: 22px;
-        color: #4a6358;
-        font-weight: 700;
-      }
-      .number-card__value {
-        font-size: 88px;
-        line-height: 1;
+      .draw-date__value {
+        margin-top: 8px;
+        font-size: 46px;
         font-weight: 800;
-        letter-spacing: 1px;
-        color: #102f1f;
+        color: #ffffff;
       }
-      .number-card__accent {
-        font-size: 15px;
-        color: rgba(16, 47, 31, 0.68);
+      .title-block {
+        margin-top: 34px;
       }
-      .footer {
-        margin-top: 22px;
-        display: grid;
-        grid-template-columns: 1.7fr 0.9fr;
+      .lottery-name {
+        font-size: 108px;
+        line-height: 1.02;
+        font-weight: 900;
+        color: #ffd45e;
+        letter-spacing: 0.5px;
+        -webkit-text-stroke: 8px #1f0700;
+        paint-order: stroke fill;
+        text-shadow:
+          0 8px 0 #1f0700,
+          0 16px 22px rgba(0,0,0,0.26),
+          0 0 18px rgba(255, 226, 150, 0.15);
+      }
+      .divider {
+        display: flex;
+        align-items: center;
         gap: 18px;
+        margin-top: 20px;
       }
-      .detail-box,
-      .time-box {
+      .divider__line {
+        flex: 1;
+        height: 4px;
+        border-radius: 999px;
+        background: linear-gradient(90deg, transparent 0%, #f5c54d 22%, #f5c54d 78%, transparent 100%);
+      }
+      .divider__ornament {
+        font-size: 42px;
+        color: #ffd86a;
+        text-shadow: 0 2px 0 rgba(0,0,0,0.35);
+      }
+      .result-head {
+        margin-top: 22px;
+        display: flex;
+        align-items: baseline;
+        gap: 18px;
+        flex-wrap: wrap;
+      }
+      .result-head__label {
+        font-size: 66px;
+        font-weight: 900;
+        color: #fff;
+        -webkit-text-stroke: 6px #120400;
+        paint-order: stroke fill;
+        text-shadow: 0 6px 0 #120400;
+      }
+      .result-head__draw {
+        font-size: 36px;
+        font-weight: 700;
+        color: #ffe6b0;
+      }
+      .results {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 22px;
+        margin-top: 22px;
+      }
+      .result-chip {
+        padding: 22px 24px 24px;
         border-radius: 24px;
-        overflow: hidden;
+        border: 2px solid rgba(255, 236, 185, 0.2);
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
       }
-      .detail-box {
-        background: linear-gradient(180deg, #f7fbf8 0%, #eef6f1 100%);
-        border: 1px solid #ddeee2;
-        padding: 22px 22px 24px;
+      .result-chip.gold {
+        background: linear-gradient(180deg, rgba(58, 20, 0, 0.66) 0%, rgba(96, 29, 0, 0.78) 100%);
       }
-      .detail-box__label {
-        font-size: 16px;
-        color: var(--muted);
-        margin-bottom: 10px;
+      .result-chip.green {
+        background: linear-gradient(180deg, rgba(0, 78, 32, 0.66) 0%, rgba(0, 111, 44, 0.78) 100%);
       }
-      .detail-box__value {
+      .result-chip.orange {
+        background: linear-gradient(180deg, rgba(88, 40, 0, 0.66) 0%, rgba(120, 52, 0, 0.78) 100%);
+      }
+      .result-chip__label {
         font-size: 30px;
-        line-height: 1.44;
+        color: #ffe5a6;
         font-weight: 700;
-        color: #173227;
-        word-break: break-word;
       }
-      .time-box {
-        background:
-          linear-gradient(180deg, #163f29 0%, #0f2c1d 100%);
-        color: #d8ffe5;
-        padding: 22px;
-      }
-      .time-box__label {
-        font-size: 15px;
-        opacity: 0.82;
-        margin-bottom: 8px;
-      }
-      .time-box__value {
-        font-size: 22px;
-        line-height: 1.45;
-        font-weight: 700;
-        word-break: break-word;
+      .result-chip__value {
+        margin-top: 10px;
+        font-size: 98px;
+        line-height: 1;
+        font-weight: 900;
+        color: #ffffff;
+        text-shadow: 0 5px 0 rgba(0,0,0,0.34);
       }
     </style>
   </head>
   <body>
     <div class="frame">
-      <div class="card">
-        <section class="hero">
-          <div class="eyebrow">ประกาศผลหวย</div>
-          <div class="hero-meta">
-            <div>
-              <div class="site-tag">${escapeHtml(data.site_name || '')}</div>
-              <div class="lottery-name">${escapeHtml(data.lottery_name || 'ผลหวย')}</div>
-              <div class="category-name">${escapeHtml(data.category_name || '')}</div>
-            </div>
-            <div class="draw-pill">
-              <div class="draw-pill__label">งวดประจำวันที่</div>
-              <div class="draw-pill__value">${escapeHtml(data.draw_date_display || data.draw_date || '')}</div>
-            </div>
+      <main class="poster">
+        <div class="top-row">
+          <div class="brand-badge">${TEXT.result}</div>
+          <div class="draw-date">
+            <div class="draw-date__label">${TEXT.draw}</div>
+            <div class="draw-date__value">${escapeHtml(data.draw_date_display || data.draw_date || '-')}</div>
           </div>
+        </div>
+
+        <section class="title-block">
+          <div class="lottery-name">${escapeHtml(data.lottery_name || '-')}</div>
         </section>
 
-        <section class="content">
-          <div class="highlight">
-            <div>
-              <div class="highlight__title">ผลออกรอบล่าสุด</div>
-              <div class="highlight__sub">ภาพนี้ถูกสร้างจากข้อมูลผลหวยในระบบเพื่อส่งเข้า LINE กลุ่ม</div>
-            </div>
-            <div class="highlight__stamp">อัปเดตอัตโนมัติ</div>
-          </div>
+        <div class="divider">
+          <div class="divider__line"></div>
+          <div class="divider__ornament">༻༺</div>
+          <div class="divider__line"></div>
+        </div>
 
-          <div class="numbers">
-            ${renderNumberCard('3 ตัวบน', data.three_top, 'primary', 'Three Top')}
-            ${renderNumberCard('2 ตัวบน', data.two_top, 'secondary', 'Two Top')}
-            ${renderNumberCard('2 ตัวล่าง', data.two_bot, 'accent', 'Two Bottom')}
-          </div>
+        <div class="result-head">
+          <div class="result-head__label">${TEXT.result}</div>
+          <div class="result-head__draw">${TEXT.draw} ${escapeHtml(data.draw_date_display || data.draw_date || '-')}</div>
+        </div>
 
-          <div class="footer">
-            <div class="detail-box">
-              <div class="detail-box__label">รายละเอียดผลหวย</div>
-              <div class="detail-box__value">${escapeHtml(data.summary_text || '')}</div>
-            </div>
-            <div class="time-box">
-              <div class="time-box__label">สร้างภาพเมื่อ</div>
-              <div class="time-box__value">${escapeHtml(data.generated_at || '')}</div>
-            </div>
-          </div>
+        <section class="results">
+          ${renderResultChip(TEXT.top3, data.three_top, 'gold')}
+          ${renderResultChip(TEXT.top2, data.two_top, 'green')}
+          ${renderResultChip(TEXT.bot2, data.two_bot, 'orange')}
         </section>
-      </div>
+      </main>
     </div>
   </body>
   </html>`;
@@ -514,7 +430,7 @@ const main = async () => {
 
   try {
     const page = await browser.newPage();
-    await page.setViewport({ width: 1080, height: 1320, deviceScaleFactor: 2 });
+    await page.setViewport({ width: 1280, height: 720, deviceScaleFactor: 2 });
     await page.setContent(html, { waitUntil: 'networkidle0' });
     await page.evaluate(async () => {
       if (document.fonts?.ready) {
@@ -525,7 +441,6 @@ const main = async () => {
     await page.screenshot({
       path: outputPath,
       type: 'png',
-      fullPage: true,
     });
   } finally {
     await browser.close();
