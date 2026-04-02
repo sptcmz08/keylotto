@@ -1,4 +1,5 @@
-import fs from 'fs/promises';
+import fs from 'fs';
+import fsp from 'fs/promises';
 import path from 'path';
 import puppeteer from 'puppeteer';
 
@@ -24,11 +25,55 @@ const renderNumberCard = (label, value, tone) => `
   </div>
 `;
 
+const findChromeExecutable = () => {
+  const rootDir = process.cwd();
+  const cacheDir = path.join(rootDir, '.cache', 'puppeteer');
+  const directCandidates = [
+    path.join(cacheDir, 'chrome', 'linux-146.0.7680.153', 'chrome-linux64', 'chrome'),
+    path.join(cacheDir, 'chrome', 'win64-146.0.7680.153', 'chrome-win64', 'chrome.exe'),
+    path.join(cacheDir, 'chrome', 'mac-146.0.7680.153', 'chrome-mac-x64', 'Google Chrome for Testing.app', 'Contents', 'MacOS', 'Google Chrome for Testing'),
+    path.join(cacheDir, 'chrome', 'mac_arm-146.0.7680.153', 'chrome-mac-arm64', 'Google Chrome for Testing.app', 'Contents', 'MacOS', 'Google Chrome for Testing'),
+  ];
+
+  for (const candidate of directCandidates) {
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  const chromeRoot = path.join(cacheDir, 'chrome');
+  if (!fs.existsSync(chromeRoot)) {
+    return null;
+  }
+
+  const stack = [chromeRoot];
+  const executableNames = new Set(['chrome', 'chrome.exe']);
+
+  while (stack.length > 0) {
+    const current = stack.pop();
+    const entries = fs.readdirSync(current, { withFileTypes: true });
+
+    for (const entry of entries) {
+      const fullPath = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        stack.push(fullPath);
+        continue;
+      }
+
+      if (executableNames.has(entry.name)) {
+        return fullPath;
+      }
+    }
+  }
+
+  return null;
+};
+
 const main = async () => {
-  const raw = await fs.readFile(inputPath, 'utf8');
+  const raw = await fsp.readFile(inputPath, 'utf8');
   const data = JSON.parse(raw);
 
-  await fs.mkdir(path.dirname(outputPath), { recursive: true });
+  await fsp.mkdir(path.dirname(outputPath), { recursive: true });
 
   const html = `
   <!doctype html>
@@ -205,10 +250,17 @@ const main = async () => {
   </body>
   </html>`;
 
-  const browser = await puppeteer.launch({
+  const launchOptions = {
     headless: 'new',
     args: ['--no-sandbox', '--disable-setuid-sandbox'],
-  });
+  };
+
+  const executablePath = findChromeExecutable();
+  if (executablePath) {
+    launchOptions.executablePath = executablePath;
+  }
+
+  const browser = await puppeteer.launch(launchOptions);
 
   try {
     const page = await browser.newPage();
