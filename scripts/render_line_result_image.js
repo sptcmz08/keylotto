@@ -15,7 +15,6 @@ if (!inputPath || !outputPath) {
 
 const TEXT = {
   draw: '\u0e07\u0e27\u0e14',
-  result: '\u0e1c\u0e25\u0e2d\u0e2d\u0e01',
   top3: '3 \u0e15\u0e31\u0e27\u0e1a\u0e19',
   top2: '2 \u0e15\u0e31\u0e27\u0e1a\u0e19',
   bot2: '2 \u0e15\u0e31\u0e27\u0e25\u0e48\u0e32\u0e07',
@@ -204,9 +203,9 @@ const main = async () => {
         margin: 0;
         font-family: "LineThai", "Tahoma", sans-serif;
         background:
-          radial-gradient(circle at 25% 22%, rgba(255, 196, 76, 0.14), transparent 18%),
-          radial-gradient(circle at 78% 68%, rgba(255, 150, 80, 0.12), transparent 20%),
-          linear-gradient(180deg, #7c0606 0%, #980d0d 38%, #7c0606 100%);
+          radial-gradient(circle at 20% 18%, rgba(255, 186, 72, 0.16), transparent 18%),
+          radial-gradient(circle at 80% 74%, rgba(255, 122, 72, 0.14), transparent 20%),
+          linear-gradient(180deg, #860707 0%, #ad0f0f 42%, #7d0606 100%);
         color: #fff4c8;
       }
       body::before {
@@ -214,10 +213,10 @@ const main = async () => {
         position: fixed;
         inset: 0;
         background:
-          radial-gradient(circle at center, rgba(255, 208, 98, 0.08) 0 3px, transparent 3px 100%),
-          radial-gradient(circle at center, rgba(255, 208, 98, 0.06) 0 1.5px, transparent 1.5px 100%);
-        background-size: 120px 120px, 40px 40px;
-        background-position: 0 0, 20px 20px;
+          radial-gradient(circle at center, rgba(255, 210, 100, 0.08) 0 3px, transparent 3px 100%),
+          radial-gradient(circle at center, rgba(255, 210, 100, 0.06) 0 1.5px, transparent 1.5px 100%);
+        background-size: 120px 120px, 42px 42px;
+        background-position: 0 0, 21px 21px;
         opacity: 0.22;
         pointer-events: none;
       }
@@ -227,7 +226,6 @@ const main = async () => {
         padding: 28px 34px;
       }
       .poster {
-        position: relative;
         width: 100%;
         height: 100%;
         border-radius: 28px;
@@ -239,35 +237,16 @@ const main = async () => {
         box-shadow:
           inset 0 0 0 3px rgba(255, 214, 116, 0.08),
           0 20px 60px rgba(0,0,0,0.28);
+        padding: 34px 42px 38px;
       }
       .top-row {
         display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
-      }
-      .brand-badge {
-        display: inline-flex;
-        align-items: center;
-        gap: 10px;
-        padding: 8px 14px;
-        border-radius: 999px;
-        background: rgba(0, 0, 0, 0.18);
-        border: 1px solid rgba(255, 217, 126, 0.28);
-        color: #ffe6a4;
-        font-size: 24px;
-        font-weight: 700;
-      }
-      .brand-badge::before {
-        content: "";
-        width: 16px;
-        height: 16px;
-        border-radius: 999px;
-        background: #ffcf57;
-        box-shadow: 0 0 0 5px rgba(255, 207, 87, 0.14);
+        justify-content: flex-end;
       }
       .draw-date {
+        min-width: 280px;
         padding: 16px 24px;
-        border-radius: 18px;
+        border-radius: 20px;
         background: rgba(0, 0, 0, 0.22);
         border: 1px solid rgba(255, 217, 126, 0.18);
         text-align: center;
@@ -298,48 +277,22 @@ const main = async () => {
           0 16px 22px rgba(0,0,0,0.26),
           0 0 18px rgba(255, 226, 150, 0.15);
       }
-      .divider {
-        display: flex;
-        align-items: center;
-        gap: 18px;
-        margin-top: 20px;
-      }
-      .divider__line {
-        flex: 1;
-        height: 4px;
-        border-radius: 999px;
-        background: linear-gradient(90deg, transparent 0%, #f5c54d 22%, #f5c54d 78%, transparent 100%);
-      }
-      .divider__ornament {
-        font-size: 42px;
-        color: #ffd86a;
-        text-shadow: 0 2px 0 rgba(0,0,0,0.35);
-      }
       .result-head {
-        margin-top: 22px;
+        margin-top: 28px;
         display: flex;
-        align-items: baseline;
-        gap: 18px;
-        flex-wrap: wrap;
-      }
-      .result-head__label {
-        font-size: 66px;
-        font-weight: 900;
-        color: #fff;
-        -webkit-text-stroke: 6px #120400;
-        paint-order: stroke fill;
-        text-shadow: 0 6px 0 #120400;
+        justify-content: center;
       }
       .result-head__draw {
-        font-size: 36px;
+        font-size: 42px;
         font-weight: 700;
         color: #ffe6b0;
+        text-shadow: 0 3px 0 rgba(0,0,0,0.3);
       }
       .results {
         display: grid;
         grid-template-columns: repeat(3, 1fr);
         gap: 22px;
-        margin-top: 22px;
+        margin-top: 28px;
       }
       .result-chip {
         padding: 22px 24px 24px;
@@ -360,6 +313,7 @@ const main = async () => {
         font-size: 30px;
         color: #ffe5a6;
         font-weight: 700;
+        text-align: center;
       }
       .result-chip__value {
         margin-top: 10px;
@@ -367,6 +321,7 @@ const main = async () => {
         line-height: 1;
         font-weight: 900;
         color: #ffffff;
+        text-align: center;
         text-shadow: 0 5px 0 rgba(0,0,0,0.34);
       }
     </style>
@@ -375,7 +330,6 @@ const main = async () => {
     <div class="frame">
       <main class="poster">
         <div class="top-row">
-          <div class="brand-badge">${TEXT.result}</div>
           <div class="draw-date">
             <div class="draw-date__label">${TEXT.draw}</div>
             <div class="draw-date__value">${escapeHtml(data.draw_date_display || data.draw_date || '-')}</div>
@@ -386,14 +340,7 @@ const main = async () => {
           <div class="lottery-name">${escapeHtml(data.lottery_name || '-')}</div>
         </section>
 
-        <div class="divider">
-          <div class="divider__line"></div>
-          <div class="divider__ornament">༻༺</div>
-          <div class="divider__line"></div>
-        </div>
-
         <div class="result-head">
-          <div class="result-head__label">${TEXT.result}</div>
           <div class="result-head__draw">${TEXT.draw} ${escapeHtml(data.draw_date_display || data.draw_date || '-')}</div>
         </div>
 
