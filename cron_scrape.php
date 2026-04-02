@@ -531,8 +531,10 @@ function processResults($pdo, $results, $source) {
             try {
                 $lineStats = lineSendResultNotification($pdo, $lotteryTypeId, $drawDate);
                 if (!empty($lineStats['sent'])) {
-                    $lineMode = !empty($lineStats['used_image']) ? 'image' : 'text';
+                    $lineMode = !empty($lineStats['renderer']) ? 'image:' . $lineStats['renderer'] : 'image';
                     echo "ðŸ“£ {$keyLotteryName}: à¸ªà¹ˆà¸‡ LINE {$lineStats['sent']} à¸à¸¥à¸¸à¹ˆà¸¡ ({$lineMode})\n";
+                } elseif (($lineStats['reason'] ?? '') === 'image_generation_failed') {
+                    echo "âš ï¸  {$keyLotteryName}: à¸¢à¸±à¸‡à¹„à¸¡à¹ˆà¸ªà¹ˆà¸‡ LINE à¹€à¸žà¸£à¸²à¸°à¸ªà¸£à¹‰à¸²à¸‡à¸£à¸¹à¸›à¹„à¸¡à¹ˆà¸ªà¸³à¹€à¸£à¹‡à¸ˆ\n";
                 }
             } catch (Exception $lineError) {
                 echo "âš ï¸  LINE notify failed for {$keyLotteryName}: " . $lineError->getMessage() . "\n";

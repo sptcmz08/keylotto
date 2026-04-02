@@ -305,6 +305,160 @@ function lineResolvedNodeBinary(): string
     return '/usr/bin/node';
 }
 
+function lineFindTtfFont(): ?string
+{
+    $candidates = [
+        __DIR__ . '/fonts/NotoSansThai-Regular.ttf',
+        __DIR__ . '/fonts/Prompt-Regular.ttf',
+        'C:/Windows/Fonts/tahoma.ttf',
+        'C:/Windows/Fonts/arial.ttf',
+        '/usr/share/fonts/truetype/noto/NotoSansThai-Regular.ttf',
+        '/usr/share/fonts/opentype/noto/NotoSansThai-Regular.ttf',
+        '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+        '/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf',
+    ];
+
+    foreach ($candidates as $fontPath) {
+        if (is_file($fontPath)) {
+            return $fontPath;
+        }
+    }
+
+    return null;
+}
+
+function lineGdColor($image, string $hex, int $alpha = 0): int
+{
+    $hex = ltrim($hex, '#');
+    if (strlen($hex) === 3) {
+        $hex = $hex[0] . $hex[0] . $hex[1] . $hex[1] . $hex[2] . $hex[2];
+    }
+
+    $red = hexdec(substr($hex, 0, 2));
+    $green = hexdec(substr($hex, 2, 2));
+    $blue = hexdec(substr($hex, 4, 2));
+
+    return imagecolorallocatealpha($image, $red, $green, $blue, $alpha);
+}
+
+function lineWrapTextForImage(string $text, string $fontFile, int $fontSize, int $maxWidth): array
+{
+    $text = trim(preg_replace('/\s+/u', ' ', $text));
+    if ($text === '') {
+        return ['-'];
+    }
+
+    $words = preg_split('/\s+/u', $text) ?: [$text];
+    $lines = [];
+    $current = '';
+
+    foreach ($words as $word) {
+        $candidate = $current === '' ? $word : $current . ' ' . $word;
+        $box = imagettfbbox($fontSize, 0, $fontFile, $candidate);
+        $width = $box ? abs($box[2] - $box[0]) : 0;
+
+        if ($current !== '' && $width > $maxWidth) {
+            $lines[] = $current;
+            $current = $word;
+        } else {
+            $current = $candidate;
+        }
+    }
+
+    if ($current !== '') {
+        $lines[] = $current;
+    }
+
+    return $lines ?: ['-'];
+}
+
+function lineRenderResultImageWithGd(array $payload, string $outputPath): bool
+{
+    if (!extension_loaded('gd') || !function_exists('imagettftext')) {
+        return false;
+    }
+
+    $fontFile = lineFindTtfFont();
+    if ($fontFile === null) {
+        lineLog('GD renderer skipped: no TTF font found');
+        return false;
+    }
+
+    $width = 1040;
+    $height = 1280;
+    $image = imagecreatetruecolor($width, $height);
+    if (!$image) {
+        return false;
+    }
+
+    imageantialias($image, true);
+    imagesavealpha($image, true);
+
+    $white = lineGdColor($image, '#FFFFFF');
+    $bg = lineGdColor($image, '#F4FBF6');
+    $hero = lineGdColor($image, '#12904B');
+    $heroAlt = lineGdColor($image, '#28B764');
+    $border = lineGdColor($image, '#DCEEE2');
+    $textDark = lineGdColor($image, '#173525');
+    $textMuted = lineGdColor($image, '#547062');
+    $primaryBox = lineGdColor($image, '#E9FFF0');
+    $secondaryBox = lineGdColor($image, '#EEF6FF');
+    $accentBox = lineGdColor($image, '#FFF6E7');
+    $stampBg = lineGdColor($image, '#143B28');
+
+    imagefill($image, 0, 0, $bg);
+
+    imagefilledrectangle($image, 40, 40, 1000, 1240, $white);
+    imagerectangle($image, 40, 40, 1000, 1240, $border);
+
+    imagefilledrectangle($image, 40, 40, 1000, 330, $hero);
+    imagefilledrectangle($image, 520, 40, 1000, 330, $heroAlt);
+
+    imagettftext($image, 30, 0, 90, 110, $white, $fontFile, 'ประกาศผลหวย');
+    imagettftext($image, 20, 0, 90, 160, $white, $fontFile, (string) ($payload['site_name'] ?? ''));
+    imagettftext($image, 40, 0, 90, 230, $white, $fontFile, (string) ($payload['lottery_name'] ?? 'ผลหวย'));
+    imagettftext($image, 22, 0, 90, 285, $white, $fontFile, (string) ($payload['category_name'] ?? ''));
+    imagettftext($image, 22, 0, 640, 285, $white, $fontFile, 'งวดวันที่ ' . (string) ($payload['draw_date_display'] ?? ''));
+
+    $cards = [
+        ['x1' => 90, 'x2' => 380, 'label' => '3 ตัวบน', 'value' => (string) ($payload['three_top'] ?? '-'), 'bg' => $primaryBox],
+        ['x1' => 400, 'x2' => 690, 'label' => '2 ตัวบน', 'value' => (string) ($payload['two_top'] ?? '-'), 'bg' => $secondaryBox],
+        ['x1' => 710, 'x2' => 950, 'label' => '2 ตัวล่าง', 'value' => (string) ($payload['two_bot'] ?? '-'), 'bg' => $accentBox],
+    ];
+
+    foreach ($cards as $card) {
+        imagefilledrectangle($image, $card['x1'], 390, $card['x2'], 690, $card['bg']);
+        imagerectangle($image, $card['x1'], 390, $card['x2'], 690, $border);
+        imagettftext($image, 24, 0, $card['x1'] + 22, 450, $textMuted, $fontFile, $card['label']);
+        imagettftext($image, 60, 0, $card['x1'] + 30, 590, $textDark, $fontFile, $card['value'] !== '' ? $card['value'] : '-');
+    }
+
+    imagefilledrectangle($image, 90, 740, 700, 1030, $bg);
+    imagerectangle($image, 90, 740, 700, 1030, $border);
+    imagettftext($image, 20, 0, 120, 790, $textMuted, $fontFile, 'สรุปผลล่าสุด');
+
+    $summaryLines = lineWrapTextForImage((string) ($payload['summary_text'] ?? ''), $fontFile, 28, 540);
+    $summaryY = 850;
+    foreach (array_slice($summaryLines, 0, 5) as $line) {
+        imagettftext($image, 28, 0, 120, $summaryY, $textDark, $fontFile, $line);
+        $summaryY += 52;
+    }
+
+    imagefilledrectangle($image, 730, 740, 950, 1030, $stampBg);
+    imagettftext($image, 18, 0, 760, 790, $white, $fontFile, 'สร้างภาพเมื่อ');
+    $stampLines = lineWrapTextForImage((string) ($payload['generated_at'] ?? ''), $fontFile, 24, 150);
+    $stampY = 860;
+    foreach (array_slice($stampLines, 0, 3) as $line) {
+        imagettftext($image, 24, 0, 760, $stampY, $white, $fontFile, $line);
+        $stampY += 42;
+    }
+
+    $saved = imagepng($image, $outputPath, 6);
+    imagedestroy($image);
+
+    return $saved && file_exists($outputPath);
+}
+
 function lineGenerateResultImage(PDO $pdo, array $resultRow): ?array
 {
     $baseUrl = lineResolvedPublicBaseUrl($pdo);
@@ -346,12 +500,25 @@ function lineGenerateResultImage(PDO $pdo, array $resultRow): ?array
 
     $scriptPath = $rootDir . '/scripts/render_line_result_image.js';
     $nodeBinary = lineResolvedNodeBinary();
-    $command = escapeshellarg($nodeBinary) . ' ' . escapeshellarg($scriptPath) . ' ' . escapeshellarg($tempJson) . ' ' . escapeshellarg($outputPath) . ' 2>&1';
+    $output = ['Node renderer skipped'];
+    $exitCode = 1;
 
-    $output = [];
-    $exitCode = 0;
-    exec($command, $output, $exitCode);
+    if (is_file($scriptPath)) {
+        $command = escapeshellarg($nodeBinary) . ' ' . escapeshellarg($scriptPath) . ' ' . escapeshellarg($tempJson) . ' ' . escapeshellarg($outputPath) . ' 2>&1';
+        $output = [];
+        $exitCode = 0;
+        exec($command, $output, $exitCode);
+    }
+
     @unlink($tempJson);
+
+    if (($exitCode !== 0 || !file_exists($outputPath)) && lineRenderResultImageWithGd($payload, $outputPath)) {
+        return [
+            'path' => $outputPath,
+            'url' => $baseUrl . '/line/generated/' . rawurlencode($outputFilename),
+            'renderer' => 'gd',
+        ];
+    }
 
     if ($exitCode !== 0 || !file_exists($outputPath)) {
         lineLog('Result image render failed: ' . implode("\n", $output));
@@ -361,6 +528,7 @@ function lineGenerateResultImage(PDO $pdo, array $resultRow): ?array
     return [
         'path' => $outputPath,
         'url' => $baseUrl . '/line/generated/' . rawurlencode($outputFilename),
+        'renderer' => 'node',
     ];
 }
 
@@ -391,22 +559,23 @@ function lineSendResultNotification(PDO $pdo, int $lotteryTypeId, string $drawDa
         return ['sent' => 0, 'skipped' => true];
     }
 
-    $summaryText = lineResultSummaryText($resultRow);
     $image = lineGenerateResultImage($pdo, $resultRow);
-
-    $messages = [];
-    if ($image && !empty($image['url'])) {
-        $messages[] = [
-            'type' => 'image',
-            'originalContentUrl' => $image['url'],
-            'previewImageUrl' => $image['url'],
-        ];
-    } else {
-        $messages[] = [
-            'type' => 'text',
-            'text' => $summaryText,
+    if (!$image || empty($image['url'])) {
+        lineLog('Result notification skipped: image generation failed for lottery_type_id=' . $lotteryTypeId . ' draw_date=' . $drawDate);
+        return [
+            'sent' => 0,
+            'skipped' => true,
+            'used_image' => false,
+            'reason' => 'image_generation_failed',
         ];
     }
+
+    $summaryText = lineResultSummaryText($resultRow);
+    $messages = [[
+        'type' => 'image',
+        'originalContentUrl' => $image['url'],
+        'previewImageUrl' => $image['url'],
+    ]];
 
     $sent = 0;
     foreach ($groups as $group) {
@@ -425,7 +594,8 @@ function lineSendResultNotification(PDO $pdo, int $lotteryTypeId, string $drawDa
     return [
         'sent' => $sent,
         'skipped' => false,
-        'used_image' => !empty($image['url']),
+        'used_image' => true,
         'image_url' => $image['url'] ?? '',
+        'renderer' => $image['renderer'] ?? '',
     ];
 }
