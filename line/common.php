@@ -532,12 +532,8 @@ function lineGenerateResultImage(PDO $pdo, array $resultRow): ?array
     ];
 }
 
-function lineSendResultNotification(PDO $pdo, int $lotteryTypeId, string $drawDate): array
+function lineFetchResultRow(PDO $pdo, int $lotteryTypeId, string $drawDate): ?array
 {
-    if (!lineConfigReady($pdo) || !lineAutoSendEnabled($pdo)) {
-        return ['sent' => 0, 'skipped' => true];
-    }
-
     $stmt = $pdo->prepare("
         SELECT r.lottery_type_id, r.draw_date, r.three_top, r.two_top, r.two_bot,
                lt.name AS lottery_name, lc.name AS category_name
@@ -548,8 +544,93 @@ function lineSendResultNotification(PDO $pdo, int $lotteryTypeId, string $drawDa
         LIMIT 1
     ");
     $stmt->execute([$lotteryTypeId, $drawDate]);
-    $resultRow = $stmt->fetch();
 
+    $resultRow = $stmt->fetch();
+    return $resultRow ?: null;
+}
+
+function linePrepareResultImageMessage(PDO $pdo, array $resultRow): ?array
+{
+    $image = lineGenerateResultImage($pdo, $resultRow);
+    if (!$image || empty($image['url'])) {
+        return null;
+    }
+
+    return [
+        'summary_text' => lineResultSummaryText($resultRow),
+        'messages' => [[
+            'type' => 'image',
+            'originalContentUrl' => $image['url'],
+            'previewImageUrl' => $image['url'],
+        ]],
+        'image_url' => $image['url'],
+        'renderer' => $image['renderer'] ?? '',
+    ];
+}
+
+function lineSendPreparedResultToGroup(PDO $pdo, string $groupId, array $prepared): array
+{
+    if ($groupId === '') {
+        return [
+            'ok' => false,
+            'status' => 0,
+            'body' => 'Group ID is required',
+            'reason' => 'missing_group_id',
+        ];
+    }
+
+    $result = linePushMessages($pdo, $groupId, $prepared['messages']);
+    lineLogPushResult($pdo, $groupId, $prepared['summary_text'], $result);
+
+    return array_merge($result, [
+        'summary_text' => $prepared['summary_text'],
+        'image_url' => $prepared['image_url'] ?? '',
+        'renderer' => $prepared['renderer'] ?? '',
+    ]);
+}
+
+function linePushResultImageToGroup(PDO $pdo, string $groupId, int $lotteryTypeId, string $drawDate): array
+{
+    if (!lineConfigReady($pdo)) {
+        return [
+            'ok' => false,
+            'status' => 0,
+            'body' => 'LINE is not configured',
+            'reason' => 'config_not_ready',
+        ];
+    }
+
+    $resultRow = lineFetchResultRow($pdo, $lotteryTypeId, $drawDate);
+    if (!$resultRow) {
+        return [
+            'ok' => false,
+            'status' => 0,
+            'body' => 'Result not found',
+            'reason' => 'result_not_found',
+        ];
+    }
+
+    $prepared = linePrepareResultImageMessage($pdo, $resultRow);
+    if (!$prepared) {
+        lineLog('Manual result image send skipped: image generation failed for lottery_type_id=' . $lotteryTypeId . ' draw_date=' . $drawDate);
+        return [
+            'ok' => false,
+            'status' => 0,
+            'body' => 'Image generation failed',
+            'reason' => 'image_generation_failed',
+        ];
+    }
+
+    return lineSendPreparedResultToGroup($pdo, $groupId, $prepared);
+}
+
+function lineSendResultNotification(PDO $pdo, int $lotteryTypeId, string $drawDate): array
+{
+    if (!lineConfigReady($pdo) || !lineAutoSendEnabled($pdo)) {
+        return ['sent' => 0, 'skipped' => true];
+    }
+
+    $resultRow = lineFetchResultRow($pdo, $lotteryTypeId, $drawDate);
     if (!$resultRow) {
         return ['sent' => 0, 'skipped' => true];
     }
@@ -559,8 +640,8 @@ function lineSendResultNotification(PDO $pdo, int $lotteryTypeId, string $drawDa
         return ['sent' => 0, 'skipped' => true];
     }
 
-    $image = lineGenerateResultImage($pdo, $resultRow);
-    if (!$image || empty($image['url'])) {
+    $prepared = linePrepareResultImageMessage($pdo, $resultRow);
+    if (!$prepared) {
         lineLog('Result notification skipped: image generation failed for lottery_type_id=' . $lotteryTypeId . ' draw_date=' . $drawDate);
         return [
             'sent' => 0,
@@ -570,13 +651,6 @@ function lineSendResultNotification(PDO $pdo, int $lotteryTypeId, string $drawDa
         ];
     }
 
-    $summaryText = lineResultSummaryText($resultRow);
-    $messages = [[
-        'type' => 'image',
-        'originalContentUrl' => $image['url'],
-        'previewImageUrl' => $image['url'],
-    ]];
-
     $sent = 0;
     foreach ($groups as $group) {
         $groupId = $group['group_id'] ?? '';
@@ -584,8 +658,7 @@ function lineSendResultNotification(PDO $pdo, int $lotteryTypeId, string $drawDa
             continue;
         }
 
-        $result = linePushMessages($pdo, $groupId, $messages);
-        lineLogPushResult($pdo, $groupId, $summaryText, $result);
+        $result = lineSendPreparedResultToGroup($pdo, $groupId, $prepared);
         if (!empty($result['ok'])) {
             $sent++;
         }
@@ -595,7 +668,7 @@ function lineSendResultNotification(PDO $pdo, int $lotteryTypeId, string $drawDa
         'sent' => $sent,
         'skipped' => false,
         'used_image' => true,
-        'image_url' => $image['url'] ?? '',
-        'renderer' => $image['renderer'] ?? '',
+        'image_url' => $prepared['image_url'] ?? '',
+        'renderer' => $prepared['renderer'] ?? '',
     ];
 }

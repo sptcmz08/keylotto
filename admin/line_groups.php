@@ -7,8 +7,17 @@ ensureLineTables($pdo);
 
 $adminPage = 'line_groups';
 $adminTitle = 'LINE Groups';
-$msg = '';
-$msgType = 'success';
+
+function lineGroupsRedirectWithFlash(string $type, string $message): void
+{
+    $_SESSION['line_groups_flash'] = [
+        'type' => $type,
+        'message' => $message,
+    ];
+
+    header('Location: line_groups.php');
+    exit;
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['form_action'] ?? '';
@@ -20,40 +29,75 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $autoSendResults = isset($_POST['auto_send_results']) ? '1' : '0';
 
         if ($channelSecret === '' || $channelAccessToken === '') {
-            $msg = 'กรุณากรอก Channel secret และ Channel access token ให้ครบ';
-            $msgType = 'error';
-        } else {
-            lineSetSetting($pdo, 'channel_secret', $channelSecret);
-            lineSetSetting($pdo, 'channel_access_token', $channelAccessToken);
-            lineSetSetting($pdo, 'public_base_url', $publicBaseUrl !== '' ? $publicBaseUrl : 'https://member.imzshop97.com');
-            lineSetSetting($pdo, 'auto_send_results', $autoSendResults);
-            $msg = 'บันทึก LINE settings สำเร็จ';
-            $msgType = 'success';
+            lineGroupsRedirectWithFlash('error', 'กรุณากรอก Channel secret และ Channel access token ให้ครบ');
         }
-    } elseif ($action === 'send_test') {
+
+        lineSetSetting($pdo, 'channel_secret', $channelSecret);
+        lineSetSetting($pdo, 'channel_access_token', $channelAccessToken);
+        lineSetSetting($pdo, 'public_base_url', $publicBaseUrl !== '' ? $publicBaseUrl : 'https://member.imzshop97.com');
+        lineSetSetting($pdo, 'auto_send_results', $autoSendResults);
+
+        lineGroupsRedirectWithFlash('success', 'บันทึก LINE settings สำเร็จ');
+    }
+
+    if ($action === 'send_test') {
         $groupId = trim($_POST['group_id'] ?? '');
         $message = trim($_POST['message'] ?? '');
 
         if ($groupId === '' || $message === '') {
-            $msg = 'กรุณาเลือกกลุ่มและใส่ข้อความทดสอบ';
-            $msgType = 'error';
-        } elseif (!lineConfigReady($pdo)) {
-            $msg = 'ยังไม่ได้ตั้งค่า LINE channel secret และ access token บน server';
-            $msgType = 'error';
-        } else {
-            $result = linePushTextMessage($pdo, $groupId, $message);
-            lineLogPushResult($pdo, $groupId, $message, $result);
-
-            if (!empty($result['ok'])) {
-                $msg = 'ส่งข้อความทดสอบไป LINE สำเร็จ';
-                $msgType = 'success';
-            } else {
-                $msg = 'ส่งข้อความไม่สำเร็จ (HTTP ' . ($result['status'] ?: 0) . ')';
-                $msgType = 'error';
-            }
+            lineGroupsRedirectWithFlash('error', 'กรุณาเลือกกลุ่มและใส่ข้อความทดสอบ');
         }
+
+        if (!lineConfigReady($pdo)) {
+            lineGroupsRedirectWithFlash('error', 'ยังไม่ได้ตั้งค่า LINE channel secret และ access token บน server');
+        }
+
+        $result = linePushTextMessage($pdo, $groupId, $message);
+        lineLogPushResult($pdo, $groupId, $message, $result);
+
+        if (!empty($result['ok'])) {
+            lineGroupsRedirectWithFlash('success', 'ส่งข้อความทดสอบไป LINE สำเร็จ');
+        }
+
+        lineGroupsRedirectWithFlash('error', 'ส่งข้อความไม่สำเร็จ (HTTP ' . ($result['status'] ?: 0) . ')');
+    }
+
+    if ($action === 'send_result_image') {
+        $groupId = trim($_POST['group_id'] ?? '');
+        $lotteryTypeId = (int) ($_POST['lottery_type_id'] ?? 0);
+        $drawDate = trim($_POST['draw_date'] ?? '');
+
+        if ($groupId === '' || $lotteryTypeId <= 0 || $drawDate === '') {
+            lineGroupsRedirectWithFlash('error', 'ข้อมูลสำหรับส่งรูปผลหวยไม่ครบ');
+        }
+
+        $result = linePushResultImageToGroup($pdo, $groupId, $lotteryTypeId, $drawDate);
+
+        if (!empty($result['ok'])) {
+            $renderer = !empty($result['renderer']) ? ' (' . $result['renderer'] . ')' : '';
+            lineGroupsRedirectWithFlash('success', 'ส่งรูปผลหวยไป LINE สำเร็จ' . $renderer);
+        }
+
+        $reason = $result['reason'] ?? '';
+        if ($reason === 'image_generation_failed') {
+            lineGroupsRedirectWithFlash('error', 'สร้างรูปผลหวยไม่สำเร็จ กรุณาตรวจ Node/Puppeteer หรือ GD บน server');
+        }
+        if ($reason === 'result_not_found') {
+            lineGroupsRedirectWithFlash('error', 'ไม่พบผลหวยรายการนี้ในฐานข้อมูล');
+        }
+        if ($reason === 'config_not_ready') {
+            lineGroupsRedirectWithFlash('error', 'ยังไม่ได้ตั้งค่า LINE channel secret และ access token บน server');
+        }
+
+        lineGroupsRedirectWithFlash('error', 'ส่งรูปผลหวยไม่สำเร็จ (HTTP ' . ($result['status'] ?: 0) . ')');
     }
 }
+
+$flash = $_SESSION['line_groups_flash'] ?? null;
+unset($_SESSION['line_groups_flash']);
+
+$msg = is_array($flash) ? (string) ($flash['message'] ?? '') : '';
+$msgType = is_array($flash) ? (string) ($flash['type'] ?? 'success') : 'success';
 
 $groups = $pdo->query("
     SELECT *
@@ -66,6 +110,24 @@ $recentLogs = $pdo->query("
     FROM line_message_logs
     ORDER BY id DESC
     LIMIT 20
+")->fetchAll();
+
+$recentResults = $pdo->query("
+    SELECT
+        r.id,
+        r.lottery_type_id,
+        r.draw_date,
+        r.three_top,
+        r.two_top,
+        r.two_bot,
+        r.updated_at,
+        lt.name AS lottery_name,
+        lc.name AS category_name
+    FROM results r
+    JOIN lottery_types lt ON r.lottery_type_id = lt.id
+    JOIN lottery_categories lc ON lt.category_id = lc.id
+    ORDER BY r.draw_date DESC, r.updated_at DESC, r.id DESC
+    LIMIT 30
 ")->fetchAll();
 
 $savedChannelSecret = lineResolvedChannelSecret($pdo);
@@ -169,7 +231,7 @@ require_once 'includes/header.php';
             <input type="hidden" name="form_action" value="send_test">
             <div>
                 <label class="text-xs text-gray-500 block mb-1">เลือกกลุ่ม</label>
-                <select name="group_id" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+                <select name="group_id" class="w-full border rounded-lg px-3 py-2 text-sm outline-none" <?= empty($groups) ? 'disabled' : '' ?>>
                     <?php foreach ($groups as $group): ?>
                     <option value="<?= htmlspecialchars($group['group_id']) ?>">
                         <?= htmlspecialchars(($group['group_name'] ?: 'group') . ' - ' . $group['group_id']) ?>
@@ -181,10 +243,63 @@ require_once 'includes/header.php';
                 <label class="text-xs text-gray-500 block mb-1">ข้อความ</label>
                 <textarea name="message" rows="5" class="w-full border rounded-lg px-3 py-2 text-sm outline-none" placeholder="ทดสอบส่งข้อความจากระบบ LINE">ทดสอบส่งข้อความจากระบบ LINE</textarea>
             </div>
-            <button type="submit" class="w-full bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition">
+            <button type="submit" class="w-full bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition disabled:opacity-50" <?= empty($groups) ? 'disabled' : '' ?>>
                 <i class="fab fa-line mr-1"></i> ส่งข้อความทดสอบ
             </button>
         </form>
+    </div>
+</div>
+
+<div class="mt-4 bg-white rounded-xl shadow-sm border overflow-hidden">
+    <div class="px-4 py-3 border-b bg-gray-50 font-semibold text-gray-700">ผลหวยที่ออกแล้ว</div>
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead class="bg-gray-50 border-b">
+                <tr>
+                    <th class="px-3 py-2 text-left text-xs text-gray-500">หวย</th>
+                    <th class="px-3 py-2 text-left text-xs text-gray-500">หมวด</th>
+                    <th class="px-3 py-2 text-left text-xs text-gray-500">งวด</th>
+                    <th class="px-3 py-2 text-center text-xs text-gray-500">3 ตัวบน</th>
+                    <th class="px-3 py-2 text-center text-xs text-gray-500">2 ตัวบน</th>
+                    <th class="px-3 py-2 text-center text-xs text-gray-500">2 ตัวล่าง</th>
+                    <th class="px-3 py-2 text-left text-xs text-gray-500">ส่งเข้ากลุ่ม</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php foreach ($recentResults as $resultRow): ?>
+                <tr class="border-b hover:bg-gray-50 align-top">
+                    <td class="px-3 py-3 font-medium text-gray-800"><?= htmlspecialchars($resultRow['lottery_name']) ?></td>
+                    <td class="px-3 py-3 text-gray-500"><?= htmlspecialchars($resultRow['category_name']) ?></td>
+                    <td class="px-3 py-3 text-gray-500"><?= htmlspecialchars($resultRow['draw_date']) ?></td>
+                    <td class="px-3 py-3 text-center font-bold text-green-700"><?= htmlspecialchars($resultRow['three_top'] ?: '-') ?></td>
+                    <td class="px-3 py-3 text-center font-bold text-blue-600"><?= htmlspecialchars($resultRow['two_top'] ?: '-') ?></td>
+                    <td class="px-3 py-3 text-center font-bold text-cyan-600"><?= htmlspecialchars($resultRow['two_bot'] ?: '-') ?></td>
+                    <td class="px-3 py-3 min-w-[280px]">
+                        <form method="POST" class="space-y-2">
+                            <input type="hidden" name="form_action" value="send_result_image">
+                            <input type="hidden" name="lottery_type_id" value="<?= (int) $resultRow['lottery_type_id'] ?>">
+                            <input type="hidden" name="draw_date" value="<?= htmlspecialchars($resultRow['draw_date']) ?>">
+                            <select name="group_id" class="w-full border rounded-lg px-3 py-2 text-sm outline-none" <?= empty($groups) ? 'disabled' : '' ?>>
+                                <?php foreach ($groups as $group): ?>
+                                <option value="<?= htmlspecialchars($group['group_id']) ?>">
+                                    <?= htmlspecialchars(($group['group_name'] ?: 'group') . ' - ' . $group['group_id']) ?>
+                                </option>
+                                <?php endforeach; ?>
+                            </select>
+                            <button type="submit" class="w-full bg-[#1565c0] text-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-[#0d47a1] transition disabled:opacity-50" <?= empty($groups) ? 'disabled' : '' ?>>
+                                <i class="fas fa-image mr-1"></i> ส่งรูปผลหวยนี้
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                <?php endforeach; ?>
+                <?php if (empty($recentResults)): ?>
+                <tr>
+                    <td colspan="7" class="px-3 py-6 text-center text-sm text-gray-400">ยังไม่พบผลหวยในระบบ</td>
+                </tr>
+                <?php endif; ?>
+            </tbody>
+        </table>
     </div>
 </div>
 
