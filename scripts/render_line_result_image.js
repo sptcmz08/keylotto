@@ -69,11 +69,33 @@ const findChromeExecutable = () => {
   return null;
 };
 
+const ensureWritableBrowserDirs = async () => {
+  const rootDir = process.cwd();
+  const baseCacheDir = path.join(rootDir, '.cache');
+  const cacheDir = path.join(baseCacheDir, 'puppeteer');
+  const configDir = path.join(baseCacheDir, 'xdg-config');
+  const userDataDir = path.join(baseCacheDir, 'puppeteer-profile');
+
+  await fsp.mkdir(cacheDir, { recursive: true });
+  await fsp.mkdir(configDir, { recursive: true });
+  await fsp.mkdir(userDataDir, { recursive: true });
+
+  process.env.PUPPETEER_CACHE_DIR = cacheDir;
+  process.env.XDG_CACHE_HOME = baseCacheDir;
+  process.env.XDG_CONFIG_HOME = configDir;
+  if (!process.env.HOME) {
+    process.env.HOME = rootDir;
+  }
+
+  return { userDataDir };
+};
+
 const main = async () => {
   const raw = await fsp.readFile(inputPath, 'utf8');
   const data = JSON.parse(raw);
 
   await fsp.mkdir(path.dirname(outputPath), { recursive: true });
+  const { userDataDir } = await ensureWritableBrowserDirs();
 
   const html = `
   <!doctype html>
@@ -252,7 +274,16 @@ const main = async () => {
 
   const launchOptions = {
     headless: 'new',
-    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+    userDataDir,
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-crash-reporter',
+      '--disable-crashpad',
+      '--disable-crashpad-for-testing',
+      '--no-first-run',
+      '--no-default-browser-check',
+    ],
   };
 
   const executablePath = findChromeExecutable();
