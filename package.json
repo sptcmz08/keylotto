@@ -4,7 +4,8 @@
   "description": "LINE image rendering support for keylotto",
   "main": "scripts/render_line_result_image.js",
   "scripts": {
-    "render-line-image": "node scripts/render_line_result_image.js"
+    "render-line-image": "node scripts/render_line_result_image.js",
+    "install-puppeteer-browser": "npx puppeteer browsers install chrome"
   },
   "repository": {
     "type": "git",

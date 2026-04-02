@@ -305,6 +305,11 @@ function lineResolvedNodeBinary(): string
     return '/usr/bin/node';
 }
 
+function lineResolvedPuppeteerCacheDir(): string
+{
+    return dirname(__DIR__) . '/.cache/puppeteer';
+}
+
 function lineFindTtfFont(): ?string
 {
     $candidates = [
@@ -569,7 +574,19 @@ function lineGenerateResultImage(PDO $pdo, array $resultRow): ?array
     $exitCode = 1;
 
     if (is_file($scriptPath)) {
-        $command = escapeshellarg($nodeBinary) . ' ' . escapeshellarg($scriptPath) . ' ' . escapeshellarg($tempJson) . ' ' . escapeshellarg($outputPath) . ' 2>&1';
+        $puppeteerCacheDir = lineResolvedPuppeteerCacheDir();
+        if (!is_dir($puppeteerCacheDir) && !mkdir($puppeteerCacheDir, 0775, true) && !is_dir($puppeteerCacheDir)) {
+            lineLog('Unable to create puppeteer cache directory');
+        }
+
+        $commandPrefix = '';
+        if (PHP_OS_FAMILY !== 'Windows') {
+            $commandPrefix =
+                'PUPPETEER_CACHE_DIR=' . escapeshellarg($puppeteerCacheDir) . ' ' .
+                'HOME=' . escapeshellarg($rootDir) . ' ';
+        }
+
+        $command = $commandPrefix . escapeshellarg($nodeBinary) . ' ' . escapeshellarg($scriptPath) . ' ' . escapeshellarg($tempJson) . ' ' . escapeshellarg($outputPath) . ' 2>&1';
         $output = [];
         $exitCode = 0;
         exec($command, $output, $exitCode);
