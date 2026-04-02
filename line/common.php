@@ -113,18 +113,31 @@ function lineSetSetting(PDO $pdo, string $key, string $value): void
 
 function lineResolvedChannelSecret(PDO $pdo): string
 {
-    if (LINE_CHANNEL_SECRET !== '') {
-        return LINE_CHANNEL_SECRET;
+    $dbValue = lineGetSetting($pdo, 'channel_secret', '');
+    if ($dbValue !== '') {
+        return $dbValue;
     }
-    return lineGetSetting($pdo, 'channel_secret', '');
+    return LINE_CHANNEL_SECRET;
 }
 
 function lineResolvedChannelAccessToken(PDO $pdo): string
 {
-    if (LINE_CHANNEL_ACCESS_TOKEN !== '') {
-        return LINE_CHANNEL_ACCESS_TOKEN;
+    $dbValue = lineGetSetting($pdo, 'channel_access_token', '');
+    if ($dbValue !== '') {
+        return $dbValue;
     }
-    return lineGetSetting($pdo, 'channel_access_token', '');
+    return LINE_CHANNEL_ACCESS_TOKEN;
+}
+
+function lineResolvedPublicBaseUrl(PDO $pdo): string
+{
+    $default = 'https://member.imzshop97.com';
+    return rtrim(trim(lineGetSetting($pdo, 'public_base_url', $default)), '/');
+}
+
+function lineAutoSendEnabled(PDO $pdo): bool
+{
+    return lineGetSetting($pdo, 'auto_send_results', '1') !== '0';
 }
 
 function lineConfigReady(PDO $pdo): bool
@@ -132,7 +145,7 @@ function lineConfigReady(PDO $pdo): bool
     return lineResolvedChannelSecret($pdo) !== '' && lineResolvedChannelAccessToken($pdo) !== '';
 }
 
-function linePushTextMessage(PDO $pdo, string $groupId, string $message): array
+function linePushMessages(PDO $pdo, string $to, array $messages): array
 {
     $accessToken = lineResolvedChannelAccessToken($pdo);
 
@@ -145,13 +158,8 @@ function linePushTextMessage(PDO $pdo, string $groupId, string $message): array
     }
 
     $payload = [
-        'to' => $groupId,
-        'messages' => [
-            [
-                'type' => 'text',
-                'text' => $message,
-            ],
-        ],
+        'to' => $to,
+        'messages' => array_values($messages),
     ];
 
     $ch = curl_init('https://api.line.me/v2/bot/message/push');
@@ -178,6 +186,16 @@ function linePushTextMessage(PDO $pdo, string $groupId, string $message): array
         'status' => $status,
         'body' => (string) $response,
     ];
+}
+
+function linePushTextMessage(PDO $pdo, string $groupId, string $message): array
+{
+    return linePushMessages($pdo, $groupId, [
+        [
+            'type' => 'text',
+            'text' => $message,
+        ],
+    ]);
 }
 
 function lineLogPushResult(PDO $pdo, string $groupId, string $message, array $result): void
@@ -253,4 +271,161 @@ function lineUpsertGroup(PDO $pdo, array $source, ?string $eventType = null): vo
             raw_source = VALUES(raw_source)
     ");
     $stmt->execute([$groupId, $sourceType, $groupName, $isActive, $rawSource]);
+}
+
+function lineResultSummaryText(array $resultRow): string
+{
+    $parts = [];
+    $parts[] = ($resultRow['lottery_name'] ?? 'ผลหวย') . ' งวด ' . formatDateDisplay($resultRow['draw_date'] ?? '');
+
+    if (!empty($resultRow['three_top'])) {
+        $parts[] = '3 บน ' . $resultRow['three_top'];
+    }
+    if (!empty($resultRow['two_top'])) {
+        $parts[] = '2 บน ' . $resultRow['two_top'];
+    }
+    if (!empty($resultRow['two_bot'])) {
+        $parts[] = '2 ล่าง ' . $resultRow['two_bot'];
+    }
+
+    return implode(' | ', $parts);
+}
+
+function lineResolvedNodeBinary(): string
+{
+    $envNode = getenv('NODE_PATH') ?: '';
+    if ($envNode !== '') {
+        return $envNode;
+    }
+
+    if (PHP_OS_FAMILY === 'Windows') {
+        return 'node';
+    }
+
+    return '/usr/bin/node';
+}
+
+function lineGenerateResultImage(PDO $pdo, array $resultRow): ?array
+{
+    $baseUrl = lineResolvedPublicBaseUrl($pdo);
+    if ($baseUrl === '') {
+        return null;
+    }
+
+    $rootDir = dirname(__DIR__);
+    $generatedDir = $rootDir . '/line/generated';
+    if (!is_dir($generatedDir) && !mkdir($generatedDir, 0775, true) && !is_dir($generatedDir)) {
+        lineLog('Unable to create line/generated directory');
+        return null;
+    }
+
+    $safeDate = preg_replace('/[^0-9\-]/', '', (string)($resultRow['draw_date'] ?? date('Y-m-d')));
+    $safeLotteryId = (int)($resultRow['lottery_type_id'] ?? 0);
+    $outputFilename = 'result-' . $safeLotteryId . '-' . $safeDate . '.png';
+    $outputPath = $generatedDir . '/' . $outputFilename;
+
+    $payload = [
+        'site_name' => SITE_NAME,
+        'lottery_name' => $resultRow['lottery_name'] ?? '',
+        'category_name' => $resultRow['category_name'] ?? '',
+        'draw_date' => $resultRow['draw_date'] ?? '',
+        'draw_date_display' => formatDateDisplay($resultRow['draw_date'] ?? ''),
+        'three_top' => $resultRow['three_top'] ?? '',
+        'two_top' => $resultRow['two_top'] ?? '',
+        'two_bot' => $resultRow['two_bot'] ?? '',
+        'summary_text' => lineResultSummaryText($resultRow),
+        'generated_at' => date('d-m-Y H:i:s'),
+    ];
+
+    $tempJson = tempnam(sys_get_temp_dir(), 'line_result_');
+    if ($tempJson === false) {
+        return null;
+    }
+
+    file_put_contents($tempJson, json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
+
+    $scriptPath = $rootDir . '/scripts/render_line_result_image.js';
+    $nodeBinary = lineResolvedNodeBinary();
+    $command = escapeshellarg($nodeBinary) . ' ' . escapeshellarg($scriptPath) . ' ' . escapeshellarg($tempJson) . ' ' . escapeshellarg($outputPath) . ' 2>&1';
+
+    $output = [];
+    $exitCode = 0;
+    exec($command, $output, $exitCode);
+    @unlink($tempJson);
+
+    if ($exitCode !== 0 || !file_exists($outputPath)) {
+        lineLog('Result image render failed: ' . implode("\n", $output));
+        return null;
+    }
+
+    return [
+        'path' => $outputPath,
+        'url' => $baseUrl . '/line/generated/' . rawurlencode($outputFilename),
+    ];
+}
+
+function lineSendResultNotification(PDO $pdo, int $lotteryTypeId, string $drawDate): array
+{
+    if (!lineConfigReady($pdo) || !lineAutoSendEnabled($pdo)) {
+        return ['sent' => 0, 'skipped' => true];
+    }
+
+    $stmt = $pdo->prepare("
+        SELECT r.lottery_type_id, r.draw_date, r.three_top, r.two_top, r.two_bot,
+               lt.name AS lottery_name, lc.name AS category_name
+        FROM results r
+        JOIN lottery_types lt ON r.lottery_type_id = lt.id
+        JOIN lottery_categories lc ON lt.category_id = lc.id
+        WHERE r.lottery_type_id = ? AND r.draw_date = ?
+        LIMIT 1
+    ");
+    $stmt->execute([$lotteryTypeId, $drawDate]);
+    $resultRow = $stmt->fetch();
+
+    if (!$resultRow) {
+        return ['sent' => 0, 'skipped' => true];
+    }
+
+    $groups = $pdo->query("SELECT group_id FROM line_groups WHERE is_active = 1 ORDER BY id ASC")->fetchAll();
+    if (empty($groups)) {
+        return ['sent' => 0, 'skipped' => true];
+    }
+
+    $summaryText = lineResultSummaryText($resultRow);
+    $image = lineGenerateResultImage($pdo, $resultRow);
+
+    $messages = [];
+    if ($image && !empty($image['url'])) {
+        $messages[] = [
+            'type' => 'image',
+            'originalContentUrl' => $image['url'],
+            'previewImageUrl' => $image['url'],
+        ];
+    } else {
+        $messages[] = [
+            'type' => 'text',
+            'text' => $summaryText,
+        ];
+    }
+
+    $sent = 0;
+    foreach ($groups as $group) {
+        $groupId = $group['group_id'] ?? '';
+        if ($groupId === '') {
+            continue;
+        }
+
+        $result = linePushMessages($pdo, $groupId, $messages);
+        lineLogPushResult($pdo, $groupId, $summaryText, $result);
+        if (!empty($result['ok'])) {
+            $sent++;
+        }
+    }
+
+    return [
+        'sent' => $sent,
+        'skipped' => false,
+        'used_image' => !empty($image['url']),
+        'image_url' => $image['url'] ?? '',
+    ];
 }

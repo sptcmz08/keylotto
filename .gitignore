@@ -5,6 +5,7 @@ node_modules/
 .venv/
 .env
 line/credentials.php
+line/generated/*.png
 
 # Archives
 *.zip

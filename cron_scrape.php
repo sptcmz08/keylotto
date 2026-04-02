@@ -18,6 +18,7 @@
 // Config
 // =============================================
 require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/line/common.php';
 
 date_default_timezone_set('Asia/Bangkok');
 
@@ -527,6 +528,17 @@ function processResults($pdo, $results, $source) {
             // Auto-calculate payouts
             $payoutCount = processBetPayouts($pdo, $lotteryTypeId, $drawDate);
             if ($payoutCount > 0) echo "💰 {$keyLotteryName}: คำนวณผล {$payoutCount} โพย\n";
+            try {
+                $lineStats = lineSendResultNotification($pdo, $lotteryTypeId, $drawDate);
+                if (!empty($lineStats['sent'])) {
+                    $lineMode = !empty($lineStats['used_image']) ? 'image' : 'text';
+                    echo "ðŸ“£ {$keyLotteryName}: à¸ªà¹ˆà¸‡ LINE {$lineStats['sent']} à¸à¸¥à¸¸à¹ˆà¸¡ ({$lineMode})\n";
+                }
+            } catch (Exception $lineError) {
+                echo "âš ï¸  LINE notify failed for {$keyLotteryName}: " . $lineError->getMessage() . "\n";
+                lineLog('Auto notify failed: ' . $lineError->getMessage());
+            }
+
             $successCount++;
         } catch (Exception $e) {
             echo "❌ {$keyLotteryName}: " . $e->getMessage() . "\n";

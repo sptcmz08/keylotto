@@ -16,6 +16,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'save_credentials') {
         $channelSecret = trim($_POST['channel_secret'] ?? '');
         $channelAccessToken = trim($_POST['channel_access_token'] ?? '');
+        $publicBaseUrl = trim($_POST['public_base_url'] ?? '');
+        $autoSendResults = isset($_POST['auto_send_results']) ? '1' : '0';
 
         if ($channelSecret === '' || $channelAccessToken === '') {
             $msg = 'กรุณากรอก Channel secret และ Channel access token ให้ครบ';
@@ -23,7 +25,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             lineSetSetting($pdo, 'channel_secret', $channelSecret);
             lineSetSetting($pdo, 'channel_access_token', $channelAccessToken);
-            $msg = 'บันทึก LINE credentials สำเร็จ';
+            lineSetSetting($pdo, 'public_base_url', $publicBaseUrl !== '' ? $publicBaseUrl : 'https://member.imzshop97.com');
+            lineSetSetting($pdo, 'auto_send_results', $autoSendResults);
+            $msg = 'บันทึก LINE settings สำเร็จ';
             $msgType = 'success';
         }
     } elseif ($action === 'send_test') {
@@ -66,6 +70,8 @@ $recentLogs = $pdo->query("
 
 $savedChannelSecret = lineResolvedChannelSecret($pdo);
 $savedChannelAccessToken = lineResolvedChannelAccessToken($pdo);
+$savedPublicBaseUrl = lineResolvedPublicBaseUrl($pdo);
+$autoSendResults = lineAutoSendEnabled($pdo);
 
 require_once 'includes/header.php';
 ?>
@@ -91,7 +97,7 @@ require_once 'includes/header.php';
 <?php endif; ?>
 
 <div class="mb-4 bg-white rounded-xl shadow-sm border overflow-hidden">
-    <div class="px-4 py-3 border-b bg-gray-50 font-semibold text-gray-700">ตั้งค่า LINE Credentials</div>
+    <div class="px-4 py-3 border-b bg-gray-50 font-semibold text-gray-700">ตั้งค่า LINE Settings</div>
     <form method="POST" class="p-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
         <input type="hidden" name="form_action" value="save_credentials">
         <div>
@@ -102,9 +108,20 @@ require_once 'includes/header.php';
             <label class="text-xs text-gray-500 block mb-1">Channel access token</label>
             <textarea name="channel_access_token" rows="3" class="w-full border rounded-lg px-3 py-2 text-sm outline-none" placeholder="LINE Channel access token"><?= htmlspecialchars($savedChannelAccessToken) ?></textarea>
         </div>
+        <div>
+            <label class="text-xs text-gray-500 block mb-1">Public base URL</label>
+            <input type="text" name="public_base_url" class="w-full border rounded-lg px-3 py-2 text-sm outline-none" value="<?= htmlspecialchars($savedPublicBaseUrl) ?>" placeholder="https://member.imzshop97.com">
+            <div class="text-[11px] text-gray-400 mt-1">ใช้สำหรับสร้าง URL รูปภาพที่ LINE จะดึงไปแสดง</div>
+        </div>
+        <div class="flex items-center pt-6">
+            <label class="inline-flex items-center gap-2 text-sm text-gray-700">
+                <input type="checkbox" name="auto_send_results" value="1" class="rounded border-gray-300" <?= $autoSendResults ? 'checked' : '' ?>>
+                เปิดส่งผลหวยอัตโนมัติเป็นรูปเมื่อมีผลใหม่
+            </label>
+        </div>
         <div class="lg:col-span-2">
             <button type="submit" class="bg-[#2e7d32] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#1b5e20] transition">
-                <i class="fas fa-save mr-1"></i> บันทึก LINE Credentials
+                <i class="fas fa-save mr-1"></i> บันทึก LINE Settings
             </button>
         </div>
     </form>
