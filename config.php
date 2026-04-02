@@ -12,6 +12,11 @@ define('DB_CHARSET', 'utf8mb4');
 define('SITE_NAME', 'imzshop97');
 define('SITE_URL', '/');
 
+// LINE Messaging API config
+// Leave empty for now, then fill with the values from LINE Developers when ready.
+define('LINE_CHANNEL_SECRET', getenv('LINE_CHANNEL_SECRET') ?: '');
+define('LINE_CHANNEL_ACCESS_TOKEN', getenv('LINE_CHANNEL_ACCESS_TOKEN') ?: '');
+
 // Start session
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
