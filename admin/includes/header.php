@@ -100,6 +100,10 @@ $adminTitle = $adminTitle ?? 'Admin';
                     <a href="result_links.php" class="<?= $adminPage === 'links' ? 'active' : '' ?>"><i class="fas fa-chevron-right text-[10px] w-5 text-gray-500"></i> ลิงค์ดูผล</a>
                 </div>
             </div>
+            <a href="line_groups.php" class="sidebar-menu-btn flex items-center px-4 py-3 text-sm font-medium <?= $adminPage === 'line_groups' ? 'bg-[#4caf50]' : '' ?>">
+                <i class="fab fa-line w-6 text-center"></i> LINE กลุ่ม/ทดสอบส่ง
+            </a>
+
             <div>
                 <button onclick="toggleMenu('memberMenu')" class="sidebar-menu-btn w-full flex items-center justify-between px-4 py-3 text-sm font-medium focus:outline-none <?= $adminPage === 'users' ? 'bg-[#4caf50]' : '' ?>">
                     <div class="flex items-center"><i class="fas fa-users w-6 text-center"></i> จัดการสมาชิก</div>

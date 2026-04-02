@@ -13,9 +13,17 @@ define('SITE_NAME', 'imzshop97');
 define('SITE_URL', '/');
 
 // LINE Messaging API config
-// Leave empty for now, then fill with the values from LINE Developers when ready.
-define('LINE_CHANNEL_SECRET', getenv('LINE_CHANNEL_SECRET') ?: '');
-define('LINE_CHANNEL_ACCESS_TOKEN', getenv('LINE_CHANNEL_ACCESS_TOKEN') ?: '');
+// Prefer environment variables. If not available, load from line/credentials.php on the server.
+$lineCredentials = [];
+$lineCredentialsFile = __DIR__ . '/line/credentials.php';
+if (file_exists($lineCredentialsFile)) {
+    $loadedLineCredentials = require $lineCredentialsFile;
+    if (is_array($loadedLineCredentials)) {
+        $lineCredentials = $loadedLineCredentials;
+    }
+}
+define('LINE_CHANNEL_SECRET', getenv('LINE_CHANNEL_SECRET') ?: ($lineCredentials['channel_secret'] ?? ''));
+define('LINE_CHANNEL_ACCESS_TOKEN', getenv('LINE_CHANNEL_ACCESS_TOKEN') ?: ($lineCredentials['channel_access_token'] ?? ''));
 
 // Start session
 if (session_status() === PHP_SESSION_NONE) {
