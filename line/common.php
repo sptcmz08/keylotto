@@ -545,7 +545,8 @@ function lineGenerateResultImage(PDO $pdo, array $resultRow): ?array
 
     $safeDate = preg_replace('/[^0-9\-]/', '', (string)($resultRow['draw_date'] ?? date('Y-m-d')));
     $safeLotteryId = (int)($resultRow['lottery_type_id'] ?? 0);
-    $outputFilename = 'result-' . $safeLotteryId . '-' . $safeDate . '.png';
+    $uniqueSuffix = date('YmdHis') . '-' . substr(md5(uniqid((string) $safeLotteryId, true)), 0, 8);
+    $outputFilename = 'result-' . $safeLotteryId . '-' . $safeDate . '-' . $uniqueSuffix . '.png';
     $outputPath = $generatedDir . '/' . $outputFilename;
 
     $payload = [
@@ -564,6 +565,13 @@ function lineGenerateResultImage(PDO $pdo, array $resultRow): ?array
     $tempJson = tempnam(sys_get_temp_dir(), 'line_result_');
     if ($tempJson === false) {
         return null;
+    }
+
+    $cleanupPattern = $generatedDir . '/result-' . $safeLotteryId . '-' . $safeDate . '*.png';
+    foreach (glob($cleanupPattern) ?: [] as $oldFile) {
+        if (is_file($oldFile) && $oldFile !== $outputPath) {
+            @unlink($oldFile);
+        }
     }
 
     file_put_contents($tempJson, json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
