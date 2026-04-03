@@ -172,8 +172,9 @@ function lineTemplateImagePath(int $lotteryTypeId): ?string
         return null;
     }
 
-    $pattern = lineTemplatesDir() . '/lottery-type-' . $lotteryTypeId . '.*';
-    foreach (glob($pattern) ?: [] as $filePath) {
+    $extensions = ['png', 'jpg', 'webp'];
+    foreach ($extensions as $extension) {
+        $filePath = lineTemplatesDir() . '/lottery-type-' . $lotteryTypeId . '.' . $extension;
         if (is_file($filePath)) {
             return $filePath;
         }
@@ -201,7 +202,9 @@ function lineTemplateImageUrl(PDO $pdo, int $lotteryTypeId): ?string
 function lineDeleteTemplateImage(int $lotteryTypeId): bool
 {
     $deleted = false;
-    foreach (glob(lineTemplatesDir() . '/lottery-type-' . $lotteryTypeId . '.*') ?: [] as $filePath) {
+    $extensions = ['png', 'jpg', 'webp'];
+    foreach ($extensions as $extension) {
+        $filePath = lineTemplatesDir() . '/lottery-type-' . $lotteryTypeId . '.' . $extension;
         if (is_file($filePath) && @unlink($filePath)) {
             $deleted = true;
         }
@@ -333,7 +336,7 @@ function lineSaveTemplateUpload(int $lotteryTypeId, array $upload): array
 
     $dir = lineTemplatesDir();
     $targetPath = $dir . '/lottery-type-' . $lotteryTypeId . '.' . $extension;
-    $stagingPath = $dir . '/lottery-type-' . $lotteryTypeId . '.upload-' . bin2hex(random_bytes(4)) . '.' . $extension;
+    $stagingPath = $dir . '/.upload-lottery-type-' . $lotteryTypeId . '-' . bin2hex(random_bytes(4)) . '.' . $extension;
 
     if (is_dir($dir) && !is_writable($dir)) {
         @chmod($dir, 0775);
