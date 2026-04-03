@@ -95,11 +95,11 @@ const ensureWritableBrowserDirs = async () => {
   const baseCacheDir = path.join(rootDir, '.cache');
   const cacheDir = path.join(baseCacheDir, 'puppeteer');
   const configDir = path.join(baseCacheDir, 'xdg-config');
-  const userDataDir = path.join(baseCacheDir, 'puppeteer-profile');
+  const profileRootDir = path.join(baseCacheDir, 'puppeteer-profiles');
 
   await fsp.mkdir(cacheDir, { recursive: true });
   await fsp.mkdir(configDir, { recursive: true });
-  await fsp.mkdir(userDataDir, { recursive: true });
+  await fsp.mkdir(profileRootDir, { recursive: true });
 
   process.env.PUPPETEER_CACHE_DIR = cacheDir;
   process.env.XDG_CACHE_HOME = baseCacheDir;
@@ -108,6 +108,7 @@ const ensureWritableBrowserDirs = async () => {
     process.env.HOME = rootDir;
   }
 
+  const userDataDir = await fsp.mkdtemp(path.join(profileRootDir, 'session-'));
   return { userDataDir };
 };
 
@@ -455,6 +456,7 @@ const main = async () => {
     });
   } finally {
     await browser.close();
+    await fsp.rm(userDataDir, { recursive: true, force: true }).catch(() => {});
   }
 };
 
