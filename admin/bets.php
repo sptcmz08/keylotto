@@ -8,55 +8,6 @@ $adminPage = 'bets';
 $adminTitle = 'รายการเดิมพัน';
 $msg = '';
 
-function fetchBetPeriodSummary(PDO $pdo, string $whereSql = '', array $params = []): array
-{
-    $where = "b.status != 'cancelled'";
-    if ($whereSql !== '') {
-        $where .= " AND {$whereSql}";
-    }
-
-    $summary = [
-        'bill_count' => 0,
-        'pending_count' => 0,
-        'net_amount' => 0.0,
-        'payout_amount' => 0.0,
-        'profit_amount' => 0.0,
-    ];
-
-    try {
-        $stmt = $pdo->prepare("
-            SELECT
-                COUNT(*) AS bill_count,
-                SUM(CASE WHEN b.status = 'pending' THEN 1 ELSE 0 END) AS pending_count,
-                COALESCE(SUM(b.net_amount), 0) AS net_amount,
-                COALESCE(SUM(CASE WHEN b.status = 'won' THEN COALESCE(b.win_amount, 0) ELSE 0 END), 0) AS payout_amount
-            FROM bets b
-            WHERE {$where}
-        ");
-        $stmt->execute($params);
-        $row = $stmt->fetch() ?: [];
-    } catch (Exception $e) {
-        $stmt = $pdo->prepare("
-            SELECT
-                COUNT(*) AS bill_count,
-                SUM(CASE WHEN b.status = 'pending' THEN 1 ELSE 0 END) AS pending_count,
-                COALESCE(SUM(b.net_amount), 0) AS net_amount
-            FROM bets b
-            WHERE {$where}
-        ");
-        $stmt->execute($params);
-        $row = $stmt->fetch() ?: [];
-    }
-
-    $summary['bill_count'] = (int) ($row['bill_count'] ?? 0);
-    $summary['pending_count'] = (int) ($row['pending_count'] ?? 0);
-    $summary['net_amount'] = (float) ($row['net_amount'] ?? 0);
-    $summary['payout_amount'] = (float) ($row['payout_amount'] ?? 0);
-    $summary['profit_amount'] = $summary['net_amount'] - $summary['payout_amount'];
-
-    return $summary;
-}
-
 // Handle status updates (CSRF protected)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!validateCsrf()) {
@@ -130,30 +81,6 @@ $bets = $stmt->fetchAll();
 // Lottery list for filter
 $lotteryList = $pdo->query("SELECT id, name FROM lottery_types WHERE is_active = 1 ORDER BY name")->fetchAll();
 
-// Period summaries
-$periodSummaries = [
-    [
-        'label' => 'Today',
-        'range' => date('d-m-Y'),
-        'data' => fetchBetPeriodSummary($pdo, 'DATE(b.created_at) = CURDATE()'),
-    ],
-    [
-        'label' => 'This Week',
-        'range' => date('d-m-Y', strtotime('monday this week')) . ' - ' . date('d-m-Y'),
-        'data' => fetchBetPeriodSummary($pdo, 'YEARWEEK(b.created_at, 1) = YEARWEEK(CURDATE(), 1)'),
-    ],
-    [
-        'label' => 'This Month',
-        'range' => date('m/Y'),
-        'data' => fetchBetPeriodSummary($pdo, 'YEAR(b.created_at) = YEAR(CURDATE()) AND MONTH(b.created_at) = MONTH(CURDATE())'),
-    ],
-    [
-        'label' => 'All Time',
-        'range' => 'All records',
-        'data' => fetchBetPeriodSummary($pdo),
-    ],
-];
-
 // Summary
 $totalBets = count($bets);
 $pendingBets = count(array_filter($bets, fn($b) => $b['status'] === 'pending'));
@@ -165,44 +92,6 @@ require_once 'includes/header.php';
 <?php if ($msg): ?>
 <div class="mb-4 p-3 rounded-lg text-sm bg-green-50 text-green-700 border border-green-200"><i class="fas fa-check-circle mr-1"></i><?= htmlspecialchars($msg) ?></div>
 <?php endif; ?>
-
-<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
-    <?php foreach ($periodSummaries as $period): ?>
-    <?php $summary = $period['data']; ?>
-    <div class="bg-white rounded-xl shadow-sm border p-4">
-        <div class="flex items-start justify-between gap-3">
-            <div>
-                <p class="text-sm font-bold text-gray-800"><?= htmlspecialchars($period['label']) ?></p>
-                <p class="text-[11px] text-gray-400 mt-1"><?= htmlspecialchars($period['range']) ?></p>
-            </div>
-            <div class="text-right">
-                <p class="text-[11px] text-gray-400">Bills</p>
-                <p class="text-lg font-bold text-gray-700"><?= number_format($summary['bill_count']) ?></p>
-            </div>
-        </div>
-        <div class="mt-4 grid grid-cols-3 gap-2 text-center">
-            <div class="rounded-lg bg-green-50 border border-green-100 px-2 py-3">
-                <p class="text-[11px] text-green-700">Received</p>
-                <p class="mt-1 text-base font-bold text-green-700">฿<?= number_format($summary['net_amount'], 2) ?></p>
-            </div>
-            <div class="rounded-lg bg-red-50 border border-red-100 px-2 py-3">
-                <p class="text-[11px] text-red-600">Payout</p>
-                <p class="mt-1 text-base font-bold text-red-600">฿<?= number_format($summary['payout_amount'], 2) ?></p>
-            </div>
-            <div class="rounded-lg bg-blue-50 border border-blue-100 px-2 py-3">
-                <p class="text-[11px] text-blue-600">Profit</p>
-                <p class="mt-1 text-base font-bold <?= $summary['profit_amount'] >= 0 ? 'text-blue-700' : 'text-red-600' ?>">฿<?= number_format($summary['profit_amount'], 2) ?></p>
-            </div>
-        </div>
-        <div class="mt-3 flex items-center justify-between text-xs">
-            <span class="text-gray-400">Pending <?= number_format($summary['pending_count']) ?> bills</span>
-            <span class="font-medium <?= $summary['profit_amount'] >= 0 ? 'text-green-600' : 'text-red-500' ?>">
-                <?= $summary['profit_amount'] >= 0 ? 'Positive' : 'Negative' ?>
-            </span>
-        </div>
-    </div>
-    <?php endforeach; ?>
-</div>
 
 <!-- Filter + Summary -->
 <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">

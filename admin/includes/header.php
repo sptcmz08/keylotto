@@ -75,12 +75,13 @@ $adminTitle = $adminTitle ?? 'Admin';
             
             <!-- Expanded Menu (Reports) -->
             <div>
-                <button onclick="toggleMenu('reportMenu')" class="sidebar-menu-btn w-full flex items-center justify-between px-4 py-3 text-sm font-medium focus:outline-none <?= in_array($adminPage, ['win_lose', 'bets', 'bills']) ? 'bg-[#4caf50]' : '' ?>">
+                <button onclick="toggleMenu('reportMenu')" class="sidebar-menu-btn w-full flex items-center justify-between px-4 py-3 text-sm font-medium focus:outline-none <?= in_array($adminPage, ['win_lose', 'bets', 'bills', 'bet_summary']) ? 'bg-[#4caf50]' : '' ?>">
                     <div class="flex items-center"><i class="fas fa-file-invoice w-6 text-center"></i> รายงานการแทง</div>
                     <i class="fas fa-chevron-down text-xs transition-transform" id="reportMenuIcon"></i>
                 </button>
-                <div id="reportMenu" class="sidebar-submenu <?= in_array($adminPage, ['win_lose', 'bets', 'bills']) ? 'block' : 'hidden' ?>">
+                <div id="reportMenu" class="sidebar-submenu <?= in_array($adminPage, ['win_lose', 'bets', 'bills', 'bet_summary']) ? 'block' : 'hidden' ?>">
                     <a href="win_lose.php" class="flex items-center <?= $adminPage === 'win_lose' ? 'active' : '' ?>"><i class="fas fa-chevron-right text-[10px] w-5 text-gray-500"></i> ดูของรวม/คาดคะเน ได้-เสีย</a>
+                    <a href="bet_summary.php" class="flex items-center <?= $adminPage === 'bet_summary' ? 'active' : '' ?>"><i class="fas fa-chevron-right text-[10px] w-5 text-gray-500"></i> สรุปยอดทั้งหมด</a>
                     <a href="bets.php" class="flex items-center <?= $adminPage === 'bets' ? 'active' : '' ?>"><i class="fas fa-chevron-right text-[10px] w-5 text-gray-500"></i> รายการโพย/ยกเลิกโพย</a>
                     <a href="blocked_numbers.php" class="flex items-center <?= $adminPage === 'blocked' ? 'active' : '' ?>"><i class="fas fa-chevron-right text-[10px] w-5 text-gray-500"></i> เลขปิดรับ/เลขอั้น</a>
                 </div>
