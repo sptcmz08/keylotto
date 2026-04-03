@@ -149,10 +149,21 @@ function lineEnsureTemplatesDir(): bool
 {
     $dir = lineTemplatesDir();
     if (is_dir($dir)) {
-        return true;
+        if (!is_writable($dir)) {
+            @chmod($dir, 0775);
+        }
+        return is_writable($dir);
     }
 
-    return mkdir($dir, 0775, true) || is_dir($dir);
+    if (!mkdir($dir, 0775, true) && !is_dir($dir)) {
+        return false;
+    }
+
+    if (!is_writable($dir)) {
+        @chmod($dir, 0775);
+    }
+
+    return is_writable($dir);
 }
 
 function lineTemplateImagePath(int $lotteryTypeId): ?string
@@ -199,18 +210,101 @@ function lineDeleteTemplateImage(int $lotteryTypeId): bool
     return $deleted;
 }
 
+function lineUploadErrorMessage(int $errorCode): string
+{
+    if ($errorCode === UPLOAD_ERR_OK) {
+        return '';
+    }
+
+    if ($errorCode === UPLOAD_ERR_NO_FILE) {
+        return 'Please choose an image file to upload';
+    }
+
+    if ($errorCode === UPLOAD_ERR_INI_SIZE || $errorCode === UPLOAD_ERR_FORM_SIZE) {
+        return 'The uploaded image is too large for the server limit';
+    }
+
+    if ($errorCode === UPLOAD_ERR_PARTIAL) {
+        return 'The image upload was interrupted before completion';
+    }
+
+    if ($errorCode === UPLOAD_ERR_NO_TMP_DIR) {
+        return 'The server upload temp directory is missing';
+    }
+
+    if ($errorCode === UPLOAD_ERR_CANT_WRITE) {
+        return 'The server could not write the uploaded image to disk';
+    }
+
+    if ($errorCode === UPLOAD_ERR_EXTENSION) {
+        return 'A server extension blocked the image upload';
+    }
+
+    return 'Image upload failed with error code ' . $errorCode;
+}
+
+function lineStoreUploadedFile(string $tmpPath, string $targetPath): array
+{
+    $attempts = [
+        'move_uploaded_file' => function () use ($tmpPath, $targetPath): bool {
+            return @move_uploaded_file($tmpPath, $targetPath);
+        },
+        'rename' => function () use ($tmpPath, $targetPath): bool {
+            return @rename($tmpPath, $targetPath);
+        },
+        'copy' => function () use ($tmpPath, $targetPath): bool {
+            return @copy($tmpPath, $targetPath);
+        },
+        'stream_copy' => function () use ($tmpPath, $targetPath): bool {
+            $contents = @file_get_contents($tmpPath);
+            if ($contents === false) {
+                return false;
+            }
+
+            return @file_put_contents($targetPath, $contents) !== false;
+        },
+    ];
+
+    foreach ($attempts as $method => $callback) {
+        if ($callback()) {
+            if (file_exists($tmpPath) && $tmpPath !== $targetPath) {
+                @unlink($tmpPath);
+            }
+
+            return ['ok' => true, 'method' => $method];
+        }
+    }
+
+    $lastError = error_get_last();
+    return [
+        'ok' => false,
+        'method' => 'none',
+        'error' => is_array($lastError) ? (string) ($lastError['message'] ?? '') : '',
+    ];
+}
+
 function lineSaveTemplateUpload(int $lotteryTypeId, array $upload): array
 {
     if ($lotteryTypeId <= 0) {
         return ['ok' => false, 'message' => 'Lottery type is invalid'];
     }
 
-    if (($upload['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
-        return ['ok' => false, 'message' => 'Please choose an image file to upload'];
+    $uploadError = (int) ($upload['error'] ?? UPLOAD_ERR_NO_FILE);
+    if ($uploadError !== UPLOAD_ERR_OK) {
+        return ['ok' => false, 'message' => lineUploadErrorMessage($uploadError)];
     }
 
     if (!lineEnsureTemplatesDir()) {
-        return ['ok' => false, 'message' => 'Unable to create template directory'];
+        $dir = lineTemplatesDir();
+        $debugInfo = sprintf(
+            'dir=%s exists=%s writable=%s perms=%s',
+            $dir,
+            is_dir($dir) ? 'yes' : 'no',
+            is_writable($dir) ? 'yes' : 'no',
+            is_dir($dir) ? substr(sprintf('%o', fileperms($dir)), -4) : 'n/a'
+        );
+        lineLog('Template upload failed: unable to prepare template directory (' . $debugInfo . ')');
+        return ['ok' => false, 'message' => 'Unable to create template directory (' . $debugInfo . ')'];
     }
 
     $tmpPath = $upload['tmp_name'] ?? '';
@@ -226,7 +320,9 @@ function lineSaveTemplateUpload(int $lotteryTypeId, array $upload): array
 
     $allowed = [
         'image/png' => 'png',
+        'image/x-png' => 'png',
         'image/jpeg' => 'jpg',
+        'image/pjpeg' => 'jpg',
         'image/webp' => 'webp',
     ];
 
@@ -235,11 +331,52 @@ function lineSaveTemplateUpload(int $lotteryTypeId, array $upload): array
         return ['ok' => false, 'message' => 'Only PNG, JPG, or WEBP images are supported'];
     }
 
+    $dir = lineTemplatesDir();
+    $targetPath = $dir . '/lottery-type-' . $lotteryTypeId . '.' . $extension;
+    $stagingPath = $dir . '/lottery-type-' . $lotteryTypeId . '.upload-' . bin2hex(random_bytes(4)) . '.' . $extension;
+
+    if (is_dir($dir) && !is_writable($dir)) {
+        @chmod($dir, 0775);
+    }
+
+    $saveResult = lineStoreUploadedFile($tmpPath, $stagingPath);
+    $saved = !empty($saveResult['ok']) && is_file($stagingPath);
+
+    if (!$saved) {
+        $debugInfo = sprintf(
+            'dir_exists=%s writable=%s tmp_exists=%s tmp_size=%s perms=%s target=%s method=%s error=%s',
+            is_dir($dir) ? 'yes' : 'no',
+            is_writable($dir) ? 'yes' : 'no',
+            file_exists($tmpPath) ? 'yes' : 'no',
+            file_exists($tmpPath) ? filesize($tmpPath) : '0',
+            is_dir($dir) ? substr(sprintf('%o', fileperms($dir)), -4) : 'n/a',
+            $targetPath,
+            $saveResult['method'] ?? 'none',
+            $saveResult['error'] ?? ''
+        );
+        lineLog('Template upload failed: ' . $debugInfo);
+        return ['ok' => false, 'message' => 'Unable to save uploaded image (' . $debugInfo . ')'];
+    }
+
+    @chmod($stagingPath, 0664);
     lineDeleteTemplateImage($lotteryTypeId);
 
-    $targetPath = lineTemplatesDir() . '/lottery-type-' . $lotteryTypeId . '.' . $extension;
-    if (!move_uploaded_file($tmpPath, $targetPath)) {
-        return ['ok' => false, 'message' => 'Unable to save uploaded image'];
+    if ($stagingPath !== $targetPath && !@rename($stagingPath, $targetPath)) {
+        if (!@copy($stagingPath, $targetPath)) {
+            $lastError = error_get_last();
+            $debugInfo = sprintf(
+                'staging=%s target=%s writable=%s error=%s',
+                $stagingPath,
+                $targetPath,
+                is_writable($dir) ? 'yes' : 'no',
+                is_array($lastError) ? (string) ($lastError['message'] ?? '') : ''
+            );
+            lineLog('Template finalize failed: ' . $debugInfo);
+            @unlink($stagingPath);
+            return ['ok' => false, 'message' => 'Unable to finalize uploaded image (' . $debugInfo . ')'];
+        }
+
+        @unlink($stagingPath);
     }
 
     @chmod($targetPath, 0664);
@@ -248,6 +385,7 @@ function lineSaveTemplateUpload(int $lotteryTypeId, array $upload): array
         'ok' => true,
         'message' => 'Template image uploaded successfully',
         'path' => $targetPath,
+        'method' => $saveResult['method'] ?? 'unknown',
     ];
 }
 
