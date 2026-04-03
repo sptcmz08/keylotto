@@ -4,6 +4,20 @@ $currentPage = 'home';
 require_once 'auth.php';
 requireLogin();
 
+function pageResultHasData($row) {
+    if (empty($row) || !is_array($row)) {
+        return false;
+    }
+
+    foreach (['three_top', 'three_tod', 'two_top', 'two_bot', 'run_top', 'run_bot'] as $field) {
+        if (trim((string)($row[$field] ?? '')) !== '') {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 // =============================================
 // ดึงหมวดหวยจาก DB (ไม่ hardcode)
 // =============================================
@@ -82,7 +96,7 @@ foreach ($allLotteries as &$l) {
     
     // ผลล่าสุดจาก DB
     $resultDate = $l['result_date'] ?? null;
-    $hasAnyResult = !empty($l['three_top']);
+    $hasAnyResult = pageResultHasData($l);
     
     // === Current Round Date จาก draw_schedule + cross-midnight check ===
     $drawSchedule = $l['draw_schedule'] ?? 'daily';
@@ -414,6 +428,7 @@ require_once 'includes/header.php';
                     $closeTime = null;
                     $isBetClosed = !empty($lt['bet_closed']);
                     $hoursPastClose = 0;
+                    $hoursPastResult = 0;
                     
                     // === ถ้าแสดงงวดถัดไป (หวยรายเดือน) → บังคับ "รอออกผล" ===
                     if ($isNonDrawDay) {
@@ -435,6 +450,7 @@ require_once 'includes/header.php';
                     $pastCloseTime = false;
                     $pastResultTime = false;
                     $hoursPastClose = 0;
+                    $hoursPastResult = 0;
                     if (!empty($lt['close_time'])) {
                         $lCloseH = intval(substr($lt['close_time'], 0, 2));
                         
@@ -470,6 +486,9 @@ require_once 'includes/header.php';
                             if ($resultTime < $closeTime) $resultTime += 86400;
                         }
                         $pastResultTime = $now > $resultTime;
+                        if ($pastResultTime) {
+                            $hoursPastResult = ($now - $resultTime) / 3600;
+                        }
                     }
                     
                     // ผลล่าสุดเก่าแค่ไหน (เทียบกับ draw schedule)
@@ -506,9 +525,9 @@ require_once 'includes/header.php';
                         $statusClass = 'status-paid'; $statusLabel = 'ผลออกแล้ว';
                     } elseif ($hasResultForRound && $hasPending) {
                         $statusClass = 'status-processing'; $statusLabel = '<i class="fas fa-spinner fa-spin mr-1"></i> กำลังประมวลผล';
-                    } elseif ($pastCloseTime && !$hasResultForRound && $hoursPastClose >= 2) {
+                    } elseif ($pastResultTime && !$hasResultForRound && $hoursPastResult >= 2) {
                         $statusClass = 'status-suspended'; $statusLabel = 'งดออกผล';
-                    } elseif ($pastCloseTime && !$hasResultForRound) {
+                    } elseif ($pastResultTime && !$hasResultForRound) {
                         $statusClass = 'status-drawing'; $statusLabel = '<i class="fas fa-spinner fa-spin mr-1"></i> กำลังออกผล';
                     } elseif (!$pastCloseTime && $closeTime && ($closeTime - $now) < 900) {
                         $statusClass = 'status-drawing'; $statusLabel = 'ใกล้ออกผล';

@@ -72,11 +72,6 @@ $stmt = $pdo->query("
     FROM lottery_types lt
     WHERE lt.is_active = 1
     AND lt.result_time IS NOT NULL
-    AND NOT EXISTS (
-        SELECT 1 FROM results r 
-        WHERE r.lottery_type_id = lt.id 
-        AND (r.draw_date = '{$today}' OR r.draw_date = '{$todayReal}')
-    )
     ORDER BY lt.result_time ASC
 ");
 
@@ -87,6 +82,10 @@ foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $lt) {
     // เช็คว่าวันนี้เป็นวันออกผลไหม
     $expectedDate = getCurrentDrawDate($lt['draw_schedule'] ?? 'daily');
     if ($expectedDate !== $today && $expectedDate !== $todayReal) continue;
+
+    if (findUsableResultForDates($pdo, $lt['id'], [$expectedDate, $today, $todayReal])) {
+        continue;
+    }
     
     // คำนวณ result_time timestamp
     $drawDate = $expectedDate;
@@ -115,6 +114,8 @@ foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $lt) {
 // 2. หวยที่เกิน 2 ชม. → งดออกผล + ยกเลิกโพย
 // =============================================
 foreach ($timedOutLotteries as $lt) {
+    $drawDates = array_values(array_unique([$lt['draw_date'], $today, $todayReal]));
+
     // บันทึก log ว่างดออกผล (บันทึกแค่ครั้งเดียวต่อวัน)
     $logCheck = $pdo->prepare("
         SELECT COUNT(*) FROM scraper_logs 
@@ -125,21 +126,13 @@ foreach ($timedOutLotteries as $lt) {
     if ((int)$logCheck->fetchColumn() === 0) {
         logScrape($pdo, $lt['name'], 'monitor', 'no_draw', 
             "เกิน {$TIMEOUT_MINUTES} นาที ({$lt['elapsed']} min) → งดออกผล", $lt['draw_date']);
-        
-        // ยกเลิกโพย pending
-        $cancelStmt = $pdo->prepare("
-            UPDATE bets SET status = 'cancelled', win_amount = 0,
-            cancel_approved_by = 'auto_timeout', cancel_approved_at = NOW()
-            WHERE lottery_type_id = ? AND (draw_date = ? OR draw_date = ?) AND status = 'pending'
-        ");
-        $cancelStmt->execute([$lt['id'], $today, $todayReal]);
-        $cancelled = $cancelStmt->rowCount();
-        
-        if ($cancelled > 0) {
-            echo "[Monitor] ⏰ {$lt['name']}: งดออกผล (รอ {$lt['elapsed']} นาที) — ยกเลิก {$cancelled} โพย\n";
-        } else {
-            echo "[Monitor] ⏰ {$lt['name']}: งดออกผล (รอ {$lt['elapsed']} นาที)\n";
-        }
+    }
+
+    $cancelled = cancelBetsBecauseNoResult($pdo, $lt['id'], $drawDates, 'auto_timeout');
+    if ($cancelled > 0) {
+        echo "[Monitor] ⏰ {$lt['name']}: งดออกผล (รอ {$lt['elapsed']} นาที) — ปรับ {$cancelled} โพยเป็นยกเลิก\n";
+    } else {
+        echo "[Monitor] ⏰ {$lt['name']}: งดออกผล (รอ {$lt['elapsed']} นาที)\n";
     }
 }
 
@@ -184,19 +177,12 @@ if ($data && !empty($data['success'])) {
 //     เช่น exphuay.com/result/gdaxi (หน้าเฉพาะหุ้นเยอรมัน)
 // =============================================
 
-// เช็คว่ายังมีหวยไหนไม่เจอจาก /result page
-$stillMissingStmt = $pdo->prepare("
-    SELECT lt.id, lt.name
-    FROM lottery_types lt
-    WHERE lt.id IN (" . implode(',', array_column($dueLotteries, 'id')) . ")
-    AND NOT EXISTS (
-        SELECT 1 FROM results r 
-        WHERE r.lottery_type_id = lt.id 
-        AND (r.draw_date = ? OR r.draw_date = ?)
-    )
-");
-$stillMissingStmt->execute([$today, $todayReal]);
-$stillMissing = $stillMissingStmt->fetchAll(PDO::FETCH_ASSOC);
+$stillMissing = [];
+foreach ($dueLotteries as $lt) {
+    if (!findUsableResultForDates($pdo, $lt['id'], [$lt['draw_date'], $today, $todayReal])) {
+        $stillMissing[] = ['id' => $lt['id'], 'name' => $lt['name']];
+    }
+}
 
 if (!empty($stillMissing)) {
     echo "\n[Monitor] 🔍 ยังขาด " . count($stillMissing) . " ตัว → ลองเข้าหน้าเฉพาะ:\n";

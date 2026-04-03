@@ -109,6 +109,73 @@ $SLUG_TO_LOTTERY_NAME = [
     'gsb-2'              => 'หวยออมสิน',
 ];
 
+function usefulResultSqlCondition($alias = 'r') {
+    return "(
+        NULLIF(TRIM(COALESCE({$alias}.three_top, '')), '') IS NOT NULL
+        OR NULLIF(TRIM(COALESCE({$alias}.three_tod, '')), '') IS NOT NULL
+        OR NULLIF(TRIM(COALESCE({$alias}.two_top, '')), '') IS NOT NULL
+        OR NULLIF(TRIM(COALESCE({$alias}.two_bot, '')), '') IS NOT NULL
+        OR NULLIF(TRIM(COALESCE({$alias}.run_top, '')), '') IS NOT NULL
+        OR NULLIF(TRIM(COALESCE({$alias}.run_bot, '')), '') IS NOT NULL
+    )";
+}
+
+function resultHasUsableData($result) {
+    if (empty($result) || !is_array($result)) {
+        return false;
+    }
+
+    foreach (['three_top', 'three_tod', 'two_top', 'two_bot', 'run_top', 'run_bot'] as $field) {
+        $value = trim((string)($result[$field] ?? ''));
+        if ($value !== '') {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function findUsableResultForDates($pdo, $lotteryTypeId, array $drawDates) {
+    $drawDates = array_values(array_unique(array_filter($drawDates)));
+    if (empty($drawDates)) {
+        return null;
+    }
+
+    $stmt = $pdo->prepare("SELECT * FROM results WHERE lottery_type_id = ? AND draw_date = ? LIMIT 1");
+    foreach ($drawDates as $drawDate) {
+        $stmt->execute([$lotteryTypeId, $drawDate]);
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (resultHasUsableData($result)) {
+            return $result;
+        }
+    }
+
+    return null;
+}
+
+function cancelBetsBecauseNoResult($pdo, $lotteryTypeId, array $drawDates, $approvedBy = 'auto_timeout') {
+    $drawDates = array_values(array_unique(array_filter($drawDates)));
+    if (empty($drawDates)) {
+        return 0;
+    }
+
+    $placeholders = implode(',', array_fill(0, count($drawDates), '?'));
+    $sql = "
+        UPDATE bets
+        SET status = 'cancelled',
+            win_amount = 0,
+            cancel_approved_by = ?,
+            cancel_approved_at = NOW()
+        WHERE lottery_type_id = ?
+          AND draw_date IN ({$placeholders})
+          AND status IN ('pending', 'lost')
+    ";
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute(array_merge([$approvedBy, $lotteryTypeId], $drawDates));
+    return $stmt->rowCount();
+}
+
 // =============================================
 // Smart Pre-check: นับผลที่ยังขาดวันนี้
 // ถ้าครบแล้ว → ข้าม scraping (ประหยัด CPU/RAM)
@@ -124,6 +191,7 @@ function countMissingResults($pdo, $expectedCount = 62) {
         SELECT COUNT(*) FROM results r
         JOIN lottery_types lt ON r.lottery_type_id = lt.id
         WHERE r.draw_date = ? AND lt.is_active = 1
+        AND " . usefulResultSqlCondition('r') . "
     ");
     $todayResults->execute([$today]);
     $foundToday = $todayResults->fetchColumn();
@@ -995,19 +1063,19 @@ function scrapeSmart($pdo) {
             SELECT 1 FROM bets b 
             WHERE b.lottery_type_id = lt.id 
             AND (b.draw_date = ? OR b.draw_date = ?)
-            AND b.status = 'pending'
-        )
-        AND NOT EXISTS (
-            SELECT 1 FROM results r 
-            WHERE r.lottery_type_id = lt.id 
-            AND (r.draw_date = ? OR r.draw_date = ?)
+            AND b.status IN ('pending', 'lost')
         )
     ");
-    $overdueStmt->execute([$today, $todayReal, $today, $todayReal]);
+    $overdueStmt->execute([$today, $todayReal]);
     $overdueLotteries = $overdueStmt->fetchAll(PDO::FETCH_ASSOC);
 
     $autoCancelCount = 0;
     foreach ($overdueLotteries as $ol) {
+        $drawDates = array_values(array_unique([$today, $todayReal]));
+        if (findUsableResultForDates($pdo, $ol['id'], $drawDates)) {
+            continue;
+        }
+
         // คำนวณ result_time สำหรับวันนี้
         $resultTimeStr = $todayReal . ' ' . $ol['result_time'];
         $resultTimestamp = strtotime($resultTimeStr);
@@ -1024,16 +1092,10 @@ function scrapeSmart($pdo) {
         $hoursPast = ($now - $resultTimestamp) / 3600;
         
         if ($hoursPast > 2) {
-            // เลย 2 ชม.แล้ว → ยกเลิกโพย pending
-            $cancelStmt = $pdo->prepare("
-                UPDATE bets SET status = 'cancelled', win_amount = 0, 
-                cancel_approved_by = 'auto_timeout', cancel_approved_at = NOW()
-                WHERE lottery_type_id = ? AND (draw_date = ? OR draw_date = ?) AND status = 'pending'
-            ");
-            $cancelStmt->execute([$ol['id'], $today, $todayReal]);
-            $cancelled = $cancelStmt->rowCount();
+            // เลย 2 ชม.แล้วและยังไม่มีผลจริง → ปรับโพยค้าง/ที่เคยตัดผิดเป็นยกเลิก
+            $cancelled = cancelBetsBecauseNoResult($pdo, $ol['id'], $drawDates, 'auto_timeout');
             if ($cancelled > 0) {
-                echo "🚫 Auto-cancel: {$ol['name']} — ยกเลิก {$cancelled} โพย (เลย result_time > 2 ชม.)\n";
+                echo "🚫 Auto-cancel: {$ol['name']} — ปรับ {$cancelled} โพยเป็นยกเลิก (เลย result_time > 2 ชม.)\n";
                 logScrape($pdo, $ol['name'], 'auto_cancel', 'success', "Cancelled {$cancelled} bets (overdue > 2hrs)", $today);
                 $autoCancelCount += $cancelled;
             }
