@@ -543,6 +543,28 @@ function lineResultSummaryText(array $resultRow): string
     return implode(' | ', $parts);
 }
 
+function lineCompactErrorDetail(string $detail, int $maxLength = 280): string
+{
+    $detail = trim(preg_replace('/\s+/u', ' ', $detail));
+    if ($detail === '') {
+        return '';
+    }
+
+    if (function_exists('mb_strlen') && function_exists('mb_substr')) {
+        if (mb_strlen($detail) <= $maxLength) {
+            return $detail;
+        }
+
+        return rtrim(mb_substr($detail, 0, $maxLength - 3)) . '...';
+    }
+
+    if (strlen($detail) <= $maxLength) {
+        return $detail;
+    }
+
+    return rtrim(substr($detail, 0, $maxLength - 3)) . '...';
+}
+
 function lineResolvedNodeBinary(): string
 {
     $envNode = getenv('NODE_PATH') ?: '';
@@ -785,14 +807,14 @@ function lineGenerateResultImage(PDO $pdo, array $resultRow): ?array
 {
     $baseUrl = lineResolvedPublicBaseUrl($pdo);
     if ($baseUrl === '') {
-        return null;
+        return ['error' => 'Public base URL is not configured'];
     }
 
     $rootDir = dirname(__DIR__);
     $generatedDir = $rootDir . '/line/generated';
     if (!is_dir($generatedDir) && !mkdir($generatedDir, 0775, true) && !is_dir($generatedDir)) {
         lineLog('Unable to create line/generated directory');
-        return null;
+        return ['error' => 'line/generated directory is not writable'];
     }
 
     $safeDate = preg_replace('/[^0-9\-]/', '', (string)($resultRow['draw_date'] ?? date('Y-m-d')));
@@ -817,7 +839,7 @@ function lineGenerateResultImage(PDO $pdo, array $resultRow): ?array
 
     $tempJson = tempnam(sys_get_temp_dir(), 'line_result_');
     if ($tempJson === false) {
-        return null;
+        return ['error' => 'Unable to create temporary JSON file for renderer'];
     }
 
     $cleanupPattern = $generatedDir . '/result-' . $safeLotteryId . '-' . $safeDate . '*.png';
@@ -864,8 +886,25 @@ function lineGenerateResultImage(PDO $pdo, array $resultRow): ?array
     }
 
     if ($exitCode !== 0 || !file_exists($outputPath)) {
-        lineLog('Result image render failed: ' . implode("\n", $output));
-        return null;
+        $detailParts = [];
+        $nodeOutput = lineCompactErrorDetail(implode(' | ', array_filter($output, static function ($line) {
+            return trim((string) $line) !== '';
+        })));
+        if ($nodeOutput !== '') {
+            $detailParts[] = $nodeOutput;
+        }
+        if (!extension_loaded('gd')) {
+            $detailParts[] = 'GD extension is not enabled';
+        }
+        if (!is_writable($generatedDir)) {
+            $detailParts[] = 'line/generated is not writable';
+        }
+        $detailParts[] = 'node=' . $nodeBinary;
+        $detailParts[] = 'exit=' . $exitCode;
+        $detail = implode(' | ', array_unique(array_filter($detailParts)));
+
+        lineLog('Result image render failed: ' . $detail);
+        return ['error' => $detail];
     }
 
     return [
@@ -892,14 +931,19 @@ function lineFetchResultRow(PDO $pdo, int $lotteryTypeId, string $drawDate): ?ar
     return $resultRow ?: null;
 }
 
-function linePrepareResultImageMessage(PDO $pdo, array $resultRow): ?array
+function linePrepareResultImageMessage(PDO $pdo, array $resultRow): array
 {
     $image = lineGenerateResultImage($pdo, $resultRow);
     if (!$image || empty($image['url'])) {
-        return null;
+        return [
+            'ok' => false,
+            'reason' => 'image_generation_failed',
+            'detail' => lineCompactErrorDetail((string) ($image['error'] ?? 'Image generation failed')),
+        ];
     }
 
     return [
+        'ok' => true,
         'summary_text' => lineResultSummaryText($resultRow),
         'messages' => [[
             'type' => 'image',
@@ -954,13 +998,15 @@ function linePushResultImageToGroup(PDO $pdo, string $groupId, int $lotteryTypeI
     }
 
     $prepared = linePrepareResultImageMessage($pdo, $resultRow);
-    if (!$prepared) {
-        lineLog('Manual result image send skipped: image generation failed for lottery_type_id=' . $lotteryTypeId . ' draw_date=' . $drawDate);
+    if (empty($prepared['ok'])) {
+        $detail = lineCompactErrorDetail((string) ($prepared['detail'] ?? ''));
+        lineLog('Manual result image send skipped: image generation failed for lottery_type_id=' . $lotteryTypeId . ' draw_date=' . $drawDate . ($detail !== '' ? ' detail=' . $detail : ''));
         return [
             'ok' => false,
             'status' => 0,
             'body' => 'Image generation failed',
-            'reason' => 'image_generation_failed',
+            'reason' => $prepared['reason'] ?? 'image_generation_failed',
+            'detail' => $detail,
         ];
     }
 
@@ -984,13 +1030,15 @@ function lineSendResultNotification(PDO $pdo, int $lotteryTypeId, string $drawDa
     }
 
     $prepared = linePrepareResultImageMessage($pdo, $resultRow);
-    if (!$prepared) {
-        lineLog('Result notification skipped: image generation failed for lottery_type_id=' . $lotteryTypeId . ' draw_date=' . $drawDate);
+    if (empty($prepared['ok'])) {
+        $detail = lineCompactErrorDetail((string) ($prepared['detail'] ?? ''));
+        lineLog('Result notification skipped: image generation failed for lottery_type_id=' . $lotteryTypeId . ' draw_date=' . $drawDate . ($detail !== '' ? ' detail=' . $detail : ''));
         return [
             'sent' => 0,
             'skipped' => true,
             'used_image' => false,
-            'reason' => 'image_generation_failed',
+            'reason' => $prepared['reason'] ?? 'image_generation_failed',
+            'detail' => $detail,
         ];
     }
 

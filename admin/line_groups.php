@@ -79,6 +79,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         $reason = $result['reason'] ?? '';
+        $detail = trim((string) ($result['detail'] ?? ''));
+        if ($reason === 'image_generation_failed' && $detail !== '') {
+            lineGroupsRedirectWithFlash('error', 'Image generation failed - ' . $detail);
+        }
         if ($reason === 'image_generation_failed') {
             lineGroupsRedirectWithFlash('error', 'สร้างรูปผลหวยไม่สำเร็จ กรุณาตรวจ Node/Puppeteer หรือ GD บน server');
         }

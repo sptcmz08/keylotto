@@ -37,14 +37,27 @@ const renderResultChip = (label, value, tone) => `
 
 const findChromeExecutable = () => {
   const cacheDir = path.join(rootDir, '.cache', 'puppeteer');
+  const envCandidates = [
+    process.env.PUPPETEER_EXECUTABLE_PATH,
+    process.env.CHROME_BIN,
+    process.env.GOOGLE_CHROME_BIN,
+  ].filter(Boolean);
   const directCandidates = [
     path.join(cacheDir, 'chrome', 'linux-146.0.7680.153', 'chrome-linux64', 'chrome'),
     path.join(cacheDir, 'chrome', 'win64-146.0.7680.153', 'chrome-win64', 'chrome.exe'),
     path.join(cacheDir, 'chrome', 'mac-146.0.7680.153', 'chrome-mac-x64', 'Google Chrome for Testing.app', 'Contents', 'MacOS', 'Google Chrome for Testing'),
     path.join(cacheDir, 'chrome', 'mac_arm-146.0.7680.153', 'chrome-mac-arm64', 'Google Chrome for Testing.app', 'Contents', 'MacOS', 'Google Chrome for Testing'),
+    '/usr/bin/google-chrome',
+    '/usr/bin/google-chrome-stable',
+    '/usr/bin/chromium',
+    '/usr/bin/chromium-browser',
+    '/snap/bin/chromium',
+    '/opt/google/chrome/chrome',
+    'C:/Program Files/Google/Chrome/Application/chrome.exe',
+    'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
   ];
 
-  for (const candidate of directCandidates) {
+  for (const candidate of [...envCandidates, ...directCandidates]) {
     if (fs.existsSync(candidate)) {
       return candidate;
     }
