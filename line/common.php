@@ -392,6 +392,296 @@ function lineSaveTemplateUpload(int $lotteryTypeId, array $upload): array
     ];
 }
 
+function lineSharedTemplateGroups(): array
+{
+    return [
+        'thai' => 'ไทย',
+        'laos' => 'ลาว',
+        'vietnam' => 'ฮานอย / เวียดนาม',
+        'usa' => 'อเมริกา / ดาวโจนส์',
+        'korea' => 'เกาหลี',
+        'japan' => 'ญี่ปุ่น',
+        'germany' => 'เยอรมัน',
+        'uk' => 'อังกฤษ',
+        'egypt' => 'อียิปต์',
+        'china' => 'จีน',
+        'hongkong' => 'ฮ่องกง',
+        'taiwan' => 'ไต้หวัน',
+        'india' => 'อินเดีย',
+        'singapore' => 'สิงคโปร์',
+        'malaysia' => 'มาเลย์',
+        'russia' => 'รัสเซีย',
+    ];
+}
+
+function lineSharedTemplateKey(string $groupKey): string
+{
+    $groupKey = strtolower(trim($groupKey));
+    $groups = lineSharedTemplateGroups();
+    return isset($groups[$groupKey]) ? $groupKey : '';
+}
+
+function lineSharedTemplateImagePath(string $groupKey): ?string
+{
+    $groupKey = lineSharedTemplateKey($groupKey);
+    if ($groupKey === '') {
+        return null;
+    }
+
+    $extensions = ['png', 'jpg', 'webp'];
+    foreach ($extensions as $extension) {
+        $filePath = lineTemplatesDir() . '/shared-group-' . $groupKey . '.' . $extension;
+        if (is_file($filePath)) {
+            return $filePath;
+        }
+    }
+
+    return null;
+}
+
+function lineSharedTemplateImageUrl(PDO $pdo, string $groupKey): ?string
+{
+    $filePath = lineSharedTemplateImagePath($groupKey);
+    if ($filePath === null) {
+        return null;
+    }
+
+    $baseUrl = lineResolvedPublicBaseUrl($pdo);
+    if ($baseUrl === '') {
+        return null;
+    }
+
+    $version = @filemtime($filePath) ?: time();
+    return $baseUrl . '/line/templates/' . rawurlencode(basename($filePath)) . '?v=' . $version;
+}
+
+function lineDeleteSharedTemplateImage(string $groupKey): bool
+{
+    $groupKey = lineSharedTemplateKey($groupKey);
+    if ($groupKey === '') {
+        return false;
+    }
+
+    $deleted = false;
+    $extensions = ['png', 'jpg', 'webp'];
+    foreach ($extensions as $extension) {
+        $filePath = lineTemplatesDir() . '/shared-group-' . $groupKey . '.' . $extension;
+        if (is_file($filePath) && @unlink($filePath)) {
+            $deleted = true;
+        }
+    }
+
+    return $deleted;
+}
+
+function lineSaveSharedTemplateUpload(string $groupKey, array $upload): array
+{
+    $groupKey = lineSharedTemplateKey($groupKey);
+    if ($groupKey === '') {
+        return ['ok' => false, 'message' => 'Template group is invalid'];
+    }
+
+    $uploadError = (int) ($upload['error'] ?? UPLOAD_ERR_NO_FILE);
+    if ($uploadError !== UPLOAD_ERR_OK) {
+        return ['ok' => false, 'message' => lineUploadErrorMessage($uploadError)];
+    }
+
+    if (!lineEnsureTemplatesDir()) {
+        $dir = lineTemplatesDir();
+        $debugInfo = sprintf(
+            'dir=%s exists=%s writable=%s perms=%s',
+            $dir,
+            is_dir($dir) ? 'yes' : 'no',
+            is_writable($dir) ? 'yes' : 'no',
+            is_dir($dir) ? substr(sprintf('%o', fileperms($dir)), -4) : 'n/a'
+        );
+        lineLog('Shared template upload failed: unable to prepare template directory (' . $debugInfo . ')');
+        return ['ok' => false, 'message' => 'Unable to create template directory (' . $debugInfo . ')'];
+    }
+
+    $tmpPath = $upload['tmp_name'] ?? '';
+    if ($tmpPath === '' || !is_uploaded_file($tmpPath)) {
+        return ['ok' => false, 'message' => 'Uploaded file is invalid'];
+    }
+
+    $finfo = finfo_open(FILEINFO_MIME_TYPE);
+    $mimeType = $finfo ? finfo_file($finfo, $tmpPath) : '';
+    if ($finfo) {
+        finfo_close($finfo);
+    }
+
+    $allowed = [
+        'image/png' => 'png',
+        'image/x-png' => 'png',
+        'image/jpeg' => 'jpg',
+        'image/pjpeg' => 'jpg',
+        'image/webp' => 'webp',
+    ];
+
+    $extension = $allowed[$mimeType] ?? null;
+    if ($extension === null) {
+        return ['ok' => false, 'message' => 'Only PNG, JPG, or WEBP images are supported'];
+    }
+
+    $dir = lineTemplatesDir();
+    $targetPath = $dir . '/shared-group-' . $groupKey . '.' . $extension;
+    $stagingPath = $dir . '/.upload-shared-group-' . $groupKey . '-' . bin2hex(random_bytes(4)) . '.' . $extension;
+
+    if (is_dir($dir) && !is_writable($dir)) {
+        @chmod($dir, 0775);
+    }
+
+    $saveResult = lineStoreUploadedFile($tmpPath, $stagingPath);
+    $saved = !empty($saveResult['ok']) && is_file($stagingPath);
+
+    if (!$saved) {
+        $debugInfo = sprintf(
+            'dir_exists=%s writable=%s tmp_exists=%s tmp_size=%s perms=%s target=%s method=%s error=%s',
+            is_dir($dir) ? 'yes' : 'no',
+            is_writable($dir) ? 'yes' : 'no',
+            file_exists($tmpPath) ? 'yes' : 'no',
+            file_exists($tmpPath) ? filesize($tmpPath) : '0',
+            is_dir($dir) ? substr(sprintf('%o', fileperms($dir)), -4) : 'n/a',
+            $targetPath,
+            $saveResult['method'] ?? 'none',
+            $saveResult['error'] ?? ''
+        );
+        lineLog('Shared template upload failed: ' . $debugInfo);
+        return ['ok' => false, 'message' => 'Unable to save uploaded image (' . $debugInfo . ')'];
+    }
+
+    @chmod($stagingPath, 0664);
+    lineDeleteSharedTemplateImage($groupKey);
+
+    if ($stagingPath !== $targetPath && !@rename($stagingPath, $targetPath)) {
+        if (!@copy($stagingPath, $targetPath)) {
+            $lastError = error_get_last();
+            $debugInfo = sprintf(
+                'staging=%s target=%s writable=%s error=%s',
+                $stagingPath,
+                $targetPath,
+                is_writable($dir) ? 'yes' : 'no',
+                is_array($lastError) ? (string) ($lastError['message'] ?? '') : ''
+            );
+            lineLog('Shared template finalize failed: ' . $debugInfo);
+            @unlink($stagingPath);
+            return ['ok' => false, 'message' => 'Unable to finalize uploaded image (' . $debugInfo . ')'];
+        }
+
+        @unlink($stagingPath);
+    }
+
+    @chmod($targetPath, 0664);
+
+    return [
+        'ok' => true,
+        'message' => 'Shared template image uploaded successfully',
+        'path' => $targetPath,
+        'method' => $saveResult['method'] ?? 'unknown',
+    ];
+}
+
+function lineDetectTemplateGroupKey(array $lotteryRow): string
+{
+    $lotteryName = trim((string) ($lotteryRow['lottery_name'] ?? $lotteryRow['name'] ?? ''));
+    $flagEmoji = trim((string) ($lotteryRow['flag_emoji'] ?? ''));
+    $countryCode = '';
+
+    if (function_exists('getFlagForCountry')) {
+        $flagUrl = getFlagForCountry($flagEmoji, $lotteryName);
+        if (preg_match('#/([a-z]{2})\.png$#i', (string) $flagUrl, $matches)) {
+            $countryCode = strtolower($matches[1]);
+        }
+    }
+
+    $countryMap = [
+        'th' => 'thai',
+        'la' => 'laos',
+        'vn' => 'vietnam',
+        'us' => 'usa',
+        'kr' => 'korea',
+        'jp' => 'japan',
+        'de' => 'germany',
+        'gb' => 'uk',
+        'eg' => 'egypt',
+        'cn' => 'china',
+        'hk' => 'hongkong',
+        'tw' => 'taiwan',
+        'in' => 'india',
+        'sg' => 'singapore',
+        'my' => 'malaysia',
+        'ru' => 'russia',
+    ];
+
+    if ($countryCode !== '' && isset($countryMap[$countryCode])) {
+        return $countryMap[$countryCode];
+    }
+
+    $keywordMap = [
+        'ฮานอย' => 'vietnam',
+        'เวียดนาม' => 'vietnam',
+        'ลาว' => 'laos',
+        'ไทย' => 'thai',
+        'รัฐบาล' => 'thai',
+        'ออมสิน' => 'thai',
+        'ธกส' => 'thai',
+        'ดาวโจนส์' => 'usa',
+        'อเมริกา' => 'usa',
+        'เกาหลี' => 'korea',
+        'ญี่ปุ่น' => 'japan',
+        'เยอรมัน' => 'germany',
+        'อังกฤษ' => 'uk',
+        'อียิปต์' => 'egypt',
+        'จีน' => 'china',
+        'ฮ่องกง' => 'hongkong',
+        'ไต้หวัน' => 'taiwan',
+        'อินเดีย' => 'india',
+        'สิงคโปร์' => 'singapore',
+        'มาเลย์' => 'malaysia',
+        'รัสเซีย' => 'russia',
+    ];
+
+    foreach ($keywordMap as $keyword => $groupKey) {
+        if ($lotteryName !== '' && mb_strpos($lotteryName, $keyword) !== false) {
+            return $groupKey;
+        }
+    }
+
+    return '';
+}
+
+function lineResolveTemplateImageInfo(PDO $pdo, array $lotteryRow): ?array
+{
+    $lotteryTypeId = (int) ($lotteryRow['lottery_type_id'] ?? $lotteryRow['id'] ?? 0);
+    $exactPath = $lotteryTypeId > 0 ? lineTemplateImagePath($lotteryTypeId) : null;
+    if ($exactPath !== null) {
+        $version = @filemtime($exactPath) ?: time();
+        return [
+            'path' => $exactPath,
+            'url' => lineResolvedPublicBaseUrl($pdo) . '/line/templates/' . rawurlencode(basename($exactPath)) . '?v=' . $version,
+            'source_type' => 'lottery',
+            'source_key' => (string) $lotteryTypeId,
+            'source_label' => 'เฉพาะหวย',
+        ];
+    }
+
+    $groupKey = lineDetectTemplateGroupKey($lotteryRow);
+    $sharedPath = $groupKey !== '' ? lineSharedTemplateImagePath($groupKey) : null;
+    if ($sharedPath !== null) {
+        $version = @filemtime($sharedPath) ?: time();
+        $groups = lineSharedTemplateGroups();
+        return [
+            'path' => $sharedPath,
+            'url' => lineResolvedPublicBaseUrl($pdo) . '/line/templates/' . rawurlencode(basename($sharedPath)) . '?v=' . $version,
+            'source_type' => 'shared',
+            'source_key' => $groupKey,
+            'source_label' => 'กลุ่มร่วม: ' . ($groups[$groupKey] ?? $groupKey),
+        ];
+    }
+
+    return null;
+}
+
 function lineConfigReady(PDO $pdo): bool
 {
     return lineResolvedChannelSecret($pdo) !== '' && lineResolvedChannelAccessToken($pdo) !== '';
@@ -822,6 +1112,7 @@ function lineGenerateResultImage(PDO $pdo, array $resultRow): ?array
     $uniqueSuffix = date('YmdHis') . '-' . substr(md5(uniqid((string) $safeLotteryId, true)), 0, 8);
     $outputFilename = 'result-' . $safeLotteryId . '-' . $safeDate . '-' . $uniqueSuffix . '.png';
     $outputPath = $generatedDir . '/' . $outputFilename;
+    $templateInfo = lineResolveTemplateImageInfo($pdo, $resultRow);
 
     $payload = [
         'site_name' => SITE_NAME,
@@ -834,7 +1125,7 @@ function lineGenerateResultImage(PDO $pdo, array $resultRow): ?array
         'two_bot' => $resultRow['two_bot'] ?? '',
         'summary_text' => lineResultSummaryText($resultRow),
         'generated_at' => date('d-m-Y H:i:s'),
-        'background_image_path' => lineTemplateImagePath($safeLotteryId) ?? '',
+        'background_image_path' => $templateInfo['path'] ?? '',
     ];
 
     $tempJson = tempnam(sys_get_temp_dir(), 'line_result_');
@@ -918,6 +1209,7 @@ function lineFetchResultRow(PDO $pdo, int $lotteryTypeId, string $drawDate): ?ar
 {
     $stmt = $pdo->prepare("
         SELECT r.lottery_type_id, r.draw_date, r.three_top, r.two_top, r.two_bot,
+               lt.flag_emoji,
                lt.name AS lottery_name, lc.name AS category_name
         FROM results r
         JOIN lottery_types lt ON r.lottery_type_id = lt.id

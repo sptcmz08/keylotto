@@ -102,6 +102,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         lineGroupsRedirectWithFlash($upload['ok'] ? 'success' : 'error', $upload['message']);
     }
 
+    if ($action === 'upload_shared_template') {
+        $groupKey = trim((string) ($_POST['shared_group_key'] ?? ''));
+        $upload = lineSaveSharedTemplateUpload($groupKey, $_FILES['template_image'] ?? []);
+        lineGroupsRedirectWithFlash($upload['ok'] ? 'success' : 'error', $upload['message']);
+    }
+
     if ($action === 'delete_template') {
         $lotteryTypeId = (int) ($_POST['lottery_type_id'] ?? 0);
         if ($lotteryTypeId <= 0) {
@@ -113,6 +119,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         lineGroupsRedirectWithFlash('error', 'Template image was not found');
+    }
+
+    if ($action === 'delete_shared_template') {
+        $groupKey = trim((string) ($_POST['shared_group_key'] ?? ''));
+        if ($groupKey === '') {
+            lineGroupsRedirectWithFlash('error', 'Template group is invalid');
+        }
+
+        if (lineDeleteSharedTemplateImage($groupKey)) {
+            lineGroupsRedirectWithFlash('success', 'Shared template image removed');
+        }
+
+        lineGroupsRedirectWithFlash('error', 'Shared template image was not found');
     }
 }
 
@@ -144,6 +163,7 @@ $recentResults = $pdo->query("
         r.two_top,
         r.two_bot,
         r.updated_at,
+        lt.flag_emoji,
         lt.name AS lottery_name,
         lc.name AS category_name
     FROM results r
@@ -156,6 +176,7 @@ $recentResults = $pdo->query("
 $lotteryTypes = $pdo->query("
     SELECT
         lt.id,
+        lt.flag_emoji,
         lt.name AS lottery_name,
         lc.name AS category_name
     FROM lottery_types lt
@@ -164,9 +185,15 @@ $lotteryTypes = $pdo->query("
     ORDER BY lc.sort_order ASC, lt.sort_order ASC, lt.id ASC
 ")->fetchAll();
 
-$templateUrls = [];
+$templateInfos = [];
 foreach ($lotteryTypes as $lotteryType) {
-    $templateUrls[(int) $lotteryType['id']] = lineTemplateImageUrl($pdo, (int) $lotteryType['id']);
+    $templateInfos[(int) $lotteryType['id']] = lineResolveTemplateImageInfo($pdo, $lotteryType);
+}
+
+$sharedTemplateGroups = lineSharedTemplateGroups();
+$sharedTemplateUrls = [];
+foreach ($sharedTemplateGroups as $groupKey => $groupLabel) {
+    $sharedTemplateUrls[$groupKey] = lineSharedTemplateImageUrl($pdo, $groupKey);
 }
 
 $savedChannelSecret = lineResolvedChannelSecret($pdo);
@@ -245,7 +272,8 @@ require_once 'includes/header.php';
             </thead>
             <tbody>
                 <?php foreach ($lotteryTypes as $lotteryType): ?>
-                <?php $templateUrl = $templateUrls[(int) $lotteryType['id']] ?? null; ?>
+                <?php $templateInfo = $templateInfos[(int) $lotteryType['id']] ?? null; ?>
+                <?php $templateUrl = is_array($templateInfo) ? ($templateInfo['url'] ?? null) : null; ?>
                 <tr class="border-b hover:bg-gray-50 align-top">
                     <td class="px-3 py-3 font-medium text-gray-800"><?= htmlspecialchars($lotteryType['lottery_name']) ?></td>
                     <td class="px-3 py-3 text-gray-500"><?= htmlspecialchars($lotteryType['category_name']) ?></td>
@@ -254,6 +282,7 @@ require_once 'includes/header.php';
                         <a href="<?= htmlspecialchars($templateUrl) ?>" target="_blank" class="inline-block">
                             <img src="<?= htmlspecialchars($templateUrl) ?>" alt="Template preview" class="w-40 h-24 object-cover rounded-lg border border-gray-200 shadow-sm">
                         </a>
+                        <div class="mt-1 text-[11px] text-gray-500"><?= htmlspecialchars((string) ($templateInfo['source_label'] ?? '')) ?></div>
                         <?php else: ?>
                         <span class="text-xs text-gray-400">No template uploaded</span>
                         <?php endif; ?>
@@ -284,6 +313,60 @@ require_once 'includes/header.php';
                     <td colspan="4" class="px-3 py-6 text-center text-sm text-gray-400">No active lottery types found</td>
                 </tr>
                 <?php endif; ?>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="mb-4 bg-white rounded-xl shadow-sm border overflow-hidden">
+    <div class="px-4 py-3 border-b bg-gray-50 font-semibold text-gray-700">Shared Template Groups</div>
+    <div class="px-4 py-3 text-xs text-gray-500 border-b bg-gray-50/60">
+        Upload one shared image per country/group. Lotteries without their own template will reuse the shared one automatically.
+    </div>
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead class="bg-gray-50 border-b">
+                <tr>
+                    <th class="px-3 py-2 text-left text-xs text-gray-500">Group</th>
+                    <th class="px-3 py-2 text-left text-xs text-gray-500">Current template</th>
+                    <th class="px-3 py-2 text-left text-xs text-gray-500">Upload / Remove</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php foreach ($sharedTemplateGroups as $groupKey => $groupLabel): ?>
+                <?php $sharedTemplateUrl = $sharedTemplateUrls[$groupKey] ?? null; ?>
+                <tr class="border-b hover:bg-gray-50 align-top">
+                    <td class="px-3 py-3 font-medium text-gray-800"><?= htmlspecialchars($groupLabel) ?></td>
+                    <td class="px-3 py-3">
+                        <?php if ($sharedTemplateUrl): ?>
+                        <a href="<?= htmlspecialchars($sharedTemplateUrl) ?>" target="_blank" class="inline-block">
+                            <img src="<?= htmlspecialchars($sharedTemplateUrl) ?>" alt="Shared template preview" class="w-40 h-24 object-cover rounded-lg border border-gray-200 shadow-sm">
+                        </a>
+                        <?php else: ?>
+                        <span class="text-xs text-gray-400">No shared template uploaded</span>
+                        <?php endif; ?>
+                    </td>
+                    <td class="px-3 py-3 min-w-[320px]">
+                        <form method="POST" enctype="multipart/form-data" class="space-y-2">
+                            <input type="hidden" name="form_action" value="upload_shared_template">
+                            <input type="hidden" name="shared_group_key" value="<?= htmlspecialchars($groupKey) ?>">
+                            <input type="file" name="template_image" accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp" class="block w-full text-xs text-gray-500 border rounded-lg px-3 py-2 bg-white">
+                            <button type="submit" class="bg-[#7b1fa2] text-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-[#6a1b9a] transition">
+                                <i class="fas fa-layer-group mr-1"></i> Upload shared template
+                            </button>
+                        </form>
+                        <?php if ($sharedTemplateUrl): ?>
+                        <form method="POST" class="mt-2">
+                            <input type="hidden" name="form_action" value="delete_shared_template">
+                            <input type="hidden" name="shared_group_key" value="<?= htmlspecialchars($groupKey) ?>">
+                            <button type="submit" class="bg-red-50 text-red-700 border border-red-200 px-3 py-2 rounded-lg text-sm font-medium hover:bg-red-100 transition">
+                                <i class="fas fa-trash-alt mr-1"></i> Remove shared template
+                            </button>
+                        </form>
+                        <?php endif; ?>
+                    </td>
+                </tr>
+                <?php endforeach; ?>
             </tbody>
         </table>
     </div>
@@ -390,6 +473,9 @@ require_once 'includes/header.php';
                                 <i class="fas fa-image mr-1"></i> ส่งรูปผลหวยนี้
                             </button>
                         </form>
+                        <a href="line_preview.php?lottery_type_id=<?= (int) $resultRow['lottery_type_id'] ?>&draw_date=<?= urlencode((string) $resultRow['draw_date']) ?>" target="_blank" class="mt-2 inline-flex items-center justify-center w-full bg-white text-[#6a1b9a] border border-[#d1b3e5] px-3 py-2 rounded-lg text-sm font-medium hover:bg-[#faf5ff] transition">
+                            <i class="fas fa-eye mr-1"></i> Preview image
+                        </a>
                     </td>
                 </tr>
                 <?php endforeach; ?>
