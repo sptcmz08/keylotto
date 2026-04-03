@@ -1,5 +1,6 @@
 import fs from 'fs';
 import fsp from 'fs/promises';
+import os from 'os';
 import path from 'path';
 import puppeteer from 'puppeteer';
 import { fileURLToPath } from 'url';
@@ -94,8 +95,9 @@ const findChromeExecutable = () => {
 const ensureWritableBrowserDirs = async () => {
   const baseCacheDir = path.join(rootDir, '.cache');
   const cacheDir = path.join(baseCacheDir, 'puppeteer');
-  const configDir = path.join(baseCacheDir, 'xdg-config');
-  const profileRootDir = path.join(baseCacheDir, 'puppeteer-profiles');
+  const tempRootDir = path.join(os.tmpdir(), 'keylotto-puppeteer');
+  const configDir = path.join(tempRootDir, 'xdg-config');
+  const profileRootDir = path.join(tempRootDir, 'profiles');
 
   await fsp.mkdir(cacheDir, { recursive: true });
   await fsp.mkdir(configDir, { recursive: true });
