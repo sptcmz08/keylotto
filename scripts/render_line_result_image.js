@@ -284,46 +284,53 @@ const main = async () => {
         justify-content: flex-end;
       }
       .draw-date {
-        min-width: 280px;
-        padding: 16px 24px;
+        min-width: 250px;
+        padding: 14px 22px;
         border-radius: 20px;
         background: rgba(0, 0, 0, 0.22);
         border: 1px solid rgba(255, 217, 126, 0.18);
         text-align: center;
       }
       .draw-date__label {
-        font-size: 26px;
+        font-size: 24px;
         color: #ffe2a0;
       }
       .draw-date__value {
-        margin-top: 8px;
-        font-size: 46px;
+        margin-top: 6px;
+        font-size: 40px;
         font-weight: 800;
         color: #ffffff;
       }
       .title-block {
-        margin-top: 34px;
+        margin-top: 26px;
+        text-align: center;
       }
       .lottery-name {
-        font-size: 108px;
-        line-height: 1.02;
+        font-size: 128px;
+        line-height: 0.96;
         font-weight: 900;
         color: #ffd45e;
         letter-spacing: 0.5px;
         -webkit-text-stroke: 8px #1f0700;
         paint-order: stroke fill;
+        text-wrap: balance;
+        word-break: break-word;
         text-shadow:
           0 8px 0 #1f0700,
           0 16px 22px rgba(0,0,0,0.26),
           0 0 18px rgba(255, 226, 150, 0.15);
       }
-      .result-head {
-        margin-top: 28px;
+      .title-meta {
+        margin-top: 10px;
         display: flex;
         justify-content: center;
       }
-      .result-head__draw {
-        font-size: 42px;
+      .title-meta__text {
+        padding: 10px 24px;
+        border-radius: 999px;
+        background: rgba(18, 5, 0, 0.34);
+        border: 1px solid rgba(255, 226, 162, 0.22);
+        font-size: 30px;
         font-weight: 700;
         color: #ffe6b0;
         text-shadow: 0 3px 0 rgba(0,0,0,0.3);
@@ -332,13 +339,17 @@ const main = async () => {
         display: grid;
         grid-template-columns: repeat(3, 1fr);
         gap: 22px;
-        margin-top: 28px;
+        margin-top: 22px;
       }
       .result-chip {
-        padding: 22px 24px 24px;
+        min-height: 290px;
+        padding: 22px 20px 28px;
         border-radius: 24px;
         border: 2px solid rgba(255, 236, 185, 0.2);
         box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
       }
       .result-chip.gold {
         background: linear-gradient(180deg, rgba(58, 20, 0, 0.66) 0%, rgba(96, 29, 0, 0.78) 100%);
@@ -350,14 +361,14 @@ const main = async () => {
         background: linear-gradient(180deg, rgba(88, 40, 0, 0.66) 0%, rgba(120, 52, 0, 0.78) 100%);
       }
       .result-chip__label {
-        font-size: 30px;
+        font-size: 34px;
         color: #ffe5a6;
         font-weight: 700;
         text-align: center;
       }
       .result-chip__value {
-        margin-top: 10px;
-        font-size: 98px;
+        margin-top: 16px;
+        font-size: 132px;
         line-height: 1;
         font-weight: 900;
         color: #ffffff;
@@ -380,8 +391,8 @@ const main = async () => {
           <div class="lottery-name">${escapeHtml(data.lottery_name || '-')}</div>
         </section>
 
-        <div class="result-head">
-          <div class="result-head__draw">${TEXT.draw} ${escapeHtml(data.draw_date_display || data.draw_date || '-')}</div>
+        <div class="title-meta">
+          <div class="title-meta__text">${TEXT.draw} ${escapeHtml(data.draw_date_display || data.draw_date || '-')}</div>
         </div>
 
         <section class="results">
