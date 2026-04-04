@@ -27,6 +27,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $channelAccessToken = trim($_POST['channel_access_token'] ?? '');
         $publicBaseUrl = trim($_POST['public_base_url'] ?? '');
         $autoSendResults = isset($_POST['auto_send_results']) ? '1' : '0';
+        $autoSendTexts = isset($_POST['auto_send_texts']) ? '1' : '0';
 
         if ($channelSecret === '' || $channelAccessToken === '') {
             lineGroupsRedirectWithFlash('error', 'กรุณากรอก Channel secret และ Channel access token ให้ครบ');
@@ -36,8 +37,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         lineSetSetting($pdo, 'channel_access_token', $channelAccessToken);
         lineSetSetting($pdo, 'public_base_url', $publicBaseUrl !== '' ? $publicBaseUrl : 'https://member.imzshop97.com');
         lineSetSetting($pdo, 'auto_send_results', $autoSendResults);
+        lineSetSetting($pdo, 'auto_send_texts', $autoSendTexts);
 
         lineGroupsRedirectWithFlash('success', 'บันทึก LINE settings สำเร็จ');
+    }
+
+    if ($action === 'save_auto_text_templates') {
+        $templates = $_POST['auto_text_templates'] ?? [];
+        lineSetAutoTextTemplates($pdo, is_array($templates) ? $templates : []);
+        lineGroupsRedirectWithFlash('success', 'บันทึกข้อความอัตโนมัติสำเร็จ');
     }
 
     if ($action === 'send_test') {
@@ -200,6 +208,8 @@ $savedChannelSecret = lineResolvedChannelSecret($pdo);
 $savedChannelAccessToken = lineResolvedChannelAccessToken($pdo);
 $savedPublicBaseUrl = lineResolvedPublicBaseUrl($pdo);
 $autoSendResults = lineAutoSendEnabled($pdo);
+$autoSendTexts = lineAutoSendTextsEnabled($pdo);
+$autoTextTemplates = lineGetAutoTextTemplates($pdo);
 
 require_once 'includes/header.php';
 ?>
@@ -241,10 +251,16 @@ require_once 'includes/header.php';
             <input type="text" name="public_base_url" class="w-full border rounded-lg px-3 py-2 text-sm outline-none" value="<?= htmlspecialchars($savedPublicBaseUrl) ?>" placeholder="https://member.imzshop97.com">
             <div class="text-[11px] text-gray-400 mt-1">ใช้สำหรับสร้าง URL รูปภาพที่ LINE จะดึงไปแสดง</div>
         </div>
-        <div class="flex items-center pt-6">
+        <div class="pt-4 space-y-3">
+        <div class="pt-1">
             <label class="inline-flex items-center gap-2 text-sm text-gray-700">
                 <input type="checkbox" name="auto_send_results" value="1" class="rounded border-gray-300" <?= $autoSendResults ? 'checked' : '' ?>>
                 เปิดส่งผลหวยอัตโนมัติเป็นรูปเมื่อมีผลใหม่
+            </label>
+        </div>
+            <label class="inline-flex items-center gap-2 text-sm text-gray-700">
+                <input type="checkbox" name="auto_send_texts" value="1" class="rounded border-gray-300" <?= $autoSendTexts ? 'checked' : '' ?>>
+                เปิดส่งข้อความอัตโนมัติตามข้อความที่ตั้งไว้เมื่อมีผลใหม่
             </label>
         </div>
         <div class="lg:col-span-2">
@@ -370,6 +386,54 @@ require_once 'includes/header.php';
             </tbody>
         </table>
     </div>
+</div>
+
+<div class="mb-4 bg-white rounded-xl shadow-sm border overflow-hidden">
+    <div class="px-4 py-3 border-b bg-gray-50 font-semibold text-gray-700">Auto Message Templates</div>
+    <div class="px-4 py-3 text-xs text-gray-500 border-b bg-gray-50/60">
+        ตั้งข้อความอัตโนมัติรายหวยได้ที่นี่ ระบบจะส่งข้อความนี้ไปทุกกลุ่มที่ active เมื่อหวยรายการนั้นมีผลใหม่
+        ตัวแปรที่ใช้ได้: <code>{lottery_name}</code>, <code>{draw_date}</code>, <code>{draw_date_display}</code>, <code>{three_top}</code>, <code>{two_top}</code>, <code>{two_bot}</code>
+    </div>
+    <form method="POST">
+        <input type="hidden" name="form_action" value="save_auto_text_templates">
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead class="bg-gray-50 border-b">
+                    <tr>
+                        <th class="px-3 py-2 text-left text-xs text-gray-500">Lottery</th>
+                        <th class="px-3 py-2 text-left text-xs text-gray-500">Category</th>
+                        <th class="px-3 py-2 text-left text-xs text-gray-500">Message template</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($lotteryTypes as $lotteryType): ?>
+                    <tr class="border-b hover:bg-gray-50 align-top">
+                        <td class="px-3 py-3 font-medium text-gray-800"><?= htmlspecialchars($lotteryType['lottery_name']) ?></td>
+                        <td class="px-3 py-3 text-gray-500"><?= htmlspecialchars($lotteryType['category_name']) ?></td>
+                        <td class="px-3 py-3 min-w-[420px]">
+                            <textarea
+                                name="auto_text_templates[<?= (int) $lotteryType['id'] ?>]"
+                                rows="5"
+                                class="w-full border rounded-lg px-3 py-2 text-sm outline-none"
+                                placeholder="เว้นว่างไว้ถ้าไม่ต้องการส่งข้อความอัตโนมัติสำหรับหวยรายการนี้"
+                            ><?= htmlspecialchars((string) ($autoTextTemplates[(int) $lotteryType['id']] ?? '')) ?></textarea>
+                        </td>
+                    </tr>
+                    <?php endforeach; ?>
+                    <?php if (empty($lotteryTypes)): ?>
+                    <tr>
+                        <td colspan="3" class="px-3 py-6 text-center text-sm text-gray-400">No active lottery types found</td>
+                    </tr>
+                    <?php endif; ?>
+                </tbody>
+            </table>
+        </div>
+        <div class="px-4 py-3 border-t bg-white">
+            <button type="submit" class="bg-[#2e7d32] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#1b5e20] transition">
+                <i class="fas fa-save mr-1"></i> บันทึกข้อความอัตโนมัติ
+            </button>
+        </div>
+    </form>
 </div>
 
 <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">

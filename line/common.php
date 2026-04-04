@@ -140,6 +140,49 @@ function lineAutoSendEnabled(PDO $pdo): bool
     return lineGetSetting($pdo, 'auto_send_results', '1') !== '0';
 }
 
+function lineAutoSendTextsEnabled(PDO $pdo): bool
+{
+    return lineGetSetting($pdo, 'auto_send_texts', '0') === '1';
+}
+
+function lineGetAutoTextTemplates(PDO $pdo): array
+{
+    $raw = lineGetSetting($pdo, 'auto_text_templates', '{}');
+    $decoded = json_decode($raw, true);
+    if (!is_array($decoded)) {
+        return [];
+    }
+
+    $templates = [];
+    foreach ($decoded as $lotteryTypeId => $message) {
+        $id = (int) $lotteryTypeId;
+        $text = trim((string) $message);
+        if ($id > 0 && $text !== '') {
+            $templates[$id] = $text;
+        }
+    }
+
+    return $templates;
+}
+
+function lineSetAutoTextTemplates(PDO $pdo, array $templates): void
+{
+    $normalized = [];
+    foreach ($templates as $lotteryTypeId => $message) {
+        $id = (int) $lotteryTypeId;
+        $text = trim((string) $message);
+        if ($id > 0 && $text !== '') {
+            $normalized[(string) $id] = $text;
+        }
+    }
+
+    lineSetSetting(
+        $pdo,
+        'auto_text_templates',
+        json_encode($normalized, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
+    );
+}
+
 function lineTemplatesDir(): string
 {
     return __DIR__ . '/templates';
@@ -833,6 +876,26 @@ function lineResultSummaryText(array $resultRow): string
     return implode(' | ', $parts);
 }
 
+function lineRenderAutoTextTemplate(string $template, array $resultRow): string
+{
+    $drawDate = (string) ($resultRow['draw_date'] ?? '');
+    $replacements = [
+        '{lottery_name}' => (string) ($resultRow['lottery_name'] ?? ''),
+        '{category_name}' => (string) ($resultRow['category_name'] ?? ''),
+        '{draw_date}' => $drawDate,
+        '{draw_date_display}' => function_exists('formatDateDisplay') ? (string) formatDateDisplay($drawDate) : $drawDate,
+        '{three_top}' => (string) ($resultRow['three_top'] ?? ''),
+        '{two_top}' => (string) ($resultRow['two_top'] ?? ''),
+        '{two_bot}' => (string) ($resultRow['two_bot'] ?? ''),
+    ];
+
+    $message = strtr($template, $replacements);
+    $message = preg_replace("/\r\n?/", "\n", $message);
+    $message = preg_replace("/\n{3,}/", "\n\n", (string) $message);
+
+    return trim((string) $message);
+}
+
 function lineCompactErrorDetail(string $detail, int $maxLength = 280): string
 {
     $detail = trim(preg_replace('/\s+/u', ' ', $detail));
@@ -1353,5 +1416,53 @@ function lineSendResultNotification(PDO $pdo, int $lotteryTypeId, string $drawDa
         'used_image' => true,
         'image_url' => $prepared['image_url'] ?? '',
         'renderer' => $prepared['renderer'] ?? '',
+    ];
+}
+
+function lineSendConfiguredTextNotification(PDO $pdo, int $lotteryTypeId, string $drawDate): array
+{
+    if (!lineConfigReady($pdo) || !lineAutoSendTextsEnabled($pdo)) {
+        return ['sent' => 0, 'skipped' => true];
+    }
+
+    $templates = lineGetAutoTextTemplates($pdo);
+    $template = trim((string) ($templates[$lotteryTypeId] ?? ''));
+    if ($template === '') {
+        return ['sent' => 0, 'skipped' => true, 'reason' => 'template_not_found'];
+    }
+
+    $resultRow = lineFetchResultRow($pdo, $lotteryTypeId, $drawDate);
+    if (!$resultRow) {
+        return ['sent' => 0, 'skipped' => true, 'reason' => 'result_not_found'];
+    }
+
+    $message = lineRenderAutoTextTemplate($template, $resultRow);
+    if ($message === '') {
+        return ['sent' => 0, 'skipped' => true, 'reason' => 'message_empty'];
+    }
+
+    $groups = $pdo->query("SELECT group_id FROM line_groups WHERE is_active = 1 ORDER BY id ASC")->fetchAll();
+    if (empty($groups)) {
+        return ['sent' => 0, 'skipped' => true, 'reason' => 'no_groups'];
+    }
+
+    $sent = 0;
+    foreach ($groups as $group) {
+        $groupId = $group['group_id'] ?? '';
+        if ($groupId === '') {
+            continue;
+        }
+
+        $result = linePushTextMessage($pdo, $groupId, $message);
+        lineLogPushResult($pdo, $groupId, $message, $result);
+        if (!empty($result['ok'])) {
+            $sent++;
+        }
+    }
+
+    return [
+        'sent' => $sent,
+        'skipped' => false,
+        'message' => $message,
     ];
 }

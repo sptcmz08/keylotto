@@ -604,6 +604,10 @@ function processResults($pdo, $results, $source) {
                 } elseif (($lineStats['reason'] ?? '') === 'image_generation_failed') {
                     echo "âš ï¸  {$keyLotteryName}: à¸¢à¸±à¸‡à¹„à¸¡à¹ˆà¸ªà¹ˆà¸‡ LINE à¹€à¸žà¸£à¸²à¸°à¸ªà¸£à¹‰à¸²à¸‡à¸£à¸¹à¸›à¹„à¸¡à¹ˆà¸ªà¸³à¹€à¸£à¹‡à¸ˆ\n";
                 }
+                $lineTextStats = lineSendConfiguredTextNotification($pdo, $lotteryTypeId, $drawDate);
+                if (!empty($lineTextStats['sent'])) {
+                    echo "ðŸ’¬ {$keyLotteryName}: ส่งข้อความ LINE {$lineTextStats['sent']} กลุ่ม\n";
+                }
             } catch (Exception $lineError) {
                 echo "âš ï¸  LINE notify failed for {$keyLotteryName}: " . $lineError->getMessage() . "\n";
                 lineLog('Auto notify failed: ' . $lineError->getMessage());
