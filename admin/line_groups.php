@@ -691,6 +691,7 @@ require_once 'includes/header.php';
                 <div class="scheduled-image-item rounded-xl border border-gray-200 bg-gray-50 p-4 space-y-3">
                     <input type="hidden" name="scheduled_images[<?= $index ?>][id]" value="<?= htmlspecialchars((string) $scheduledImage['id']) ?>">
                     <input type="hidden" name="scheduled_images[<?= $index ?>][images_json]" value="<?= htmlspecialchars(json_encode(array_values((array) ($scheduledImage['images'] ?? [])), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) ?>">
+                    <input type="hidden" class="scheduled-image-urls-json" value="<?= htmlspecialchars(json_encode(array_values($scheduledImageUrls), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) ?>">
                     <div class="grid grid-cols-1 xl:grid-cols-[180px_180px_180px_auto] gap-3">
                         <div>
                             <label class="text-xs text-gray-500 block mb-1">วันเริ่ม</label>
@@ -728,13 +729,19 @@ require_once 'includes/header.php';
                             <div class="scheduled-image-preview-box rounded-xl border border-dashed border-gray-300 bg-white p-3">
                                 <?php if (!empty($scheduledImageUrls)): ?>
                                 <div class="grid grid-cols-2 gap-2">
-                                    <?php foreach ($scheduledImageUrls as $scheduledImageUrl): ?>
-                                    <a href="<?= htmlspecialchars($scheduledImageUrl) ?>" target="_blank" class="block">
-                                        <img src="<?= htmlspecialchars($scheduledImageUrl) ?>" alt="Scheduled image preview" class="w-full h-28 object-cover rounded-lg border border-gray-200">
-                                    </a>
+                                    <?php foreach ($scheduledImageUrls as $imageUrlIndex => $scheduledImageUrl): ?>
+                                    <div class="relative group">
+                                        <button type="button" class="remove-saved-image absolute top-1 right-1 z-10 inline-flex h-7 w-7 items-center justify-center rounded-full bg-red-600 text-white shadow hover:bg-red-700 transition" data-index="<?= $imageUrlIndex ?>" title="ลบรูปนี้ออกจากรายการ">
+                                            <i class="fas fa-times text-xs"></i>
+                                        </button>
+                                        <a href="<?= htmlspecialchars($scheduledImageUrl) ?>" target="_blank" class="block">
+                                            <img src="<?= htmlspecialchars($scheduledImageUrl) ?>" alt="Scheduled image preview" class="w-full h-28 object-cover rounded-lg border border-gray-200">
+                                        </a>
+                                        <div class="mt-1 text-[11px] text-gray-500 break-all"><?= htmlspecialchars((string) (($scheduledImage['images'] ?? [])[$imageUrlIndex] ?? '')) ?></div>
+                                        <div class="text-[11px] text-green-600">บันทึกแล้ว</div>
+                                    </div>
                                     <?php endforeach; ?>
                                 </div>
-                                <div class="mt-2 text-[11px] text-gray-500 break-all"><?= htmlspecialchars(implode(', ', (array) ($scheduledImage['images'] ?? []))) ?></div>
                                 <?php else: ?>
                                 <div class="h-40 rounded-lg border border-dashed border-gray-200 flex items-center justify-center text-xs text-gray-400">ยังไม่มีรูปอัปโหลด</div>
                                 <?php endif; ?>
@@ -1011,6 +1018,7 @@ document.addEventListener('DOMContentLoaded', function () {
         wrapper.innerHTML = `
             <input type="hidden" name="scheduled_images[${index}][id]" value="${generatedId}">
             <input type="hidden" name="scheduled_images[${index}][images_json]" value="[]">
+            <input type="hidden" class="scheduled-image-urls-json" value="[]">
             <div class="grid grid-cols-1 xl:grid-cols-[180px_180px_180px_auto] gap-3">
                 <div>
                     <label class="text-xs text-gray-500 block mb-1">วันเริ่ม</label>
@@ -1084,7 +1092,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const sourceTime = sourceItem.querySelector('input[type="time"]');
         const sourceCheckbox = sourceItem.querySelector('input[type="checkbox"]');
         const sourceImageHidden = sourceItem.querySelector('input[name*="[images_json]"]');
-        const sourcePreviewBox = sourceItem.querySelector('.scheduled-image-preview-box');
+        const sourceImageUrlsHidden = sourceItem.querySelector('.scheduled-image-urls-json');
         const sourceStatusText = sourceItem.querySelector('.space-y-3 > .text-xs.text-gray-500');
 
         const targetDayStart = newItem.querySelector('select[name*="[day_start]"]');
@@ -1092,7 +1100,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const targetTime = newItem.querySelector('input[type="time"]');
         const targetCheckbox = newItem.querySelector('input[type="checkbox"]');
         const targetImageHidden = newItem.querySelector('input[name*="[images_json]"]');
-        const targetPreviewBox = newItem.querySelector('.scheduled-image-preview-box');
+        const targetImageUrlsHidden = newItem.querySelector('.scheduled-image-urls-json');
         const targetStatusText = newItem.querySelector('.space-y-3 > .text-xs.text-gray-500');
 
         if (targetDayStart && sourceDayStart) targetDayStart.value = sourceDayStart.value;
@@ -1100,25 +1108,73 @@ document.addEventListener('DOMContentLoaded', function () {
         if (targetTime && sourceTime) targetTime.value = sourceTime.value;
         if (targetCheckbox && sourceCheckbox) targetCheckbox.checked = sourceCheckbox.checked;
         if (targetImageHidden && sourceImageHidden) targetImageHidden.value = sourceImageHidden.value;
-        if (targetPreviewBox && sourcePreviewBox) targetPreviewBox.innerHTML = sourcePreviewBox.innerHTML;
+        if (targetImageUrlsHidden && sourceImageUrlsHidden) targetImageUrlsHidden.value = sourceImageUrlsHidden.value;
         if (targetStatusText && sourceStatusText) targetStatusText.textContent = sourceStatusText.textContent;
 
         scheduledImageIndex += 1;
+        renderScheduledImagePreview(newItem);
         return newItem;
     }
 
-    function renderScheduledImagePreview(fileInput) {
-        const item = fileInput.closest('.scheduled-image-item');
-        const previewBox = item ? item.querySelector('.scheduled-image-preview-box') : null;
+    function parseJsonArray(value) {
+        try {
+            const decoded = JSON.parse(value || '[]');
+            return Array.isArray(decoded) ? decoded : [];
+        } catch (error) {
+            return [];
+        }
+    }
+
+    function updateScheduledImageStatus(item, savedCount, selectedCount) {
         const statusText = item ? item.querySelector('.space-y-3 > .text-xs.text-gray-500') : null;
+        if (!statusText) {
+            return;
+        }
+
+        let statusLabel = 'ยังไม่ได้อัปโหลดรูป';
+        if (savedCount > 0 && selectedCount > 0) {
+            statusLabel = 'มีรูปที่บันทึกไว้ และเลือกรูปใหม่แล้ว';
+        } elseif (savedCount > 0) {
+            statusLabel = 'พร้อมใช้งาน';
+        } elseif (selectedCount > 0) {
+            statusLabel = 'เลือกรูปใหม่แล้ว';
+        }
+
+        statusText.textContent = `สถานะตอนนี้: ${statusLabel} / รูปที่บันทึกไว้ ${savedCount} รูป / รูปที่เลือกใหม่ ${selectedCount} รูป`;
+    }
+
+    function setScheduledImageFiles(fileInput, files) {
+        if (typeof DataTransfer === 'undefined') {
+            window.alert('เบราว์เซอร์นี้ยังไม่รองรับการลบรูปที่เพิ่งเลือกทีละรูป กรุณาเลือกไฟล์ใหม่อีกครั้ง');
+            return false;
+        }
+
+        const dataTransfer = new DataTransfer();
+        files.forEach((file) => {
+            dataTransfer.items.add(file);
+        });
+        fileInput.files = dataTransfer.files;
+        return true;
+    }
+
+    function renderScheduledImagePreview(target) {
+        const item = target && target.closest ? target.closest('.scheduled-image-item') : target;
+        const previewBox = item ? item.querySelector('.scheduled-image-preview-box') : null;
+        const fileInput = item ? item.querySelector('.scheduled-image-file-input') : null;
+        const imagesInput = item ? item.querySelector('input[name*="[images_json]"]') : null;
+        const imageUrlsInput = item ? item.querySelector('.scheduled-image-urls-json') : null;
         if (!item || !previewBox) {
             return;
         }
 
-        const files = fileInput.files ? Array.from(fileInput.files) : [];
-        if (files.length === 0) {
-            return;
-        }
+        const savedNames = imagesInput ? parseJsonArray(imagesInput.value).filter((name) => typeof name === 'string' && name !== '') : [];
+        const savedUrls = imageUrlsInput ? parseJsonArray(imageUrlsInput.value).filter((url) => typeof url === 'string' && url !== '') : [];
+        const savedEntries = savedNames.map((name, index) => ({
+            name,
+            url: savedUrls[index] || '',
+        }));
+
+        const files = fileInput && fileInput.files ? Array.from(fileInput.files) : [];
 
         for (const file of files) {
             if (!file.type.startsWith('image/')) {
@@ -1128,22 +1184,45 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         }
 
-        const previewHtml = files.map((file) => {
+        if (savedEntries.length === 0 && files.length === 0) {
+            previewBox.innerHTML = `<div class="h-40 rounded-lg border border-dashed border-gray-200 flex items-center justify-center text-xs text-gray-400">ยังไม่มีรูปอัปโหลด</div>`;
+            updateScheduledImageStatus(item, 0, 0);
+            return;
+        }
+
+        const savedHtml = savedEntries.map((entry, index) => `
+            <div class="relative group">
+                <button type="button" class="remove-saved-image absolute top-1 right-1 z-10 inline-flex h-7 w-7 items-center justify-center rounded-full bg-red-600 text-white shadow hover:bg-red-700 transition" data-index="${index}" title="ลบรูปนี้ออกจากรายการ">
+                    <i class="fas fa-times text-xs"></i>
+                </button>
+                <a href="${entry.url || '#'}" target="_blank" class="block ${entry.url ? '' : 'pointer-events-none'}">
+                    <img src="${entry.url || ''}" alt="Saved scheduled image preview" class="w-full h-28 object-cover rounded-lg border border-gray-200">
+                </a>
+                <div class="mt-1 text-[11px] text-gray-500 break-all">${entry.name}</div>
+                <div class="text-[11px] text-green-600">บันทึกแล้ว</div>
+            </div>
+        `).join('');
+
+        const previewHtml = files.map((file, index) => {
             const previewUrl = URL.createObjectURL(file);
-            return `<div><img src="${previewUrl}" alt="Selected image preview" class="w-full h-28 object-cover rounded-lg border border-gray-200"><div class="mt-1 text-[11px] text-gray-500 break-all">${file.name}</div></div>`;
+            return `
+                <div class="relative group">
+                    <button type="button" class="remove-selected-image absolute top-1 right-1 z-10 inline-flex h-7 w-7 items-center justify-center rounded-full bg-red-600 text-white shadow hover:bg-red-700 transition" data-index="${index}" title="เอารูปนี้ออกก่อนบันทึก">
+                        <i class="fas fa-times text-xs"></i>
+                    </button>
+                    <img src="${previewUrl}" alt="Selected image preview" class="w-full h-28 object-cover rounded-lg border border-gray-200">
+                    <div class="mt-1 text-[11px] text-gray-500 break-all">${file.name}</div>
+                    <div class="text-[11px] text-blue-600">ยังไม่ได้บันทึก</div>
+                </div>
+            `;
         }).join('');
 
         previewBox.innerHTML = `
-            <div class="grid grid-cols-2 gap-2">${previewHtml}</div>
-            <div class="mt-2 text-[11px] text-green-600">พรีวิวจากไฟล์ที่เลือก ${files.length} รูป ยังไม่ได้บันทึกขึ้นระบบ</div>
+            <div class="grid grid-cols-2 gap-2">${savedHtml}${previewHtml}</div>
+            ${files.length > 0 ? `<div class="mt-2 text-[11px] text-green-600">พรีวิวจากไฟล์ที่เลือก ${files.length} รูป ยังไม่ได้บันทึกขึ้นระบบ</div>` : ''}
         `;
 
-        if (statusText) {
-            const savedText = statusText.textContent || '';
-            const savedMatch = savedText.match(/รูปที่บันทึกไว้\s+(\d+)\s+รูป/);
-            const savedCount = savedMatch ? savedMatch[1] : '0';
-            statusText.textContent = `สถานะตอนนี้: เลือกรูปใหม่แล้ว / รูปที่บันทึกไว้ ${savedCount} รูป`;
-        }
+        updateScheduledImageStatus(item, savedEntries.length, files.length);
     }
 
     function updateScheduledMessagesCount() {
@@ -1280,6 +1359,43 @@ document.addEventListener('DOMContentLoaded', function () {
                 return;
             }
 
+            const removeSavedImageButton = event.target.closest('.remove-saved-image');
+            if (removeSavedImageButton) {
+                const item = removeSavedImageButton.closest('.scheduled-image-item');
+                const imageInput = item ? item.querySelector('input[name*="[images_json]"]') : null;
+                const imageUrlsInput = item ? item.querySelector('.scheduled-image-urls-json') : null;
+                const removeIndex = Number(removeSavedImageButton.dataset.index);
+                if (!item || !imageInput || !imageUrlsInput || Number.isNaN(removeIndex)) {
+                    return;
+                }
+
+                const imageNames = parseJsonArray(imageInput.value);
+                const imageUrls = parseJsonArray(imageUrlsInput.value);
+                imageNames.splice(removeIndex, 1);
+                imageUrls.splice(removeIndex, 1);
+                imageInput.value = JSON.stringify(imageNames);
+                imageUrlsInput.value = JSON.stringify(imageUrls);
+                renderScheduledImagePreview(item);
+                return;
+            }
+
+            const removeSelectedImageButton = event.target.closest('.remove-selected-image');
+            if (removeSelectedImageButton) {
+                const item = removeSelectedImageButton.closest('.scheduled-image-item');
+                const fileInput = item ? item.querySelector('.scheduled-image-file-input') : null;
+                const removeIndex = Number(removeSelectedImageButton.dataset.index);
+                if (!item || !fileInput || Number.isNaN(removeIndex)) {
+                    return;
+                }
+
+                const files = fileInput.files ? Array.from(fileInput.files) : [];
+                files.splice(removeIndex, 1);
+                if (setScheduledImageFiles(fileInput, files)) {
+                    renderScheduledImagePreview(item);
+                }
+                return;
+            }
+
             const copyButton = event.target.closest('.copy-scheduled-image');
             if (copyButton) {
                 const item = copyButton.closest('.scheduled-image-item');
@@ -1309,6 +1425,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 const timeInput = item.querySelector('input[type="time"]');
                 const checkbox = item.querySelector('input[type="checkbox"]');
                 const imageHiddenInput = item.querySelector('input[name*="[images_json]"]');
+                const imageUrlsHiddenInput = item.querySelector('.scheduled-image-urls-json');
                 const fileInput = item.querySelector('input[type="file"]');
                 selects.forEach((select) => {
                     select.value = '';
@@ -1316,7 +1433,9 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (timeInput) timeInput.value = '';
                 if (checkbox) checkbox.checked = true;
                 if (imageHiddenInput) imageHiddenInput.value = '[]';
+                if (imageUrlsHiddenInput) imageUrlsHiddenInput.value = '[]';
                 if (fileInput) fileInput.value = '';
+                renderScheduledImagePreview(item);
                 return;
             }
 
