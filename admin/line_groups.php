@@ -724,7 +724,7 @@ require_once 'includes/header.php';
                     <div class="grid grid-cols-1 lg:grid-cols-[220px_1fr] gap-4 items-start">
                         <div class="space-y-2">
                             <label class="text-xs text-gray-500 block">รูปภาพ</label>
-                            <div class="rounded-xl border border-dashed border-gray-300 bg-white p-3">
+                            <div class="scheduled-image-preview-box rounded-xl border border-dashed border-gray-300 bg-white p-3">
                                 <?php if ($scheduledImageUrl): ?>
                                 <a href="<?= htmlspecialchars($scheduledImageUrl) ?>" target="_blank" class="block">
                                     <img src="<?= htmlspecialchars($scheduledImageUrl) ?>" alt="Scheduled image preview" class="w-full h-40 object-cover rounded-lg border border-gray-200">
@@ -734,7 +734,7 @@ require_once 'includes/header.php';
                                 <div class="h-40 rounded-lg border border-dashed border-gray-200 flex items-center justify-center text-xs text-gray-400">ยังไม่มีรูปอัปโหลด</div>
                                 <?php endif; ?>
                             </div>
-                            <input type="file" name="scheduled_image_files[<?= $index ?>]" accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp" class="block w-full text-xs text-gray-500 border rounded-lg px-3 py-2 bg-white">
+                            <input type="file" name="scheduled_image_files[<?= $index ?>]" accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp" class="scheduled-image-file-input block w-full text-xs text-gray-500 border rounded-lg px-3 py-2 bg-white">
                         </div>
                         <div class="space-y-3">
                             <div class="text-xs text-gray-500">สถานะตอนนี้: <?= htmlspecialchars($scheduledImageReasonLabels[$scheduledImageDiagnostics['items'][$index]['reason'] ?? 'ready'] ?? 'พร้อมใช้งาน') ?></div>
@@ -1048,10 +1048,10 @@ document.addEventListener('DOMContentLoaded', function () {
             <div class="grid grid-cols-1 lg:grid-cols-[220px_1fr] gap-4 items-start">
                 <div class="space-y-2">
                     <label class="text-xs text-gray-500 block">รูปภาพ</label>
-                    <div class="rounded-xl border border-dashed border-gray-300 bg-white p-3">
+                    <div class="scheduled-image-preview-box rounded-xl border border-dashed border-gray-300 bg-white p-3">
                         <div class="h-40 rounded-lg border border-dashed border-gray-200 flex items-center justify-center text-xs text-gray-400">ยังไม่มีรูปอัปโหลด</div>
                     </div>
-                    <input type="file" name="scheduled_image_files[${index}]" accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp" class="block w-full text-xs text-gray-500 border rounded-lg px-3 py-2 bg-white">
+                    <input type="file" name="scheduled_image_files[${index}]" accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp" class="scheduled-image-file-input block w-full text-xs text-gray-500 border rounded-lg px-3 py-2 bg-white">
                 </div>
                 <div class="space-y-3">
                     <div class="text-xs text-gray-500">สถานะตอนนี้: ยังไม่ได้อัปโหลดรูป</div>
@@ -1079,7 +1079,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const sourceTime = sourceItem.querySelector('input[type="time"]');
         const sourceCheckbox = sourceItem.querySelector('input[type="checkbox"]');
         const sourceImageHidden = sourceItem.querySelector('input[name*="[image]"]');
-        const sourcePreviewBox = sourceItem.querySelector('.rounded-xl.border.border-dashed');
+        const sourcePreviewBox = sourceItem.querySelector('.scheduled-image-preview-box');
         const sourceStatusText = sourceItem.querySelector('.space-y-3 > .text-xs.text-gray-500');
 
         const targetDayStart = newItem.querySelector('select[name*="[day_start]"]');
@@ -1087,7 +1087,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const targetTime = newItem.querySelector('input[type="time"]');
         const targetCheckbox = newItem.querySelector('input[type="checkbox"]');
         const targetImageHidden = newItem.querySelector('input[name*="[image]"]');
-        const targetPreviewBox = newItem.querySelector('.rounded-xl.border.border-dashed');
+        const targetPreviewBox = newItem.querySelector('.scheduled-image-preview-box');
         const targetStatusText = newItem.querySelector('.space-y-3 > .text-xs.text-gray-500');
 
         if (targetDayStart && sourceDayStart) targetDayStart.value = sourceDayStart.value;
@@ -1100,6 +1100,32 @@ document.addEventListener('DOMContentLoaded', function () {
 
         scheduledImageIndex += 1;
         return newItem;
+    }
+
+    function renderScheduledImagePreview(fileInput) {
+        const item = fileInput.closest('.scheduled-image-item');
+        const previewBox = item ? item.querySelector('.scheduled-image-preview-box') : null;
+        if (!item || !previewBox) {
+            return;
+        }
+
+        const file = fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
+        if (!file) {
+            return;
+        }
+
+        if (!file.type.startsWith('image/')) {
+            window.alert('กรุณาเลือกไฟล์รูปภาพ');
+            fileInput.value = '';
+            return;
+        }
+
+        const previewUrl = URL.createObjectURL(file);
+        previewBox.innerHTML = `
+            <img src="${previewUrl}" alt="Selected image preview" class="w-full h-40 object-cover rounded-lg border border-gray-200">
+            <div class="mt-2 text-[11px] text-gray-500 break-all">${file.name}</div>
+            <div class="mt-1 text-[11px] text-green-600">พรีวิวจากไฟล์ที่เลือก ยังไม่ได้บันทึกขึ้นระบบ</div>
+        `;
     }
 
     function updateScheduledMessagesCount() {
@@ -1270,6 +1296,15 @@ document.addEventListener('DOMContentLoaded', function () {
 
             item.remove();
             updateScheduledImagesCount();
+        });
+
+        scheduledImagesList.addEventListener('change', function (event) {
+            const fileInput = event.target.closest('.scheduled-image-file-input');
+            if (!fileInput) {
+                return;
+            }
+
+            renderScheduledImagePreview(fileInput);
         });
     }
 
