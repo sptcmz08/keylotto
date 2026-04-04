@@ -604,7 +604,7 @@ function processResults($pdo, $results, $source) {
                 } elseif (($lineStats['reason'] ?? '') === 'image_generation_failed') {
                     echo "âš ï¸  {$keyLotteryName}: à¸¢à¸±à¸‡à¹„à¸¡à¹ˆà¸ªà¹ˆà¸‡ LINE à¹€à¸žà¸£à¸²à¸°à¸ªà¸£à¹‰à¸²à¸‡à¸£à¸¹à¸›à¹„à¸¡à¹ˆà¸ªà¸³à¹€à¸£à¹‡à¸ˆ\n";
                 }
-                $lineTextStats = lineSendConfiguredTextNotification($pdo, $lotteryTypeId, $drawDate);
+                $lineTextStats = ['sent' => 0];
                 if (!empty($lineTextStats['sent'])) {
                     echo "ðŸ’¬ {$keyLotteryName}: ส่งข้อความ LINE {$lineTextStats['sent']} กลุ่ม\n";
                 }
@@ -1163,6 +1163,16 @@ $startTime = microtime(true);
 echo "═══════════════════════════════════════\n";
 echo "🎰 Lottery Scraper — " . date('Y-m-d H:i:s') . "\n";
 echo "═══════════════════════════════════════\n\n";
+
+try {
+    $scheduledTextStats = lineSendDueScheduledMessages($pdo);
+    if (!empty($scheduledTextStats['sent_messages'])) {
+        echo "ðŸ’¬ Scheduled LINE text: {$scheduledTextStats['sent_messages']} à¸£à¸²à¸¢à¸à¸²à¸£ / {$scheduledTextStats['sent_groups']} à¸à¸¥à¸¸à¹ˆà¸¡ ({$scheduledTextStats['time']})\n\n";
+    }
+} catch (Exception $scheduledTextError) {
+    echo "âš ï¸  Scheduled LINE text failed: " . $scheduledTextError->getMessage() . "\n\n";
+    lineLog('Scheduled LINE text failed: ' . $scheduledTextError->getMessage());
+}
 
 switch ($scraper) {
     case 'smart':

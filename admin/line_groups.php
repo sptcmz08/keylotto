@@ -10,11 +10,7 @@ $adminTitle = 'LINE Groups';
 
 function lineGroupsRedirectWithFlash(string $type, string $message): void
 {
-    $_SESSION['line_groups_flash'] = [
-        'type' => $type,
-        'message' => $message,
-    ];
-
+    $_SESSION['line_groups_flash'] = ['type' => $type, 'message' => $message];
     header('Location: line_groups.php');
     exit;
 }
@@ -38,35 +34,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         lineSetSetting($pdo, 'public_base_url', $publicBaseUrl !== '' ? $publicBaseUrl : 'https://member.imzshop97.com');
         lineSetSetting($pdo, 'auto_send_results', $autoSendResults);
         lineSetSetting($pdo, 'auto_send_texts', $autoSendTexts);
-
         lineGroupsRedirectWithFlash('success', 'บันทึก LINE settings สำเร็จ');
     }
 
-    if ($action === 'save_auto_text_templates') {
-        $templates = $_POST['auto_text_templates'] ?? [];
-        lineSetAutoTextTemplates($pdo, is_array($templates) ? $templates : []);
-        lineGroupsRedirectWithFlash('success', 'บันทึกข้อความอัตโนมัติสำเร็จ');
+    if ($action === 'save_scheduled_messages') {
+        $messages = $_POST['scheduled_messages'] ?? [];
+        lineSetScheduledTextMessages($pdo, is_array($messages) ? $messages : []);
+        lineGroupsRedirectWithFlash('success', 'บันทึกข้อความอัตโนมัติตามเวลาสำเร็จ');
     }
 
     if ($action === 'send_test') {
         $groupId = trim($_POST['group_id'] ?? '');
         $message = trim($_POST['message'] ?? '');
-
         if ($groupId === '' || $message === '') {
             lineGroupsRedirectWithFlash('error', 'กรุณาเลือกกลุ่มและใส่ข้อความทดสอบ');
         }
-
         if (!lineConfigReady($pdo)) {
             lineGroupsRedirectWithFlash('error', 'ยังไม่ได้ตั้งค่า LINE channel secret และ access token บน server');
         }
 
         $result = linePushTextMessage($pdo, $groupId, $message);
         lineLogPushResult($pdo, $groupId, $message, $result);
-
         if (!empty($result['ok'])) {
             lineGroupsRedirectWithFlash('success', 'ส่งข้อความทดสอบไป LINE สำเร็จ');
         }
-
         lineGroupsRedirectWithFlash('error', 'ส่งข้อความไม่สำเร็จ (HTTP ' . ($result['status'] ?: 0) . ')');
     }
 
@@ -74,13 +65,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $groupId = trim($_POST['group_id'] ?? '');
         $lotteryTypeId = (int) ($_POST['lottery_type_id'] ?? 0);
         $drawDate = trim($_POST['draw_date'] ?? '');
-
         if ($groupId === '' || $lotteryTypeId <= 0 || $drawDate === '') {
             lineGroupsRedirectWithFlash('error', 'ข้อมูลสำหรับส่งรูปผลหวยไม่ครบ');
         }
 
         $result = linePushResultImageToGroup($pdo, $groupId, $lotteryTypeId, $drawDate);
-
         if (!empty($result['ok'])) {
             $renderer = !empty($result['renderer']) ? ' (' . $result['renderer'] . ')' : '';
             lineGroupsRedirectWithFlash('success', 'ส่งรูปผลหวยไป LINE สำเร็จ' . $renderer);
@@ -100,7 +89,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($reason === 'config_not_ready') {
             lineGroupsRedirectWithFlash('error', 'ยังไม่ได้ตั้งค่า LINE channel secret และ access token บน server');
         }
-
         lineGroupsRedirectWithFlash('error', 'ส่งรูปผลหวยไม่สำเร็จ (HTTP ' . ($result['status'] ?: 0) . ')');
     }
 
@@ -115,61 +103,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($groupKey === '') {
             lineGroupsRedirectWithFlash('error', 'Template group is invalid');
         }
-
         if (lineDeleteSharedTemplateImage($groupKey)) {
             lineGroupsRedirectWithFlash('success', 'Shared template image removed');
         }
-
         lineGroupsRedirectWithFlash('error', 'Shared template image was not found');
     }
 }
 
 $flash = $_SESSION['line_groups_flash'] ?? null;
 unset($_SESSION['line_groups_flash']);
-
 $msg = is_array($flash) ? (string) ($flash['message'] ?? '') : '';
 $msgType = is_array($flash) ? (string) ($flash['type'] ?? 'success') : 'success';
 
-$groups = $pdo->query("
-    SELECT *
-    FROM line_groups
-    ORDER BY is_active DESC, last_seen_at DESC, id DESC
-")->fetchAll();
-
-$recentLogs = $pdo->query("
-    SELECT *
-    FROM line_message_logs
-    ORDER BY id DESC
-    LIMIT 20
-")->fetchAll();
-
+$groups = $pdo->query("SELECT * FROM line_groups ORDER BY is_active DESC, last_seen_at DESC, id DESC")->fetchAll();
+$recentLogs = $pdo->query("SELECT * FROM line_message_logs ORDER BY id DESC LIMIT 20")->fetchAll();
 $recentResults = $pdo->query("
-    SELECT
-        r.id,
-        r.lottery_type_id,
-        r.draw_date,
-        r.three_top,
-        r.two_top,
-        r.two_bot,
-        r.updated_at,
-        lt.name AS lottery_name,
-        lc.name AS category_name
+    SELECT r.id, r.lottery_type_id, r.draw_date, r.three_top, r.two_top, r.two_bot, r.updated_at,
+           lt.name AS lottery_name, lc.name AS category_name
     FROM results r
     JOIN lottery_types lt ON r.lottery_type_id = lt.id
     JOIN lottery_categories lc ON lt.category_id = lc.id
     ORDER BY r.draw_date DESC, r.updated_at DESC, r.id DESC
     LIMIT 30
-")->fetchAll();
-
-$lotteryTypes = $pdo->query("
-    SELECT
-        lt.id,
-        lt.name AS lottery_name,
-        lc.name AS category_name
-    FROM lottery_types lt
-    JOIN lottery_categories lc ON lt.category_id = lc.id
-    WHERE lt.is_active = 1
-    ORDER BY lc.sort_order ASC, lt.sort_order ASC, lt.id ASC
 ")->fetchAll();
 
 $sharedTemplateGroups = lineSharedTemplateGroups();
@@ -183,7 +138,16 @@ $savedChannelAccessToken = lineResolvedChannelAccessToken($pdo);
 $savedPublicBaseUrl = lineResolvedPublicBaseUrl($pdo);
 $autoSendResults = lineAutoSendEnabled($pdo);
 $autoSendTexts = lineAutoSendTextsEnabled($pdo);
-$autoTextTemplates = lineGetAutoTextTemplates($pdo);
+$scheduledMessages = lineGetScheduledTextMessages($pdo);
+if (empty($scheduledMessages)) {
+    $scheduledMessages = [[
+        'id' => lineGenerateScheduledMessageId(),
+        'time' => '',
+        'message' => '',
+        'enabled' => true,
+    ]];
+}
+$activeGroupsCount = count(array_filter($groups, static fn($group) => !empty($group['is_active'])));
 
 require_once 'includes/header.php';
 ?>
@@ -198,7 +162,7 @@ require_once 'includes/header.php';
     <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
             <h1 class="text-lg font-bold text-gray-800"><i class="fab fa-line text-green-600 mr-2"></i>LINE Groups</h1>
-            <p class="text-xs text-gray-400">จัดการการส่งรูปผลหวย ข้อความอัตโนมัติ และกลุ่ม LINE ที่เชื่อมผ่าน webhook แล้ว <?= count($groups) ?> กลุ่ม</p>
+            <p class="text-xs text-gray-400">จัดการการส่งรูปผลหวย ข้อความอัตโนมัติตามเวลา และกลุ่ม LINE ที่เชื่อมผ่าน webhook แล้ว <?= count($groups) ?> กลุ่ม</p>
         </div>
         <div class="flex flex-wrap gap-2">
             <button type="button" data-line-tab="settings" class="line-tab-btn bg-[#1b5e20] text-white px-4 py-2 rounded-full text-sm font-medium">ตั้งค่า</button>
@@ -243,7 +207,7 @@ require_once 'includes/header.php';
                 </label>
                 <label class="flex items-start gap-2 text-sm text-gray-700">
                     <input type="checkbox" name="auto_send_texts" value="1" class="mt-1 rounded border-gray-300" <?= $autoSendTexts ? 'checked' : '' ?>>
-                    <span>เปิดส่งข้อความอัตโนมัติตามข้อความที่ตั้งไว้เมื่อมีผลใหม่</span>
+                    <span>เปิดส่งข้อความอัตโนมัติตามเวลาที่ตั้งไว้</span>
                 </label>
             </div>
             <div class="lg:col-span-2">
@@ -396,48 +360,50 @@ require_once 'includes/header.php';
         </div>
 
         <div class="xl:col-span-2 bg-white rounded-xl shadow-sm border overflow-hidden">
-            <div class="px-4 py-3 border-b bg-gray-50 font-semibold text-gray-700">Auto Message Templates</div>
+            <div class="px-4 py-3 border-b bg-gray-50 font-semibold text-gray-700">ข้อความอัตโนมัติตามเวลา</div>
             <div class="px-4 py-3 text-xs text-gray-500 border-b bg-gray-50/60">
-                ตั้งข้อความอัตโนมัติรายหวยได้ที่นี่ ระบบจะส่งข้อความนี้ไปทุกกลุ่มที่ active เมื่อหวยรายการนั้นมีผลใหม่
-                ตัวแปรที่ใช้ได้: <code>{lottery_name}</code>, <code>{draw_date}</code>, <code>{draw_date_display}</code>, <code>{three_top}</code>, <code>{two_top}</code>, <code>{two_bot}</code>
+                เพิ่มข้อความตามเวลาที่ต้องการได้เลย ระบบจะส่งไปทุกกลุ่มที่ active ทุกวันเมื่อถึงเวลาที่ตั้งไว้ในรูปแบบ HH:MM
             </div>
-            <form method="POST">
-                <input type="hidden" name="form_action" value="save_auto_text_templates">
-                <div class="overflow-x-auto">
-                    <table class="w-full text-sm">
-                        <thead class="bg-gray-50 border-b">
-                            <tr>
-                                <th class="px-3 py-2 text-left text-xs text-gray-500">Lottery</th>
-                                <th class="px-3 py-2 text-left text-xs text-gray-500">Category</th>
-                                <th class="px-3 py-2 text-left text-xs text-gray-500">Message template</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($lotteryTypes as $lotteryType): ?>
-                            <tr class="border-b hover:bg-gray-50 align-top">
-                                <td class="px-3 py-3 font-medium text-gray-800"><?= htmlspecialchars($lotteryType['lottery_name']) ?></td>
-                                <td class="px-3 py-3 text-gray-500"><?= htmlspecialchars($lotteryType['category_name']) ?></td>
-                                <td class="px-3 py-3 min-w-[420px]">
-                                    <textarea
-                                        name="auto_text_templates[<?= (int) $lotteryType['id'] ?>]"
-                                        rows="5"
-                                        class="w-full border rounded-lg px-3 py-2 text-sm outline-none"
-                                        placeholder="เว้นว่างไว้ถ้าไม่ต้องการส่งข้อความอัตโนมัติสำหรับหวยรายการนี้"
-                                    ><?= htmlspecialchars((string) ($autoTextTemplates[(int) $lotteryType['id']] ?? '')) ?></textarea>
-                                </td>
-                            </tr>
-                            <?php endforeach; ?>
-                            <?php if (empty($lotteryTypes)): ?>
-                            <tr>
-                                <td colspan="3" class="px-3 py-6 text-center text-sm text-gray-400">No active lottery types found</td>
-                            </tr>
-                            <?php endif; ?>
-                        </tbody>
-                    </table>
+            <form method="POST" class="p-4 space-y-4">
+                <input type="hidden" name="form_action" value="save_scheduled_messages">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <div class="text-sm text-gray-600">ตอนนี้มี <?= count($scheduledMessages) ?> รายการ</div>
+                    <button type="button" id="addScheduledMessageBtn" class="bg-[#1565c0] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#0d47a1] transition">
+                        <i class="fas fa-plus mr-1"></i> เพิ่มข้อความ
+                    </button>
                 </div>
-                <div class="px-4 py-3 border-t bg-white">
+                <div id="scheduledMessagesList" class="space-y-3">
+                    <?php foreach ($scheduledMessages as $index => $scheduledMessage): ?>
+                    <div class="scheduled-message-item rounded-xl border border-gray-200 bg-gray-50 p-4 space-y-3">
+                        <input type="hidden" name="scheduled_messages[<?= $index ?>][id]" value="<?= htmlspecialchars((string) $scheduledMessage['id']) ?>">
+                        <div class="flex flex-col gap-3 lg:flex-row lg:items-center">
+                            <div class="w-full lg:w-44">
+                                <label class="text-xs text-gray-500 block mb-1">เวลาส่ง</label>
+                                <input type="time" name="scheduled_messages[<?= $index ?>][time]" value="<?= htmlspecialchars((string) $scheduledMessage['time']) ?>" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+                            </div>
+                            <div class="flex items-center gap-2 pt-0 lg:pt-5">
+                                <input type="hidden" name="scheduled_messages[<?= $index ?>][enabled]" value="0">
+                                <label class="inline-flex items-center gap-2 text-sm text-gray-700">
+                                    <input type="checkbox" name="scheduled_messages[<?= $index ?>][enabled]" value="1" class="rounded border-gray-300" <?= !empty($scheduledMessage['enabled']) ? 'checked' : '' ?>>
+                                    <span>เปิดใช้</span>
+                                </label>
+                            </div>
+                            <div class="lg:ml-auto pt-0 lg:pt-5">
+                                <button type="button" class="remove-scheduled-message bg-red-50 text-red-700 border border-red-200 px-3 py-2 rounded-lg text-sm font-medium hover:bg-red-100 transition">
+                                    <i class="fas fa-trash-alt mr-1"></i> ลบรายการ
+                                </button>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-500 block mb-1">ข้อความ</label>
+                            <textarea name="scheduled_messages[<?= $index ?>][message]" rows="5" class="w-full border rounded-lg px-3 py-2 text-sm outline-none" placeholder="พิมพ์ข้อความที่ต้องการส่งอัตโนมัติ"><?= htmlspecialchars((string) $scheduledMessage['message']) ?></textarea>
+                        </div>
+                    </div>
+                    <?php endforeach; ?>
+                </div>
+                <div class="border-t pt-4">
                     <button type="submit" class="bg-[#2e7d32] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#1b5e20] transition">
-                        <i class="fas fa-save mr-1"></i> บันทึกข้อความอัตโนมัติ
+                        <i class="fas fa-save mr-1"></i> บันทึกข้อความตามเวลา
                     </button>
                 </div>
             </form>
@@ -491,7 +457,7 @@ require_once 'includes/header.php';
                 </div>
                 <div class="rounded-lg border border-green-200 bg-green-50 p-3">
                     <div class="text-xs text-green-700">กลุ่มที่ active</div>
-                    <div class="mt-1 text-2xl font-bold text-green-700"><?= number_format(count(array_filter($groups, static fn($group) => !empty($group['is_active'])))) ?></div>
+                    <div class="mt-1 text-2xl font-bold text-green-700"><?= number_format($activeGroupsCount) ?></div>
                 </div>
                 <div class="rounded-lg border border-blue-200 bg-blue-50 p-3">
                     <div class="text-xs text-blue-700">ประวัติการส่งล่าสุด</div>
@@ -518,7 +484,7 @@ require_once 'includes/header.php';
                     <tr class="border-b hover:bg-gray-50">
                         <td class="px-3 py-2 text-xs text-gray-500"><?= htmlspecialchars($log['created_at']) ?></td>
                         <td class="px-3 py-2 text-xs text-gray-500"><?= htmlspecialchars($log['group_id']) ?></td>
-                        <td class="px-3 py-2"><?= nl2br(htmlspecialchars($log['message_text'])) ?></td>
+                        <td class="px-3 py-2"><?= nl2br(htmlspecialchars((string) $log['message_text'])) ?></td>
                         <td class="px-3 py-2">
                             <span class="px-2 py-1 rounded-full text-[11px] font-medium <?= $log['status'] === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700' ?>">
                                 <?= htmlspecialchars($log['status']) ?><?= $log['response_code'] ? ' (' . (int) $log['response_code'] . ')' : '' ?>
@@ -541,6 +507,9 @@ require_once 'includes/header.php';
 document.addEventListener('DOMContentLoaded', function () {
     const buttons = Array.from(document.querySelectorAll('[data-line-tab]'));
     const panels = Array.from(document.querySelectorAll('[data-line-panel]'));
+    const scheduledMessagesList = document.getElementById('scheduledMessagesList');
+    const addScheduledMessageBtn = document.getElementById('addScheduledMessageBtn');
+    let scheduledMessageIndex = <?= count($scheduledMessages) ?>;
 
     function activateTab(tabName) {
         buttons.forEach((button) => {
@@ -558,11 +527,74 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
+    function buildScheduledMessageItem(index) {
+        const wrapper = document.createElement('div');
+        const generatedId = 'msg_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+        wrapper.className = 'scheduled-message-item rounded-xl border border-gray-200 bg-gray-50 p-4 space-y-3';
+        wrapper.innerHTML = `
+            <input type="hidden" name="scheduled_messages[${index}][id]" value="${generatedId}">
+            <div class="flex flex-col gap-3 lg:flex-row lg:items-center">
+                <div class="w-full lg:w-44">
+                    <label class="text-xs text-gray-500 block mb-1">เวลาส่ง</label>
+                    <input type="time" name="scheduled_messages[${index}][time]" value="" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+                </div>
+                <div class="flex items-center gap-2 pt-0 lg:pt-5">
+                    <input type="hidden" name="scheduled_messages[${index}][enabled]" value="0">
+                    <label class="inline-flex items-center gap-2 text-sm text-gray-700">
+                        <input type="checkbox" name="scheduled_messages[${index}][enabled]" value="1" class="rounded border-gray-300" checked>
+                        <span>เปิดใช้</span>
+                    </label>
+                </div>
+                <div class="lg:ml-auto pt-0 lg:pt-5">
+                    <button type="button" class="remove-scheduled-message bg-red-50 text-red-700 border border-red-200 px-3 py-2 rounded-lg text-sm font-medium hover:bg-red-100 transition">
+                        <i class="fas fa-trash-alt mr-1"></i> ลบรายการ
+                    </button>
+                </div>
+            </div>
+            <div>
+                <label class="text-xs text-gray-500 block mb-1">ข้อความ</label>
+                <textarea name="scheduled_messages[${index}][message]" rows="5" class="w-full border rounded-lg px-3 py-2 text-sm outline-none" placeholder="พิมพ์ข้อความที่ต้องการส่งอัตโนมัติ"></textarea>
+            </div>
+        `;
+        return wrapper;
+    }
+
     buttons.forEach((button) => {
         button.addEventListener('click', function () {
             activateTab(button.dataset.lineTab);
         });
     });
+
+    if (addScheduledMessageBtn && scheduledMessagesList) {
+        addScheduledMessageBtn.addEventListener('click', function () {
+            scheduledMessagesList.appendChild(buildScheduledMessageItem(scheduledMessageIndex));
+            scheduledMessageIndex += 1;
+        });
+
+        scheduledMessagesList.addEventListener('click', function (event) {
+            const removeButton = event.target.closest('.remove-scheduled-message');
+            if (!removeButton) {
+                return;
+            }
+            const item = removeButton.closest('.scheduled-message-item');
+            if (!item) {
+                return;
+            }
+
+            const items = scheduledMessagesList.querySelectorAll('.scheduled-message-item');
+            if (items.length === 1) {
+                const timeInput = item.querySelector('input[type=\"time\"]');
+                const textarea = item.querySelector('textarea');
+                const checkbox = item.querySelector('input[type=\"checkbox\"]');
+                if (timeInput) timeInput.value = '';
+                if (textarea) textarea.value = '';
+                if (checkbox) checkbox.checked = true;
+                return;
+            }
+
+            item.remove();
+        });
+    }
 
     activateTab('settings');
 });

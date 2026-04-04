@@ -83,6 +83,22 @@ function ensureLineTables(PDO $pdo): void
             UNIQUE KEY uniq_setting_key (setting_key)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS line_schedule_logs (
+            id INT(11) NOT NULL AUTO_INCREMENT,
+            message_id VARCHAR(64) NOT NULL,
+            scheduled_date DATE NOT NULL,
+            scheduled_time VARCHAR(5) NOT NULL,
+            message_text TEXT DEFAULT NULL,
+            sent_groups INT(11) NOT NULL DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            UNIQUE KEY uniq_message_schedule (message_id, scheduled_date, scheduled_time),
+            KEY idx_scheduled_date (scheduled_date),
+            KEY idx_message_id (message_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
 }
 
 function lineGetSetting(PDO $pdo, string $key, string $default = ''): string
@@ -145,42 +161,201 @@ function lineAutoSendTextsEnabled(PDO $pdo): bool
     return lineGetSetting($pdo, 'auto_send_texts', '0') === '1';
 }
 
-function lineGetAutoTextTemplates(PDO $pdo): array
+function lineNormalizeScheduledMessageId(string $value): string
 {
-    $raw = lineGetSetting($pdo, 'auto_text_templates', '{}');
+    $normalized = preg_replace('/[^A-Za-z0-9_-]/', '', trim($value));
+    return is_string($normalized) ? $normalized : '';
+}
+
+function lineGenerateScheduledMessageId(): string
+{
+    try {
+        return 'msg_' . bin2hex(random_bytes(8));
+    } catch (Exception $e) {
+        return 'msg_' . str_replace('.', '', uniqid('', true));
+    }
+}
+
+function lineNormalizeScheduledMessageTime(string $value): string
+{
+    $value = trim($value);
+    if (!preg_match('/^(2[0-3]|[01]\d):([0-5]\d)$/', $value, $matches)) {
+        return '';
+    }
+
+    return sprintf('%02d:%02d', (int) $matches[1], (int) $matches[2]);
+}
+
+function lineGetScheduledTextMessages(PDO $pdo): array
+{
+    $raw = lineGetSetting($pdo, 'scheduled_text_messages', '[]');
     $decoded = json_decode($raw, true);
     if (!is_array($decoded)) {
         return [];
     }
 
-    $templates = [];
-    foreach ($decoded as $lotteryTypeId => $message) {
-        $id = (int) $lotteryTypeId;
-        $text = trim((string) $message);
-        if ($id > 0 && $text !== '') {
-            $templates[$id] = $text;
+    $messages = [];
+    foreach ($decoded as $row) {
+        if (!is_array($row)) {
+            continue;
         }
+
+        $id = lineNormalizeScheduledMessageId((string) ($row['id'] ?? ''));
+        if ($id === '') {
+            $id = lineGenerateScheduledMessageId();
+        }
+
+        $time = lineNormalizeScheduledMessageTime((string) ($row['time'] ?? ''));
+        $message = trim((string) ($row['message'] ?? ''));
+        $enabled = (string) ($row['enabled'] ?? '1') !== '0';
+        if ($time === '' || $message === '') {
+            continue;
+        }
+
+        $messages[] = [
+            'id' => $id,
+            'time' => $time,
+            'message' => $message,
+            'enabled' => $enabled,
+        ];
     }
 
-    return $templates;
+    return $messages;
 }
 
-function lineSetAutoTextTemplates(PDO $pdo, array $templates): void
+function lineSetScheduledTextMessages(PDO $pdo, array $messages): void
 {
     $normalized = [];
-    foreach ($templates as $lotteryTypeId => $message) {
-        $id = (int) $lotteryTypeId;
-        $text = trim((string) $message);
-        if ($id > 0 && $text !== '') {
-            $normalized[(string) $id] = $text;
+    foreach ($messages as $row) {
+        if (!is_array($row)) {
+            continue;
         }
+
+        $id = lineNormalizeScheduledMessageId((string) ($row['id'] ?? ''));
+        if ($id === '') {
+            $id = lineGenerateScheduledMessageId();
+        }
+
+        $time = lineNormalizeScheduledMessageTime((string) ($row['time'] ?? ''));
+        $message = trim((string) ($row['message'] ?? ''));
+        $enabled = (string) ($row['enabled'] ?? '0') === '1';
+        if ($time === '' || $message === '') {
+            continue;
+        }
+
+        $normalized[] = [
+            'id' => $id,
+            'time' => $time,
+            'message' => $message,
+            'enabled' => $enabled ? 1 : 0,
+        ];
     }
 
     lineSetSetting(
         $pdo,
-        'auto_text_templates',
+        'scheduled_text_messages',
         json_encode($normalized, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
     );
+}
+
+function lineScheduledTextAlreadySent(PDO $pdo, string $messageId, string $scheduledDate, string $scheduledTime): bool
+{
+    ensureLineTables($pdo);
+
+    $stmt = $pdo->prepare("
+        SELECT 1
+        FROM line_schedule_logs
+        WHERE message_id = ?
+          AND scheduled_date = ?
+          AND scheduled_time = ?
+        LIMIT 1
+    ");
+    $stmt->execute([$messageId, $scheduledDate, $scheduledTime]);
+
+    return (bool) $stmt->fetchColumn();
+}
+
+function lineMarkScheduledTextSent(
+    PDO $pdo,
+    string $messageId,
+    string $scheduledDate,
+    string $scheduledTime,
+    string $messageText,
+    int $sentGroups
+): void {
+    ensureLineTables($pdo);
+
+    $stmt = $pdo->prepare("
+        INSERT INTO line_schedule_logs (message_id, scheduled_date, scheduled_time, message_text, sent_groups)
+        VALUES (?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+            message_text = VALUES(message_text),
+            sent_groups = VALUES(sent_groups)
+    ");
+    $stmt->execute([$messageId, $scheduledDate, $scheduledTime, $messageText, $sentGroups]);
+}
+
+function lineSendDueScheduledMessages(PDO $pdo, ?DateTimeImmutable $now = null): array
+{
+    if (!lineConfigReady($pdo) || !lineAutoSendTextsEnabled($pdo)) {
+        return ['sent_messages' => 0, 'sent_groups' => 0, 'skipped' => true];
+    }
+
+    $messages = lineGetScheduledTextMessages($pdo);
+    if (empty($messages)) {
+        return ['sent_messages' => 0, 'sent_groups' => 0, 'skipped' => true, 'reason' => 'no_messages'];
+    }
+
+    $groups = $pdo->query("SELECT group_id FROM line_groups WHERE is_active = 1 ORDER BY id ASC")->fetchAll();
+    if (empty($groups)) {
+        return ['sent_messages' => 0, 'sent_groups' => 0, 'skipped' => true, 'reason' => 'no_groups'];
+    }
+
+    $now = $now ?: new DateTimeImmutable('now', new DateTimeZone('Asia/Bangkok'));
+    $scheduledDate = $now->format('Y-m-d');
+    $scheduledTime = $now->format('H:i');
+
+    $sentMessages = 0;
+    $sentGroups = 0;
+    foreach ($messages as $row) {
+        $messageId = (string) ($row['id'] ?? '');
+        $messageTime = (string) ($row['time'] ?? '');
+        $messageText = trim((string) ($row['message'] ?? ''));
+        $enabled = !empty($row['enabled']);
+
+        if (!$enabled || $messageId === '' || $messageTime !== $scheduledTime || $messageText === '') {
+            continue;
+        }
+
+        if (lineScheduledTextAlreadySent($pdo, $messageId, $scheduledDate, $scheduledTime)) {
+            continue;
+        }
+
+        $deliveredGroups = 0;
+        foreach ($groups as $group) {
+            $groupId = (string) ($group['group_id'] ?? '');
+            if ($groupId === '') {
+                continue;
+            }
+
+            $result = linePushTextMessage($pdo, $groupId, $messageText);
+            lineLogPushResult($pdo, $groupId, $messageText, $result);
+            if (!empty($result['ok'])) {
+                $deliveredGroups++;
+            }
+        }
+
+        lineMarkScheduledTextSent($pdo, $messageId, $scheduledDate, $scheduledTime, $messageText, $deliveredGroups);
+        $sentMessages++;
+        $sentGroups += $deliveredGroups;
+    }
+
+    return [
+        'sent_messages' => $sentMessages,
+        'sent_groups' => $sentGroups,
+        'skipped' => false,
+        'time' => $scheduledTime,
+    ];
 }
 
 function lineTemplatesDir(): string
@@ -1421,48 +1596,5 @@ function lineSendResultNotification(PDO $pdo, int $lotteryTypeId, string $drawDa
 
 function lineSendConfiguredTextNotification(PDO $pdo, int $lotteryTypeId, string $drawDate): array
 {
-    if (!lineConfigReady($pdo) || !lineAutoSendTextsEnabled($pdo)) {
-        return ['sent' => 0, 'skipped' => true];
-    }
-
-    $templates = lineGetAutoTextTemplates($pdo);
-    $template = trim((string) ($templates[$lotteryTypeId] ?? ''));
-    if ($template === '') {
-        return ['sent' => 0, 'skipped' => true, 'reason' => 'template_not_found'];
-    }
-
-    $resultRow = lineFetchResultRow($pdo, $lotteryTypeId, $drawDate);
-    if (!$resultRow) {
-        return ['sent' => 0, 'skipped' => true, 'reason' => 'result_not_found'];
-    }
-
-    $message = lineRenderAutoTextTemplate($template, $resultRow);
-    if ($message === '') {
-        return ['sent' => 0, 'skipped' => true, 'reason' => 'message_empty'];
-    }
-
-    $groups = $pdo->query("SELECT group_id FROM line_groups WHERE is_active = 1 ORDER BY id ASC")->fetchAll();
-    if (empty($groups)) {
-        return ['sent' => 0, 'skipped' => true, 'reason' => 'no_groups'];
-    }
-
-    $sent = 0;
-    foreach ($groups as $group) {
-        $groupId = $group['group_id'] ?? '';
-        if ($groupId === '') {
-            continue;
-        }
-
-        $result = linePushTextMessage($pdo, $groupId, $message);
-        lineLogPushResult($pdo, $groupId, $message, $result);
-        if (!empty($result['ok'])) {
-            $sent++;
-        }
-    }
-
-    return [
-        'sent' => $sent,
-        'skipped' => false,
-        'message' => $message,
-    ];
+    return ['sent' => 0, 'skipped' => true, 'reason' => 'deprecated'];
 }
