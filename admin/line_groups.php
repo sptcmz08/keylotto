@@ -414,7 +414,7 @@ require_once 'includes/header.php';
                                 <select name="scheduled_messages[<?= $index ?>][day_start]" class="w-full border rounded-lg px-3 py-2 text-sm outline-none bg-white">
                                     <option value="">ทุกวัน</option>
                                     <?php foreach ($weekdayOptions as $weekdayValue => $weekdayLabel): ?>
-                                    <option value="<?= $weekdayValue ?>" <?= (string) ($scheduledMessage['day_start'] ?? '') === $weekdayValue ? 'selected' : '' ?>><?= $weekdayLabel ?></option>
+                                    <option value="<?= $weekdayValue ?>" <?= (string) ($scheduledMessage['day_start'] ?? '') === (string) $weekdayValue ? 'selected' : '' ?>><?= $weekdayLabel ?></option>
                                     <?php endforeach; ?>
                                 </select>
                             </div>
@@ -423,7 +423,7 @@ require_once 'includes/header.php';
                                 <select name="scheduled_messages[<?= $index ?>][day_end]" class="w-full border rounded-lg px-3 py-2 text-sm outline-none bg-white">
                                     <option value="">ทุกวัน</option>
                                     <?php foreach ($weekdayOptions as $weekdayValue => $weekdayLabel): ?>
-                                    <option value="<?= $weekdayValue ?>" <?= (string) ($scheduledMessage['day_end'] ?? '') === $weekdayValue ? 'selected' : '' ?>><?= $weekdayLabel ?></option>
+                                    <option value="<?= $weekdayValue ?>" <?= (string) ($scheduledMessage['day_end'] ?? '') === (string) $weekdayValue ? 'selected' : '' ?>><?= $weekdayLabel ?></option>
                                     <?php endforeach; ?>
                                 </select>
                             </div>
