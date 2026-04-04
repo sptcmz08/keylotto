@@ -241,6 +241,17 @@ function lineWeekdayInRange(int $weekday, string $startDay, string $endDay): boo
     return $weekday >= $start || $weekday <= $end;
 }
 
+function lineTimeToMinutes(string $time): ?int
+{
+    $normalized = lineNormalizeScheduledMessageTime($time);
+    if ($normalized === '') {
+        return null;
+    }
+
+    [$hours, $minutes] = array_map('intval', explode(':', $normalized, 2));
+    return ($hours * 60) + $minutes;
+}
+
 function lineGetScheduledTextMessages(PDO $pdo): array
 {
     $raw = lineGetSetting($pdo, 'scheduled_text_messages', '[]');
@@ -382,6 +393,8 @@ function lineSendDueScheduledMessages(PDO $pdo, ?DateTimeImmutable $now = null):
     $scheduledDate = $now->format('Y-m-d');
     $scheduledTime = $now->format('H:i');
     $scheduledWeekday = (int) $now->format('w');
+    $currentMinutes = ((int) $now->format('H') * 60) + (int) $now->format('i');
+    $graceMinutes = 5;
 
     $sentMessages = 0;
     $sentGroups = 0;
@@ -393,8 +406,9 @@ function lineSendDueScheduledMessages(PDO $pdo, ?DateTimeImmutable $now = null):
         $messageTime = (string) ($row['time'] ?? '');
         $messageText = trim((string) ($row['message'] ?? ''));
         $enabled = !empty($row['enabled']);
+        $messageMinutes = lineTimeToMinutes($messageTime);
 
-        if (!$enabled || $messageId === '' || $messageTime !== $scheduledTime || $messageText === '') {
+        if (!$enabled || $messageId === '' || $messageText === '' || $messageMinutes === null) {
             continue;
         }
 
@@ -406,7 +420,11 @@ function lineSendDueScheduledMessages(PDO $pdo, ?DateTimeImmutable $now = null):
             continue;
         }
 
-        if (lineScheduledTextAlreadySent($pdo, $messageId, $scheduledDate, $scheduledTime)) {
+        if ($messageMinutes > $currentMinutes || ($currentMinutes - $messageMinutes) > $graceMinutes) {
+            continue;
+        }
+
+        if (lineScheduledTextAlreadySent($pdo, $messageId, $scheduledDate, $messageTime)) {
             continue;
         }
 
@@ -424,7 +442,7 @@ function lineSendDueScheduledMessages(PDO $pdo, ?DateTimeImmutable $now = null):
             }
         }
 
-        lineMarkScheduledTextSent($pdo, $messageId, $scheduledDate, $scheduledTime, $messageText, $deliveredGroups);
+        lineMarkScheduledTextSent($pdo, $messageId, $scheduledDate, $messageTime, $messageText, $deliveredGroups);
         $sentMessages++;
         $sentGroups += $deliveredGroups;
     }
