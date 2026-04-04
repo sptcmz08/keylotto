@@ -291,19 +291,19 @@ require_once 'includes/header.php';
 </div>
 <?php endif; ?>
 
-<div class="mb-4">
+<div class="mt-2 mb-4 relative z-10">
     <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
             <h1 class="text-lg font-bold text-gray-800"><i class="fab fa-line text-green-600 mr-2"></i>LINE Groups</h1>
             <p class="text-xs text-gray-400">จัดการการส่งรูปผลหวย ข้อความอัตโนมัติตามเวลา และกลุ่ม LINE ที่เชื่อมผ่าน webhook แล้ว <?= count($groups) ?> กลุ่ม</p>
         </div>
-        <div class="flex flex-wrap gap-2">
-            <button type="button" data-line-tab="settings" class="line-tab-btn bg-[#1b5e20] text-white px-4 py-2 rounded-full text-sm font-medium">ตั้งค่า</button>
-            <button type="button" data-line-tab="shared-templates" class="line-tab-btn bg-white text-gray-700 border border-gray-200 px-4 py-2 rounded-full text-sm font-medium">Shared Templates</button>
-            <button type="button" data-line-tab="send-image" class="line-tab-btn bg-white text-gray-700 border border-gray-200 px-4 py-2 rounded-full text-sm font-medium">ส่งรูปภาพ</button>
-            <button type="button" data-line-tab="auto-text" class="line-tab-btn bg-white text-gray-700 border border-gray-200 px-4 py-2 rounded-full text-sm font-medium">ส่งข้อความ Auto</button>
-            <button type="button" data-line-tab="auto-image" class="line-tab-btn bg-white text-gray-700 border border-gray-200 px-4 py-2 rounded-full text-sm font-medium">ส่งรูป Auto</button>
-            <button type="button" data-line-tab="groups" class="line-tab-btn bg-white text-gray-700 border border-gray-200 px-4 py-2 rounded-full text-sm font-medium">กลุ่มและประวัติ</button>
+        <div class="flex flex-wrap gap-2 pt-1 relative z-20">
+            <button type="button" data-line-tab="settings" class="line-tab-btn relative z-20 bg-[#1b5e20] text-white px-4 py-2 rounded-full text-sm font-medium">ตั้งค่า</button>
+            <button type="button" data-line-tab="shared-templates" class="line-tab-btn relative z-20 bg-white text-gray-700 border border-gray-200 px-4 py-2 rounded-full text-sm font-medium">Shared Templates</button>
+            <button type="button" data-line-tab="send-image" class="line-tab-btn relative z-20 bg-white text-gray-700 border border-gray-200 px-4 py-2 rounded-full text-sm font-medium">ส่งรูปภาพ</button>
+            <button type="button" data-line-tab="auto-text" class="line-tab-btn relative z-20 bg-white text-gray-700 border border-gray-200 px-4 py-2 rounded-full text-sm font-medium">ส่งข้อความ Auto</button>
+            <button type="button" data-line-tab="auto-image" class="line-tab-btn relative z-20 bg-white text-gray-700 border border-gray-200 px-4 py-2 rounded-full text-sm font-medium">ส่งรูป Auto</button>
+            <button type="button" data-line-tab="groups" class="line-tab-btn relative z-20 bg-white text-gray-700 border border-gray-200 px-4 py-2 rounded-full text-sm font-medium">กลุ่มและประวัติ</button>
         </div>
     </div>
 </div>
