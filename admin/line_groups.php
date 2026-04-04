@@ -282,6 +282,11 @@ $weekdayOptions = [
     '6' => 'เสาร์',
 ];
 
+$allowedTabs = ['settings', 'shared-templates', 'send-image', 'auto-text', 'auto-image', 'groups'];
+$activeTab = isset($_GET['tab']) && in_array((string) $_GET['tab'], $allowedTabs, true)
+    ? (string) $_GET['tab']
+    : 'settings';
+
 require_once 'includes/header.php';
 ?>
 
@@ -1472,6 +1477,63 @@ document.addEventListener('DOMContentLoaded', function () {
 
     activateTab(initialTab);
 });
+</script>
+
+<script>
+(function () {
+    const allowedTabs = new Set(['settings', 'shared-templates', 'send-image', 'auto-text', 'auto-image', 'groups']);
+    const buttons = Array.from(document.querySelectorAll('[data-line-tab]'));
+    const panels = Array.from(document.querySelectorAll('[data-line-panel]'));
+    if (buttons.length === 0 || panels.length === 0) {
+        return;
+    }
+
+    function applyTab(tabName) {
+        const resolvedTab = allowedTabs.has(tabName) ? tabName : 'settings';
+
+        buttons.forEach((button) => {
+            const active = button.dataset.lineTab === resolvedTab;
+            button.classList.toggle('bg-[#1b5e20]', active);
+            button.classList.toggle('text-white', active);
+            button.classList.toggle('border', !active);
+            button.classList.toggle('border-gray-200', !active);
+            button.classList.toggle('bg-white', !active);
+            button.classList.toggle('text-gray-700', !active);
+        });
+
+        panels.forEach((panel) => {
+            panel.classList.toggle('hidden', panel.dataset.linePanel !== resolvedTab);
+        });
+
+        try {
+            const url = new URL(window.location.href);
+            url.searchParams.set('tab', resolvedTab);
+            window.history.replaceState({}, '', url.toString());
+        } catch (error) {
+            // Ignore URL update failures.
+        }
+    }
+
+    let initialTab = 'settings';
+    try {
+        const url = new URL(window.location.href);
+        const tabFromUrl = url.searchParams.get('tab');
+        if (tabFromUrl && allowedTabs.has(tabFromUrl)) {
+            initialTab = tabFromUrl;
+        }
+    } catch (error) {
+        // Ignore URL parsing failures and keep default tab.
+    }
+
+    applyTab(initialTab);
+
+    buttons.forEach((button) => {
+        button.addEventListener('click', function (event) {
+            event.preventDefault();
+            applyTab(button.dataset.lineTab);
+        });
+    });
+})();
 </script>
 
 <?php require_once 'includes/footer.php'; ?>
