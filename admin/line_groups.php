@@ -126,12 +126,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             lineGroupsRedirectWithFlash('error', 'ไม่พบรายการรูปภาพที่เลือก', 'auto-image');
         }
 
-        $imageUrl = lineScheduledImageUrl($pdo, (string) ($selectedImage['image'] ?? ''));
-        if ($imageUrl === null) {
+        $imageUrls = lineScheduledImageUrls($pdo, (array) ($selectedImage['images'] ?? []));
+        if (empty($imageUrls)) {
             lineGroupsRedirectWithFlash('error', 'กรุณาอัปโหลดรูปภาพก่อนกดส่งทันที', 'auto-image');
         }
 
-        $result = linePushImageToActiveGroups($pdo, $imageUrl, '[manual scheduled image]');
+        $result = linePushImageToActiveGroups($pdo, $imageUrls, '[manual scheduled image]');
         if (!empty($result['sent'])) {
             lineGroupsRedirectWithFlash('success', 'ส่งรูปภาพทันทีสำเร็จไป ' . (int) $result['sent'] . ' กลุ่ม', 'auto-image');
         }
@@ -267,6 +267,7 @@ if (empty($scheduledImages)) {
         'day_end' => '',
         'time' => '',
         'image' => '',
+        'images' => [],
         'enabled' => true,
     ]];
 }
@@ -686,10 +687,10 @@ require_once 'includes/header.php';
             </div>
             <div id="scheduledImagesList" class="space-y-3">
                 <?php foreach ($scheduledImages as $index => $scheduledImage): ?>
-                <?php $scheduledImageUrl = !empty($scheduledImage['image']) ? lineScheduledImageUrl($pdo, (string) $scheduledImage['image']) : null; ?>
+                <?php $scheduledImageUrls = lineScheduledImageUrls($pdo, (array) ($scheduledImage['images'] ?? [])); ?>
                 <div class="scheduled-image-item rounded-xl border border-gray-200 bg-gray-50 p-4 space-y-3">
                     <input type="hidden" name="scheduled_images[<?= $index ?>][id]" value="<?= htmlspecialchars((string) $scheduledImage['id']) ?>">
-                    <input type="hidden" name="scheduled_images[<?= $index ?>][image]" value="<?= htmlspecialchars((string) $scheduledImage['image']) ?>">
+                    <input type="hidden" name="scheduled_images[<?= $index ?>][images_json]" value="<?= htmlspecialchars(json_encode(array_values((array) ($scheduledImage['images'] ?? [])), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) ?>">
                     <div class="grid grid-cols-1 xl:grid-cols-[180px_180px_180px_auto] gap-3">
                         <div>
                             <label class="text-xs text-gray-500 block mb-1">วันเริ่ม</label>
@@ -725,19 +726,23 @@ require_once 'includes/header.php';
                         <div class="space-y-2">
                             <label class="text-xs text-gray-500 block">รูปภาพ</label>
                             <div class="scheduled-image-preview-box rounded-xl border border-dashed border-gray-300 bg-white p-3">
-                                <?php if ($scheduledImageUrl): ?>
-                                <a href="<?= htmlspecialchars($scheduledImageUrl) ?>" target="_blank" class="block">
-                                    <img src="<?= htmlspecialchars($scheduledImageUrl) ?>" alt="Scheduled image preview" class="w-full h-40 object-cover rounded-lg border border-gray-200">
-                                </a>
-                                <div class="mt-2 text-[11px] text-gray-500 break-all"><?= htmlspecialchars((string) $scheduledImage['image']) ?></div>
+                                <?php if (!empty($scheduledImageUrls)): ?>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <?php foreach ($scheduledImageUrls as $scheduledImageUrl): ?>
+                                    <a href="<?= htmlspecialchars($scheduledImageUrl) ?>" target="_blank" class="block">
+                                        <img src="<?= htmlspecialchars($scheduledImageUrl) ?>" alt="Scheduled image preview" class="w-full h-28 object-cover rounded-lg border border-gray-200">
+                                    </a>
+                                    <?php endforeach; ?>
+                                </div>
+                                <div class="mt-2 text-[11px] text-gray-500 break-all"><?= htmlspecialchars(implode(', ', (array) ($scheduledImage['images'] ?? []))) ?></div>
                                 <?php else: ?>
                                 <div class="h-40 rounded-lg border border-dashed border-gray-200 flex items-center justify-center text-xs text-gray-400">ยังไม่มีรูปอัปโหลด</div>
                                 <?php endif; ?>
                             </div>
-                            <input type="file" name="scheduled_image_files[<?= $index ?>]" accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp" class="scheduled-image-file-input block w-full text-xs text-gray-500 border rounded-lg px-3 py-2 bg-white">
+                            <input type="file" name="scheduled_image_files[<?= $index ?>][]" multiple accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp" class="scheduled-image-file-input block w-full text-xs text-gray-500 border rounded-lg px-3 py-2 bg-white">
                         </div>
                         <div class="space-y-3">
-                            <div class="text-xs text-gray-500">สถานะตอนนี้: <?= htmlspecialchars($scheduledImageReasonLabels[$scheduledImageDiagnostics['items'][$index]['reason'] ?? 'ready'] ?? 'พร้อมใช้งาน') ?></div>
+                            <div class="text-xs text-gray-500">สถานะตอนนี้: <?= htmlspecialchars($scheduledImageReasonLabels[$scheduledImageDiagnostics['items'][$index]['reason'] ?? 'ready'] ?? 'พร้อมใช้งาน') ?> / รูปที่บันทึกไว้ <?= (int) ($scheduledImageDiagnostics['items'][$index]['image_count'] ?? count((array) ($scheduledImage['images'] ?? []))) ?> รูป</div>
                             <div class="flex flex-wrap gap-2">
                                 <button type="button" class="send-scheduled-image-now bg-blue-50 text-blue-700 border border-blue-200 px-3 py-2 rounded-lg text-sm font-medium hover:bg-blue-100 transition">
                                     <i class="fas fa-paper-plane mr-1"></i> ส่งทันที
@@ -1005,7 +1010,7 @@ document.addEventListener('DOMContentLoaded', function () {
         wrapper.className = 'scheduled-image-item rounded-xl border border-gray-200 bg-gray-50 p-4 space-y-3';
         wrapper.innerHTML = `
             <input type="hidden" name="scheduled_images[${index}][id]" value="${generatedId}">
-            <input type="hidden" name="scheduled_images[${index}][image]" value="">
+            <input type="hidden" name="scheduled_images[${index}][images_json]" value="[]">
             <div class="grid grid-cols-1 xl:grid-cols-[180px_180px_180px_auto] gap-3">
                 <div>
                     <label class="text-xs text-gray-500 block mb-1">วันเริ่ม</label>
@@ -1051,10 +1056,10 @@ document.addEventListener('DOMContentLoaded', function () {
                     <div class="scheduled-image-preview-box rounded-xl border border-dashed border-gray-300 bg-white p-3">
                         <div class="h-40 rounded-lg border border-dashed border-gray-200 flex items-center justify-center text-xs text-gray-400">ยังไม่มีรูปอัปโหลด</div>
                     </div>
-                    <input type="file" name="scheduled_image_files[${index}]" accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp" class="scheduled-image-file-input block w-full text-xs text-gray-500 border rounded-lg px-3 py-2 bg-white">
+                    <input type="file" name="scheduled_image_files[${index}][]" multiple accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp" class="scheduled-image-file-input block w-full text-xs text-gray-500 border rounded-lg px-3 py-2 bg-white">
                 </div>
                 <div class="space-y-3">
-                    <div class="text-xs text-gray-500">สถานะตอนนี้: ยังไม่ได้อัปโหลดรูป</div>
+                    <div class="text-xs text-gray-500">สถานะตอนนี้: ยังไม่ได้อัปโหลดรูป / รูปที่บันทึกไว้ 0 รูป</div>
                     <div class="flex flex-wrap gap-2">
                         <button type="button" class="send-scheduled-image-now bg-blue-50 text-blue-700 border border-blue-200 px-3 py-2 rounded-lg text-sm font-medium hover:bg-blue-100 transition">
                             <i class="fas fa-paper-plane mr-1"></i> ส่งทันที
@@ -1078,7 +1083,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const sourceDayEnd = sourceItem.querySelector('select[name*="[day_end]"]');
         const sourceTime = sourceItem.querySelector('input[type="time"]');
         const sourceCheckbox = sourceItem.querySelector('input[type="checkbox"]');
-        const sourceImageHidden = sourceItem.querySelector('input[name*="[image]"]');
+        const sourceImageHidden = sourceItem.querySelector('input[name*="[images_json]"]');
         const sourcePreviewBox = sourceItem.querySelector('.scheduled-image-preview-box');
         const sourceStatusText = sourceItem.querySelector('.space-y-3 > .text-xs.text-gray-500');
 
@@ -1086,7 +1091,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const targetDayEnd = newItem.querySelector('select[name*="[day_end]"]');
         const targetTime = newItem.querySelector('input[type="time"]');
         const targetCheckbox = newItem.querySelector('input[type="checkbox"]');
-        const targetImageHidden = newItem.querySelector('input[name*="[image]"]');
+        const targetImageHidden = newItem.querySelector('input[name*="[images_json]"]');
         const targetPreviewBox = newItem.querySelector('.scheduled-image-preview-box');
         const targetStatusText = newItem.querySelector('.space-y-3 > .text-xs.text-gray-500');
 
@@ -1105,27 +1110,40 @@ document.addEventListener('DOMContentLoaded', function () {
     function renderScheduledImagePreview(fileInput) {
         const item = fileInput.closest('.scheduled-image-item');
         const previewBox = item ? item.querySelector('.scheduled-image-preview-box') : null;
+        const statusText = item ? item.querySelector('.space-y-3 > .text-xs.text-gray-500') : null;
         if (!item || !previewBox) {
             return;
         }
 
-        const file = fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
-        if (!file) {
+        const files = fileInput.files ? Array.from(fileInput.files) : [];
+        if (files.length === 0) {
             return;
         }
 
-        if (!file.type.startsWith('image/')) {
-            window.alert('กรุณาเลือกไฟล์รูปภาพ');
-            fileInput.value = '';
-            return;
+        for (const file of files) {
+            if (!file.type.startsWith('image/')) {
+                window.alert('กรุณาเลือกไฟล์รูปภาพ');
+                fileInput.value = '';
+                return;
+            }
         }
 
-        const previewUrl = URL.createObjectURL(file);
+        const previewHtml = files.map((file) => {
+            const previewUrl = URL.createObjectURL(file);
+            return `<div><img src="${previewUrl}" alt="Selected image preview" class="w-full h-28 object-cover rounded-lg border border-gray-200"><div class="mt-1 text-[11px] text-gray-500 break-all">${file.name}</div></div>`;
+        }).join('');
+
         previewBox.innerHTML = `
-            <img src="${previewUrl}" alt="Selected image preview" class="w-full h-40 object-cover rounded-lg border border-gray-200">
-            <div class="mt-2 text-[11px] text-gray-500 break-all">${file.name}</div>
-            <div class="mt-1 text-[11px] text-green-600">พรีวิวจากไฟล์ที่เลือก ยังไม่ได้บันทึกขึ้นระบบ</div>
+            <div class="grid grid-cols-2 gap-2">${previewHtml}</div>
+            <div class="mt-2 text-[11px] text-green-600">พรีวิวจากไฟล์ที่เลือก ${files.length} รูป ยังไม่ได้บันทึกขึ้นระบบ</div>
         `;
+
+        if (statusText) {
+            const savedText = statusText.textContent || '';
+            const savedMatch = savedText.match(/รูปที่บันทึกไว้\s+(\d+)\s+รูป/);
+            const savedCount = savedMatch ? savedMatch[1] : '0';
+            statusText.textContent = `สถานะตอนนี้: เลือกรูปใหม่แล้ว / รูปที่บันทึกไว้ ${savedCount} รูป`;
+        }
     }
 
     function updateScheduledMessagesCount() {
@@ -1240,8 +1258,16 @@ document.addEventListener('DOMContentLoaded', function () {
             if (sendNowButton) {
                 const item = sendNowButton.closest('.scheduled-image-item');
                 const idInput = item ? item.querySelector('input[name*="[id]"]') : null;
-                const imageInput = item ? item.querySelector('input[name*="[image]"]') : null;
-                const hasImage = imageInput ? imageInput.value.trim() !== '' : false;
+                const imageInput = item ? item.querySelector('input[name*="[images_json]"]') : null;
+                let hasImage = false;
+                if (imageInput) {
+                    try {
+                        const decoded = JSON.parse(imageInput.value || '[]');
+                        hasImage = Array.isArray(decoded) && decoded.length > 0;
+                    } catch (error) {
+                        hasImage = imageInput.value.trim() !== '' && imageInput.value.trim() !== '[]';
+                    }
+                }
                 if (!hasImage) {
                     window.alert('กรุณาอัปโหลดรูปภาพก่อนกดส่งทันที');
                     return;
@@ -1282,14 +1308,14 @@ document.addEventListener('DOMContentLoaded', function () {
                 const selects = item.querySelectorAll('select');
                 const timeInput = item.querySelector('input[type="time"]');
                 const checkbox = item.querySelector('input[type="checkbox"]');
-                const imageHiddenInput = item.querySelector('input[name*="[image]"]');
+                const imageHiddenInput = item.querySelector('input[name*="[images_json]"]');
                 const fileInput = item.querySelector('input[type="file"]');
                 selects.forEach((select) => {
                     select.value = '';
                 });
                 if (timeInput) timeInput.value = '';
                 if (checkbox) checkbox.checked = true;
-                if (imageHiddenInput) imageHiddenInput.value = '';
+                if (imageHiddenInput) imageHiddenInput.value = '[]';
                 if (fileInput) fileInput.value = '';
                 return;
             }
