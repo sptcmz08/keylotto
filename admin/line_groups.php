@@ -174,6 +174,19 @@ $savedPublicBaseUrl = lineResolvedPublicBaseUrl($pdo);
 $autoSendResults = lineAutoSendEnabled($pdo);
 $autoSendTexts = lineAutoSendTextsEnabled($pdo);
 $scheduledMessages = lineGetScheduledTextMessages($pdo);
+$scheduledDiagnostics = lineDiagnoseScheduledTextMessages($pdo);
+$scheduledReasonLabels = [
+    'due_now' => 'ถึงเวลาส่งตอนนี้',
+    'already_sent' => 'ส่งแล้วในรอบวันนี้',
+    'not_due_yet' => 'ยังไม่ถึงเวลา',
+    'outside_grace_window' => 'เลยช่วงเวลาส่งแล้ว',
+    'weekday_mismatch' => 'ไม่อยู่ในช่วงวัน',
+    'date_mismatch' => 'ไม่ตรงวันที่กำหนด',
+    'time_empty' => 'ยังไม่ได้ตั้งเวลา',
+    'message_empty' => 'ยังไม่ได้ใส่ข้อความ',
+    'disabled' => 'ปิดใช้งานอยู่',
+    'ready' => 'พร้อมใช้งาน',
+];
 if (empty($scheduledMessages)) {
     $scheduledMessages = [[
         'id' => lineGenerateScheduledMessageId(),
@@ -409,6 +422,68 @@ require_once 'includes/header.php';
             <div class="px-4 py-3 border-b bg-gray-50 font-semibold text-gray-700">ข้อความอัตโนมัติตามช่วงวันและเวลา</div>
             <div class="px-4 py-3 text-xs text-gray-500 border-b bg-gray-50/60">
                 เลือกวันเริ่มและวันสิ้นสุดได้ เช่น จันทร์-ศุกร์ หรือ อาทิตย์-จันทร์ ถ้าเว้นทั้งคู่ไว้ ระบบจะส่งทุกวันตามเวลาที่ตั้งไว้
+            </div>
+            <div class="px-4 py-4 border-b bg-white">
+                <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+                    <div class="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+                        <div class="text-xs text-gray-500 mb-1">เวลา server</div>
+                        <div class="text-sm font-semibold text-gray-800"><?= htmlspecialchars($scheduledDiagnostics['server_date']) ?> <?= htmlspecialchars($scheduledDiagnostics['server_time']) ?></div>
+                        <div class="text-xs text-gray-500 mt-1"><?= htmlspecialchars($scheduledDiagnostics['server_weekday']) ?></div>
+                    </div>
+                    <div class="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+                        <div class="text-xs text-gray-500 mb-1">สถานะ Auto Text</div>
+                        <div class="text-sm font-semibold <?= !empty($scheduledDiagnostics['auto_send_texts_enabled']) ? 'text-green-700' : 'text-red-600' ?>">
+                            <?= !empty($scheduledDiagnostics['auto_send_texts_enabled']) ? 'เปิดใช้งานแล้ว' : 'ยังปิดอยู่' ?>
+                        </div>
+                        <div class="text-xs text-gray-500 mt-1">Config <?= !empty($scheduledDiagnostics['config_ready']) ? 'พร้อม' : 'ยังไม่พร้อม' ?> / กลุ่ม active <?= (int) $scheduledDiagnostics['active_groups'] ?></div>
+                    </div>
+                    <div class="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+                        <div class="text-xs text-gray-500 mb-1">ข้อความพร้อมส่ง</div>
+                        <div class="text-sm font-semibold text-gray-800"><?= (int) $scheduledDiagnostics['due_messages'] ?> รายการ</div>
+                        <div class="text-xs text-gray-500 mt-1">ข้อความที่ตั้งครบ <?= (int) $scheduledDiagnostics['ready_messages'] ?> / ทั้งหมด <?= (int) $scheduledDiagnostics['total_messages'] ?></div>
+                    </div>
+                    <div class="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+                        <div class="text-xs text-gray-500 mb-1">ช่วงเผื่อเวลา</div>
+                        <div class="text-sm font-semibold text-gray-800"><?= (int) $scheduledDiagnostics['grace_minutes'] ?> นาที</div>
+                        <div class="text-xs text-gray-500 mt-1">ถ้า cron มาช้า ระบบยังตามส่งในช่วงนี้</div>
+                    </div>
+                </div>
+                <?php if (!empty($scheduledDiagnostics['reason_counts'])): ?>
+                <div class="mt-4">
+                    <div class="text-xs text-gray-500 mb-2">สรุปสถานะรายการที่ตั้งไว้ตอนนี้</div>
+                    <div class="flex flex-wrap gap-2">
+                        <?php foreach ($scheduledDiagnostics['reason_counts'] as $reasonKey => $reasonCount): ?>
+                        <span class="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-xs text-gray-700">
+                            <?= htmlspecialchars($scheduledReasonLabels[$reasonKey] ?? $reasonKey) ?> <?= (int) $reasonCount ?>
+                        </span>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+                <?php endif; ?>
+                <?php if (!empty($scheduledDiagnostics['items'])): ?>
+                <div class="mt-4 overflow-x-auto">
+                    <table class="w-full text-xs">
+                        <thead class="bg-gray-50 border-y">
+                            <tr>
+                                <th class="px-3 py-2 text-left text-gray-500">เวลา</th>
+                                <th class="px-3 py-2 text-left text-gray-500">ช่วงวัน</th>
+                                <th class="px-3 py-2 text-left text-gray-500">สถานะ</th>
+                                <th class="px-3 py-2 text-left text-gray-500">ตัวอย่างข้อความ</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($scheduledDiagnostics['items'] as $diagnosticItem): ?>
+                            <tr class="border-b">
+                                <td class="px-3 py-2 text-gray-700"><?= htmlspecialchars($diagnosticItem['time'] !== '' ? $diagnosticItem['time'] : '-') ?></td>
+                                <td class="px-3 py-2 text-gray-700"><?= htmlspecialchars($diagnosticItem['range']) ?></td>
+                                <td class="px-3 py-2 text-gray-700"><?= htmlspecialchars($scheduledReasonLabels[$diagnosticItem['reason']] ?? $diagnosticItem['reason']) ?></td>
+                                <td class="px-3 py-2 text-gray-500"><?= htmlspecialchars($diagnosticItem['preview'] !== '' ? $diagnosticItem['preview'] : '-') ?></td>
+                            </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+                <?php endif; ?>
             </div>
             <form method="POST" class="p-4 space-y-4">
                 <input type="hidden" name="form_action" value="save_scheduled_messages">

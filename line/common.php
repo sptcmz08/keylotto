@@ -252,6 +252,119 @@ function lineTimeToMinutes(string $time): ?int
     return ($hours * 60) + $minutes;
 }
 
+function lineWeekdayLabel(string $value): string
+{
+    $labels = [
+        '0' => 'อาทิตย์',
+        '1' => 'จันทร์',
+        '2' => 'อังคาร',
+        '3' => 'พุธ',
+        '4' => 'พฤหัสบดี',
+        '5' => 'ศุกร์',
+        '6' => 'เสาร์',
+    ];
+
+    return $labels[$value] ?? 'ทุกวัน';
+}
+
+function lineDescribeWeekdayRange(string $startDay, string $endDay): string
+{
+    if ($startDay === '' && $endDay === '') {
+        return 'ทุกวัน';
+    }
+
+    if ($startDay === '' && $endDay !== '') {
+        $startDay = $endDay;
+    } elseif ($endDay === '' && $startDay !== '') {
+        $endDay = $startDay;
+    }
+
+    if ($startDay === $endDay) {
+        return lineWeekdayLabel($startDay);
+    }
+
+    return lineWeekdayLabel($startDay) . ' - ' . lineWeekdayLabel($endDay);
+}
+
+function lineDiagnoseScheduledTextMessages(PDO $pdo, ?DateTimeImmutable $now = null): array
+{
+    $now = $now ?: new DateTimeImmutable('now', new DateTimeZone('Asia/Bangkok'));
+    $scheduledDate = $now->format('Y-m-d');
+    $scheduledTime = $now->format('H:i');
+    $scheduledWeekday = (int) $now->format('w');
+    $currentMinutes = ((int) $now->format('H') * 60) + (int) $now->format('i');
+    $graceMinutes = 15;
+    $messages = lineGetScheduledTextMessages($pdo);
+    $groups = $pdo->query("SELECT group_id FROM line_groups WHERE is_active = 1 ORDER BY id ASC")->fetchAll();
+
+    $diagnostics = [
+        'server_time' => $scheduledTime,
+        'server_date' => $scheduledDate,
+        'server_weekday' => lineWeekdayLabel((string) $scheduledWeekday),
+        'grace_minutes' => $graceMinutes,
+        'config_ready' => lineConfigReady($pdo),
+        'auto_send_texts_enabled' => lineAutoSendTextsEnabled($pdo),
+        'active_groups' => count($groups),
+        'total_messages' => count($messages),
+        'ready_messages' => 0,
+        'due_messages' => 0,
+        'reason_counts' => [],
+        'items' => [],
+    ];
+
+    foreach ($messages as $row) {
+        $messageId = (string) ($row['id'] ?? '');
+        $messageDate = (string) ($row['date'] ?? '');
+        $messageDayStart = (string) ($row['day_start'] ?? '');
+        $messageDayEnd = (string) ($row['day_end'] ?? '');
+        $messageTime = (string) ($row['time'] ?? '');
+        $messageText = trim((string) ($row['message'] ?? ''));
+        $enabled = !empty($row['enabled']);
+        $messageMinutes = lineTimeToMinutes($messageTime);
+        $reason = 'ready';
+
+        if (!$enabled) {
+            $reason = 'disabled';
+        } elseif ($messageText === '') {
+            $reason = 'message_empty';
+        } elseif ($messageMinutes === null) {
+            $reason = 'time_empty';
+        } else {
+            $diagnostics['ready_messages']++;
+
+            if ($messageDate !== '' && $messageDate !== $scheduledDate) {
+                $reason = 'date_mismatch';
+            } elseif ($messageDate === '' && !lineWeekdayInRange($scheduledWeekday, $messageDayStart, $messageDayEnd)) {
+                $reason = 'weekday_mismatch';
+            } elseif ($messageMinutes > $currentMinutes) {
+                $reason = 'not_due_yet';
+            } elseif (($currentMinutes - $messageMinutes) > $graceMinutes) {
+                $reason = 'outside_grace_window';
+            } elseif (lineScheduledTextAlreadySent($pdo, $messageId, $scheduledDate, $messageTime)) {
+                $reason = 'already_sent';
+            } else {
+                $reason = 'due_now';
+                $diagnostics['due_messages']++;
+            }
+        }
+
+        if (!isset($diagnostics['reason_counts'][$reason])) {
+            $diagnostics['reason_counts'][$reason] = 0;
+        }
+        $diagnostics['reason_counts'][$reason]++;
+
+        $diagnostics['items'][] = [
+            'id' => $messageId,
+            'time' => $messageTime,
+            'range' => $messageDate !== '' ? $messageDate : lineDescribeWeekdayRange($messageDayStart, $messageDayEnd),
+            'reason' => $reason,
+            'preview' => substr((string) preg_replace('/\s+/', ' ', $messageText), 0, 120),
+        ];
+    }
+
+    return $diagnostics;
+}
+
 function lineGetScheduledTextMessages(PDO $pdo): array
 {
     $raw = lineGetSetting($pdo, 'scheduled_text_messages', '[]');
