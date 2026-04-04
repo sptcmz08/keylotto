@@ -201,6 +201,46 @@ function lineNormalizeScheduledMessageDate(string $value): string
     return $value;
 }
 
+function lineNormalizeScheduledWeekday(string $value): string
+{
+    $value = trim($value);
+    if ($value === '') {
+        return '';
+    }
+
+    if (!preg_match('/^[0-6]$/', $value)) {
+        return '';
+    }
+
+    return $value;
+}
+
+function lineWeekdayInRange(int $weekday, string $startDay, string $endDay): bool
+{
+    if ($startDay === '' && $endDay === '') {
+        return true;
+    }
+
+    if ($startDay === '' && $endDay !== '') {
+        $startDay = $endDay;
+    } elseif ($endDay === '' && $startDay !== '') {
+        $endDay = $startDay;
+    }
+
+    if ($startDay === '' || $endDay === '') {
+        return true;
+    }
+
+    $start = (int) $startDay;
+    $end = (int) $endDay;
+
+    if ($start <= $end) {
+        return $weekday >= $start && $weekday <= $end;
+    }
+
+    return $weekday >= $start || $weekday <= $end;
+}
+
 function lineGetScheduledTextMessages(PDO $pdo): array
 {
     $raw = lineGetSetting($pdo, 'scheduled_text_messages', '[]');
@@ -221,6 +261,8 @@ function lineGetScheduledTextMessages(PDO $pdo): array
         }
 
         $date = lineNormalizeScheduledMessageDate((string) ($row['date'] ?? ''));
+        $dayStart = lineNormalizeScheduledWeekday((string) ($row['day_start'] ?? ''));
+        $dayEnd = lineNormalizeScheduledWeekday((string) ($row['day_end'] ?? ''));
         $time = lineNormalizeScheduledMessageTime((string) ($row['time'] ?? ''));
         $message = trim((string) ($row['message'] ?? ''));
         $enabled = (string) ($row['enabled'] ?? '1') !== '0';
@@ -231,6 +273,8 @@ function lineGetScheduledTextMessages(PDO $pdo): array
         $messages[] = [
             'id' => $id,
             'date' => $date,
+            'day_start' => $dayStart,
+            'day_end' => $dayEnd,
             'time' => $time,
             'message' => $message,
             'enabled' => $enabled,
@@ -254,6 +298,8 @@ function lineSetScheduledTextMessages(PDO $pdo, array $messages): void
         }
 
         $date = lineNormalizeScheduledMessageDate((string) ($row['date'] ?? ''));
+        $dayStart = lineNormalizeScheduledWeekday((string) ($row['day_start'] ?? ''));
+        $dayEnd = lineNormalizeScheduledWeekday((string) ($row['day_end'] ?? ''));
         $time = lineNormalizeScheduledMessageTime((string) ($row['time'] ?? ''));
         $message = trim((string) ($row['message'] ?? ''));
         $enabled = (string) ($row['enabled'] ?? '0') === '1';
@@ -261,9 +307,17 @@ function lineSetScheduledTextMessages(PDO $pdo, array $messages): void
             continue;
         }
 
+        if ($dayStart === '' && $dayEnd !== '') {
+            $dayStart = $dayEnd;
+        } elseif ($dayEnd === '' && $dayStart !== '') {
+            $dayEnd = $dayStart;
+        }
+
         $normalized[] = [
             'id' => $id,
             'date' => $date,
+            'day_start' => $dayStart,
+            'day_end' => $dayEnd,
             'time' => $time,
             'message' => $message,
             'enabled' => $enabled ? 1 : 0,
@@ -333,12 +387,15 @@ function lineSendDueScheduledMessages(PDO $pdo, ?DateTimeImmutable $now = null):
     $now = $now ?: new DateTimeImmutable('now', new DateTimeZone('Asia/Bangkok'));
     $scheduledDate = $now->format('Y-m-d');
     $scheduledTime = $now->format('H:i');
+    $scheduledWeekday = (int) $now->format('w');
 
     $sentMessages = 0;
     $sentGroups = 0;
     foreach ($messages as $row) {
         $messageId = (string) ($row['id'] ?? '');
         $messageDate = (string) ($row['date'] ?? '');
+        $messageDayStart = (string) ($row['day_start'] ?? '');
+        $messageDayEnd = (string) ($row['day_end'] ?? '');
         $messageTime = (string) ($row['time'] ?? '');
         $messageText = trim((string) ($row['message'] ?? ''));
         $enabled = !empty($row['enabled']);
@@ -348,6 +405,10 @@ function lineSendDueScheduledMessages(PDO $pdo, ?DateTimeImmutable $now = null):
         }
 
         if ($messageDate !== '' && $messageDate !== $scheduledDate) {
+            continue;
+        }
+
+        if ($messageDate === '' && !lineWeekdayInRange($scheduledWeekday, $messageDayStart, $messageDayEnd)) {
             continue;
         }
 
