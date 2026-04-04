@@ -1136,6 +1136,42 @@ function lineResultSummaryText(array $resultRow): string
     return implode(' | ', $parts);
 }
 
+function linePushTextToActiveGroups(PDO $pdo, string $message): array
+{
+    $message = trim($message);
+    if ($message === '') {
+        return ['sent' => 0, 'failed' => 0, 'skipped' => true, 'reason' => 'message_empty'];
+    }
+
+    if (!lineConfigReady($pdo)) {
+        return ['sent' => 0, 'failed' => 0, 'skipped' => true, 'reason' => 'config_not_ready'];
+    }
+
+    $groups = $pdo->query("SELECT group_id FROM line_groups WHERE is_active = 1 ORDER BY id ASC")->fetchAll();
+    if (empty($groups)) {
+        return ['sent' => 0, 'failed' => 0, 'skipped' => true, 'reason' => 'no_groups'];
+    }
+
+    $sent = 0;
+    $failed = 0;
+    foreach ($groups as $group) {
+        $groupId = (string) ($group['group_id'] ?? '');
+        if ($groupId === '') {
+            continue;
+        }
+
+        $result = linePushTextMessage($pdo, $groupId, $message);
+        lineLogPushResult($pdo, $groupId, $message, $result);
+        if (!empty($result['ok'])) {
+            $sent++;
+        } else {
+            $failed++;
+        }
+    }
+
+    return ['sent' => $sent, 'failed' => $failed, 'skipped' => false];
+}
+
 function lineRenderAutoTextTemplate(string $template, array $resultRow): string
 {
     $drawDate = (string) ($resultRow['draw_date'] ?? '');

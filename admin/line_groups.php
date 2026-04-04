@@ -61,6 +61,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         lineGroupsRedirectWithFlash('error', 'ส่งข้อความไม่สำเร็จ (HTTP ' . ($result['status'] ?: 0) . ')');
     }
 
+    if ($action === 'send_scheduled_message_now') {
+        $message = trim($_POST['scheduled_message_now'] ?? '');
+        if ($message === '') {
+            lineGroupsRedirectWithFlash('error', 'กรุณาใส่ข้อความก่อนกดส่งทันที');
+        }
+
+        $result = linePushTextToActiveGroups($pdo, $message);
+        if (!empty($result['sent'])) {
+            lineGroupsRedirectWithFlash('success', 'ส่งข้อความทันทีสำเร็จไป ' . (int) $result['sent'] . ' กลุ่ม');
+        }
+
+        if (($result['reason'] ?? '') === 'config_not_ready') {
+            lineGroupsRedirectWithFlash('error', 'ยังไม่ได้ตั้งค่า LINE channel secret และ access token บน server');
+        }
+        if (($result['reason'] ?? '') === 'no_groups') {
+            lineGroupsRedirectWithFlash('error', 'ยังไม่มีกลุ่ม LINE ที่ active สำหรับส่งข้อความ');
+        }
+
+        lineGroupsRedirectWithFlash('error', 'ส่งข้อความทันทีไม่สำเร็จ');
+    }
+
     if ($action === 'send_result_image') {
         $groupId = trim($_POST['group_id'] ?? '');
         $lotteryTypeId = (int) ($_POST['lottery_type_id'] ?? 0);
@@ -378,7 +399,7 @@ require_once 'includes/header.php';
             <form method="POST" class="p-4 space-y-4">
                 <input type="hidden" name="form_action" value="save_scheduled_messages">
                 <div class="flex flex-wrap items-center justify-between gap-3">
-                    <div class="text-sm text-gray-600">ตอนนี้มี <?= count($scheduledMessages) ?> รายการ</div>
+                    <div id="scheduledMessagesCount" class="text-sm text-gray-600">ตอนนี้มี <?= count($scheduledMessages) ?> รายการ</div>
                     <button type="button" id="addScheduledMessageBtn" class="bg-[#1565c0] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#0d47a1] transition">
                         <i class="fas fa-plus mr-1"></i> เพิ่มข้อความ
                     </button>
@@ -418,9 +439,14 @@ require_once 'includes/header.php';
                                 </label>
                             </div>
                             <div class="lg:ml-auto pt-0 lg:pt-5">
-                                <button type="button" class="remove-scheduled-message bg-red-50 text-red-700 border border-red-200 px-3 py-2 rounded-lg text-sm font-medium hover:bg-red-100 transition">
-                                    <i class="fas fa-trash-alt mr-1"></i> ลบรายการ
-                                </button>
+                                <div class="flex flex-wrap gap-2">
+                                    <button type="button" class="send-scheduled-now bg-blue-50 text-blue-700 border border-blue-200 px-3 py-2 rounded-lg text-sm font-medium hover:bg-blue-100 transition">
+                                        <i class="fas fa-paper-plane mr-1"></i> ส่งทันที
+                                    </button>
+                                    <button type="button" class="remove-scheduled-message bg-red-50 text-red-700 border border-red-200 px-3 py-2 rounded-lg text-sm font-medium hover:bg-red-100 transition">
+                                        <i class="fas fa-trash-alt mr-1"></i> ลบรายการ
+                                    </button>
+                                </div>
                             </div>
                         </div>
                         <div>
@@ -532,12 +558,20 @@ require_once 'includes/header.php';
     </div>
 </section>
 
+<form method="POST" id="sendScheduledNowForm" class="hidden">
+    <input type="hidden" name="form_action" value="send_scheduled_message_now">
+    <input type="hidden" name="scheduled_message_now" id="scheduledMessageNowInput" value="">
+</form>
+
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     const buttons = Array.from(document.querySelectorAll('[data-line-tab]'));
     const panels = Array.from(document.querySelectorAll('[data-line-panel]'));
     const scheduledMessagesList = document.getElementById('scheduledMessagesList');
     const addScheduledMessageBtn = document.getElementById('addScheduledMessageBtn');
+    const scheduledMessagesCount = document.getElementById('scheduledMessagesCount');
+    const sendScheduledNowForm = document.getElementById('sendScheduledNowForm');
+    const scheduledMessageNowInput = document.getElementById('scheduledMessageNowInput');
     let scheduledMessageIndex = <?= count($scheduledMessages) ?>;
 
     function activateTab(tabName) {
@@ -601,9 +635,14 @@ document.addEventListener('DOMContentLoaded', function () {
                     </label>
                 </div>
                 <div class="lg:ml-auto pt-0 lg:pt-5">
-                    <button type="button" class="remove-scheduled-message bg-red-50 text-red-700 border border-red-200 px-3 py-2 rounded-lg text-sm font-medium hover:bg-red-100 transition">
-                        <i class="fas fa-trash-alt mr-1"></i> ลบรายการ
-                    </button>
+                    <div class="flex flex-wrap gap-2">
+                        <button type="button" class="send-scheduled-now bg-blue-50 text-blue-700 border border-blue-200 px-3 py-2 rounded-lg text-sm font-medium hover:bg-blue-100 transition">
+                            <i class="fas fa-paper-plane mr-1"></i> ส่งทันที
+                        </button>
+                        <button type="button" class="remove-scheduled-message bg-red-50 text-red-700 border border-red-200 px-3 py-2 rounded-lg text-sm font-medium hover:bg-red-100 transition">
+                            <i class="fas fa-trash-alt mr-1"></i> ลบรายการ
+                        </button>
+                    </div>
                 </div>
             </div>
             <div>
@@ -614,6 +653,15 @@ document.addEventListener('DOMContentLoaded', function () {
         return wrapper;
     }
 
+    function updateScheduledMessagesCount() {
+        if (!scheduledMessagesCount || !scheduledMessagesList) {
+            return;
+        }
+
+        const items = scheduledMessagesList.querySelectorAll('.scheduled-message-item').length;
+        scheduledMessagesCount.textContent = `ตอนนี้มี ${items} รายการ`;
+    }
+
     buttons.forEach((button) => {
         button.addEventListener('click', function () {
             activateTab(button.dataset.lineTab);
@@ -622,11 +670,35 @@ document.addEventListener('DOMContentLoaded', function () {
 
     if (addScheduledMessageBtn && scheduledMessagesList) {
         addScheduledMessageBtn.addEventListener('click', function () {
-            scheduledMessagesList.appendChild(buildScheduledMessageItem(scheduledMessageIndex));
+            const newItem = buildScheduledMessageItem(scheduledMessageIndex);
+            scheduledMessagesList.appendChild(newItem);
             scheduledMessageIndex += 1;
+            updateScheduledMessagesCount();
+            newItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            const textarea = newItem.querySelector('textarea');
+            if (textarea) {
+                textarea.focus();
+            }
         });
 
         scheduledMessagesList.addEventListener('click', function (event) {
+            const sendNowButton = event.target.closest('.send-scheduled-now');
+            if (sendNowButton) {
+                const item = sendNowButton.closest('.scheduled-message-item');
+                const textarea = item ? item.querySelector('textarea') : null;
+                const message = textarea ? textarea.value.trim() : '';
+                if (message === '') {
+                    window.alert('กรุณาใส่ข้อความก่อนกดส่งทันที');
+                    return;
+                }
+
+                if (sendScheduledNowForm && scheduledMessageNowInput) {
+                    scheduledMessageNowInput.value = message;
+                    sendScheduledNowForm.submit();
+                }
+                return;
+            }
+
             const removeButton = event.target.closest('.remove-scheduled-message');
             if (!removeButton) {
                 return;
@@ -652,9 +724,11 @@ document.addEventListener('DOMContentLoaded', function () {
             }
 
             item.remove();
+            updateScheduledMessagesCount();
         });
     }
 
+    updateScheduledMessagesCount();
     activateTab('settings');
 });
 </script>
