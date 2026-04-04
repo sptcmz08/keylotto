@@ -11,7 +11,7 @@ $adminTitle = 'LINE Groups';
 function lineGroupsRedirectWithFlash(string $type, string $message, string $tab = 'settings'): void
 {
     $_SESSION['line_groups_flash'] = ['type' => $type, 'message' => $message];
-    $allowedTabs = ['settings', 'shared-templates', 'send-image', 'auto-text', 'groups'];
+    $allowedTabs = ['settings', 'shared-templates', 'send-image', 'auto-text', 'auto-image', 'groups'];
     if (!in_array($tab, $allowedTabs, true)) {
         $tab = 'settings';
     }
@@ -61,6 +61,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         lineGroupsRedirectWithFlash('success', 'บันทึกข้อความอัตโนมัติตามช่วงวันและเวลาสำเร็จ', 'auto-text');
     }
 
+    if ($action === 'save_scheduled_images') {
+        $images = $_POST['scheduled_images'] ?? [];
+
+        try {
+            lineSetScheduledImageMessages($pdo, is_array($images) ? $images : [], $_FILES['scheduled_image_files'] ?? []);
+            lineGroupsRedirectWithFlash('success', 'บันทึกรายการส่งรูปภาพอัตโนมัติสำเร็จ', 'auto-image');
+        } catch (RuntimeException $e) {
+            lineGroupsRedirectWithFlash('error', $e->getMessage(), 'auto-image');
+        }
+    }
+
     if ($action === 'send_test') {
         $groupId = trim($_POST['group_id'] ?? '');
         $message = trim($_POST['message'] ?? '');
@@ -98,6 +109,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         lineGroupsRedirectWithFlash('error', 'ส่งข้อความทันทีไม่สำเร็จ', 'auto-text');
+    }
+
+    if ($action === 'send_scheduled_image_now') {
+        $messageId = trim((string) ($_POST['scheduled_image_now_id'] ?? ''));
+        $scheduledImages = lineGetScheduledImageMessages($pdo);
+        $selectedImage = null;
+        foreach ($scheduledImages as $scheduledImage) {
+            if ((string) ($scheduledImage['id'] ?? '') === $messageId) {
+                $selectedImage = $scheduledImage;
+                break;
+            }
+        }
+
+        if (!$selectedImage) {
+            lineGroupsRedirectWithFlash('error', 'ไม่พบรายการรูปภาพที่เลือก', 'auto-image');
+        }
+
+        $imageUrl = lineScheduledImageUrl($pdo, (string) ($selectedImage['image'] ?? ''));
+        if ($imageUrl === null) {
+            lineGroupsRedirectWithFlash('error', 'กรุณาอัปโหลดรูปภาพก่อนกดส่งทันที', 'auto-image');
+        }
+
+        $result = linePushImageToActiveGroups($pdo, $imageUrl, '[manual scheduled image]');
+        if (!empty($result['sent'])) {
+            lineGroupsRedirectWithFlash('success', 'ส่งรูปภาพทันทีสำเร็จไป ' . (int) $result['sent'] . ' กลุ่ม', 'auto-image');
+        }
+
+        if (($result['reason'] ?? '') === 'config_not_ready') {
+            lineGroupsRedirectWithFlash('error', 'ยังไม่ได้ตั้งค่า LINE channel secret และ access token บน server', 'auto-image');
+        }
+        if (($result['reason'] ?? '') === 'no_groups') {
+            lineGroupsRedirectWithFlash('error', 'ยังไม่มีกลุ่ม LINE ที่ active สำหรับส่งรูปภาพ', 'auto-image');
+        }
+
+        lineGroupsRedirectWithFlash('error', 'ส่งรูปภาพทันทีไม่สำเร็จ', 'auto-image');
     }
 
     if ($action === 'send_result_image') {
@@ -178,7 +224,9 @@ $savedPublicBaseUrl = lineResolvedPublicBaseUrl($pdo);
 $autoSendResults = lineAutoSendEnabled($pdo);
 $autoSendTexts = lineAutoSendTextsEnabled($pdo);
 $scheduledMessages = lineGetScheduledTextMessages($pdo);
+$scheduledImages = lineGetScheduledImageMessages($pdo);
 $scheduledDiagnostics = lineDiagnoseScheduledTextMessages($pdo);
+$scheduledImageDiagnostics = lineDiagnoseScheduledImages($pdo);
 $scheduledReasonLabels = [
     'due_now' => 'ถึงเวลาส่งตอนนี้',
     'already_sent' => 'ส่งแล้วในรอบวันนี้',
@@ -191,6 +239,17 @@ $scheduledReasonLabels = [
     'disabled' => 'ปิดใช้งานอยู่',
     'ready' => 'พร้อมใช้งาน',
 ];
+$scheduledImageReasonLabels = [
+    'due_now' => 'ถึงเวลาส่งตอนนี้',
+    'already_sent' => 'ส่งแล้วในรอบวันนี้',
+    'not_due_yet' => 'ยังไม่ถึงเวลา',
+    'outside_grace_window' => 'เลยช่วงเวลาส่งแล้ว',
+    'weekday_mismatch' => 'ไม่อยู่ในช่วงวัน',
+    'time_empty' => 'ยังไม่ได้ตั้งเวลา',
+    'image_missing' => 'ยังไม่ได้อัปโหลดรูป',
+    'disabled' => 'ปิดใช้งานอยู่',
+    'ready' => 'พร้อมใช้งาน',
+];
 if (empty($scheduledMessages)) {
     $scheduledMessages = [[
         'id' => lineGenerateScheduledMessageId(),
@@ -198,6 +257,16 @@ if (empty($scheduledMessages)) {
         'day_end' => '',
         'time' => '',
         'message' => '',
+        'enabled' => true,
+    ]];
+}
+if (empty($scheduledImages)) {
+    $scheduledImages = [[
+        'id' => lineGenerateScheduledMessageId(),
+        'day_start' => '',
+        'day_end' => '',
+        'time' => '',
+        'image' => '',
         'enabled' => true,
     ]];
 }
@@ -232,6 +301,7 @@ require_once 'includes/header.php';
             <button type="button" data-line-tab="shared-templates" class="line-tab-btn bg-white text-gray-700 border border-gray-200 px-4 py-2 rounded-full text-sm font-medium">Shared Templates</button>
             <button type="button" data-line-tab="send-image" class="line-tab-btn bg-white text-gray-700 border border-gray-200 px-4 py-2 rounded-full text-sm font-medium">ส่งรูปภาพ</button>
             <button type="button" data-line-tab="auto-text" class="line-tab-btn bg-white text-gray-700 border border-gray-200 px-4 py-2 rounded-full text-sm font-medium">ส่งข้อความ Auto</button>
+            <button type="button" data-line-tab="auto-image" class="line-tab-btn bg-white text-gray-700 border border-gray-200 px-4 py-2 rounded-full text-sm font-medium">ส่งรูป Auto</button>
             <button type="button" data-line-tab="groups" class="line-tab-btn bg-white text-gray-700 border border-gray-200 px-4 py-2 rounded-full text-sm font-medium">กลุ่มและประวัติ</button>
         </div>
     </div>
@@ -536,6 +606,9 @@ require_once 'includes/header.php';
                                     <button type="button" class="send-scheduled-now bg-blue-50 text-blue-700 border border-blue-200 px-3 py-2 rounded-lg text-sm font-medium hover:bg-blue-100 transition">
                                         <i class="fas fa-paper-plane mr-1"></i> ส่งทันที
                                     </button>
+                                    <button type="button" class="copy-scheduled-message bg-amber-50 text-amber-700 border border-amber-200 px-3 py-2 rounded-lg text-sm font-medium hover:bg-amber-100 transition">
+                                        <i class="fas fa-copy mr-1"></i> คัดลอกรายการ
+                                    </button>
                                     <button type="button" class="remove-scheduled-message bg-red-50 text-red-700 border border-red-200 px-3 py-2 rounded-lg text-sm font-medium hover:bg-red-100 transition">
                                         <i class="fas fa-trash-alt mr-1"></i> ลบรายการ
                                     </button>
@@ -556,6 +629,137 @@ require_once 'includes/header.php';
                 </div>
             </form>
         </div>
+    </div>
+</section>
+
+<section data-line-panel="auto-image" class="line-panel hidden">
+    <div class="bg-white rounded-xl shadow-sm border overflow-hidden">
+        <div class="px-4 py-3 border-b bg-gray-50 font-semibold text-gray-700">ส่งรูปภาพอัตโนมัติตามช่วงวันและเวลา</div>
+        <div class="px-4 py-3 text-xs text-gray-500 border-b bg-gray-50/60">
+            อัปโหลดรูปต่อรายการ ตั้งวันเริ่ม-วันสิ้นสุดและเวลาได้เหมือนข้อความ ระบบจะส่งรูปนี้ไปทุกกลุ่ม active ตามเวลาที่ตั้งไว้
+        </div>
+        <div class="px-4 py-4 border-b bg-white">
+            <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+                <div class="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+                    <div class="text-xs text-gray-500 mb-1">เวลา server</div>
+                    <div class="text-sm font-semibold text-gray-800"><?= htmlspecialchars($scheduledImageDiagnostics['server_date']) ?> <?= htmlspecialchars($scheduledImageDiagnostics['server_time']) ?></div>
+                    <div class="text-xs text-gray-500 mt-1"><?= htmlspecialchars($scheduledImageDiagnostics['server_weekday']) ?></div>
+                </div>
+                <div class="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+                    <div class="text-xs text-gray-500 mb-1">สถานะระบบส่งรูป</div>
+                    <div class="text-sm font-semibold <?= !empty($scheduledImageDiagnostics['config_ready']) ? 'text-green-700' : 'text-red-600' ?>">
+                        <?= !empty($scheduledImageDiagnostics['config_ready']) ? 'พร้อมส่งรูป' : 'LINE config ยังไม่พร้อม' ?>
+                    </div>
+                    <div class="text-xs text-gray-500 mt-1">กลุ่ม active <?= (int) $scheduledImageDiagnostics['active_groups'] ?></div>
+                </div>
+                <div class="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+                    <div class="text-xs text-gray-500 mb-1">รูปพร้อมส่ง</div>
+                    <div class="text-sm font-semibold text-gray-800"><?= (int) $scheduledImageDiagnostics['due_messages'] ?> รายการ</div>
+                    <div class="text-xs text-gray-500 mt-1">รายการที่ตั้งครบ <?= (int) $scheduledImageDiagnostics['ready_messages'] ?> / ทั้งหมด <?= (int) $scheduledImageDiagnostics['total_messages'] ?></div>
+                </div>
+                <div class="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+                    <div class="text-xs text-gray-500 mb-1">ช่วงเผื่อเวลา</div>
+                    <div class="text-sm font-semibold text-gray-800"><?= (int) $scheduledImageDiagnostics['grace_minutes'] ?> นาที</div>
+                    <div class="text-xs text-gray-500 mt-1">ถ้า cron มาช้า ระบบยังตามส่งในช่วงนี้</div>
+                </div>
+            </div>
+            <?php if (!empty($scheduledImageDiagnostics['reason_counts'])): ?>
+            <div class="mt-4">
+                <div class="text-xs text-gray-500 mb-2">สรุปสถานะรายการรูปตอนนี้</div>
+                <div class="flex flex-wrap gap-2">
+                    <?php foreach ($scheduledImageDiagnostics['reason_counts'] as $reasonKey => $reasonCount): ?>
+                    <span class="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-xs text-gray-700">
+                        <?= htmlspecialchars($scheduledImageReasonLabels[$reasonKey] ?? $reasonKey) ?> <?= (int) $reasonCount ?>
+                    </span>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+            <?php endif; ?>
+        </div>
+        <form method="POST" enctype="multipart/form-data" class="p-4 space-y-4">
+            <input type="hidden" name="form_action" value="save_scheduled_images">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <div id="scheduledImagesCount" class="text-sm text-gray-600">ตอนนี้มี <?= count($scheduledImages) ?> รายการ</div>
+                <button type="button" id="addScheduledImageBtn" class="bg-[#1565c0] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#0d47a1] transition">
+                    <i class="fas fa-plus mr-1"></i> เพิ่มรูปภาพ
+                </button>
+            </div>
+            <div id="scheduledImagesList" class="space-y-3">
+                <?php foreach ($scheduledImages as $index => $scheduledImage): ?>
+                <?php $scheduledImageUrl = !empty($scheduledImage['image']) ? lineScheduledImageUrl($pdo, (string) $scheduledImage['image']) : null; ?>
+                <div class="scheduled-image-item rounded-xl border border-gray-200 bg-gray-50 p-4 space-y-3">
+                    <input type="hidden" name="scheduled_images[<?= $index ?>][id]" value="<?= htmlspecialchars((string) $scheduledImage['id']) ?>">
+                    <input type="hidden" name="scheduled_images[<?= $index ?>][image]" value="<?= htmlspecialchars((string) $scheduledImage['image']) ?>">
+                    <div class="grid grid-cols-1 xl:grid-cols-[180px_180px_180px_auto] gap-3">
+                        <div>
+                            <label class="text-xs text-gray-500 block mb-1">วันเริ่ม</label>
+                            <select name="scheduled_images[<?= $index ?>][day_start]" class="w-full border rounded-lg px-3 py-2 text-sm outline-none bg-white">
+                                <option value="">ทุกวัน</option>
+                                <?php foreach ($weekdayOptions as $weekdayValue => $weekdayLabel): ?>
+                                <option value="<?= $weekdayValue ?>" <?= (string) ($scheduledImage['day_start'] ?? '') === (string) $weekdayValue ? 'selected' : '' ?>><?= $weekdayLabel ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-500 block mb-1">วันสิ้นสุด</label>
+                            <select name="scheduled_images[<?= $index ?>][day_end]" class="w-full border rounded-lg px-3 py-2 text-sm outline-none bg-white">
+                                <option value="">ทุกวัน</option>
+                                <?php foreach ($weekdayOptions as $weekdayValue => $weekdayLabel): ?>
+                                <option value="<?= $weekdayValue ?>" <?= (string) ($scheduledImage['day_end'] ?? '') === (string) $weekdayValue ? 'selected' : '' ?>><?= $weekdayLabel ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-500 block mb-1">เวลาส่ง</label>
+                            <input type="time" name="scheduled_images[<?= $index ?>][time]" value="<?= htmlspecialchars((string) ($scheduledImage['time'] ?? '')) ?>" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+                        </div>
+                        <div class="flex items-center gap-2 pt-0 xl:pt-6">
+                            <input type="hidden" name="scheduled_images[<?= $index ?>][enabled]" value="0">
+                            <label class="inline-flex items-center gap-2 text-sm text-gray-700">
+                                <input type="checkbox" name="scheduled_images[<?= $index ?>][enabled]" value="1" class="rounded border-gray-300" <?= !empty($scheduledImage['enabled']) ? 'checked' : '' ?>>
+                                <span>เปิดใช้</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 lg:grid-cols-[220px_1fr] gap-4 items-start">
+                        <div class="space-y-2">
+                            <label class="text-xs text-gray-500 block">รูปภาพ</label>
+                            <div class="rounded-xl border border-dashed border-gray-300 bg-white p-3">
+                                <?php if ($scheduledImageUrl): ?>
+                                <a href="<?= htmlspecialchars($scheduledImageUrl) ?>" target="_blank" class="block">
+                                    <img src="<?= htmlspecialchars($scheduledImageUrl) ?>" alt="Scheduled image preview" class="w-full h-40 object-cover rounded-lg border border-gray-200">
+                                </a>
+                                <div class="mt-2 text-[11px] text-gray-500 break-all"><?= htmlspecialchars((string) $scheduledImage['image']) ?></div>
+                                <?php else: ?>
+                                <div class="h-40 rounded-lg border border-dashed border-gray-200 flex items-center justify-center text-xs text-gray-400">ยังไม่มีรูปอัปโหลด</div>
+                                <?php endif; ?>
+                            </div>
+                            <input type="file" name="scheduled_image_files[<?= $index ?>]" accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp" class="block w-full text-xs text-gray-500 border rounded-lg px-3 py-2 bg-white">
+                        </div>
+                        <div class="space-y-3">
+                            <div class="text-xs text-gray-500">สถานะตอนนี้: <?= htmlspecialchars($scheduledImageReasonLabels[$scheduledImageDiagnostics['items'][$index]['reason'] ?? 'ready'] ?? 'พร้อมใช้งาน') ?></div>
+                            <div class="flex flex-wrap gap-2">
+                                <button type="button" class="send-scheduled-image-now bg-blue-50 text-blue-700 border border-blue-200 px-3 py-2 rounded-lg text-sm font-medium hover:bg-blue-100 transition">
+                                    <i class="fas fa-paper-plane mr-1"></i> ส่งทันที
+                                </button>
+                                <button type="button" class="copy-scheduled-image bg-amber-50 text-amber-700 border border-amber-200 px-3 py-2 rounded-lg text-sm font-medium hover:bg-amber-100 transition">
+                                    <i class="fas fa-copy mr-1"></i> คัดลอกรายการ
+                                </button>
+                                <button type="button" class="remove-scheduled-image bg-red-50 text-red-700 border border-red-200 px-3 py-2 rounded-lg text-sm font-medium hover:bg-red-100 transition">
+                                    <i class="fas fa-trash-alt mr-1"></i> ลบรายการ
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <?php endforeach; ?>
+            </div>
+            <div class="border-t pt-4">
+                <button type="submit" class="bg-[#2e7d32] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#1b5e20] transition">
+                    <i class="fas fa-save mr-1"></i> บันทึกรูปภาพตามช่วงวันและเวลา
+                </button>
+            </div>
+        </form>
     </div>
 </section>
 
@@ -656,17 +860,28 @@ require_once 'includes/header.php';
     <input type="hidden" name="scheduled_message_now" id="scheduledMessageNowInput" value="">
 </form>
 
+<form method="POST" id="sendScheduledImageNowForm" class="hidden">
+    <input type="hidden" name="form_action" value="send_scheduled_image_now">
+    <input type="hidden" name="scheduled_image_now_id" id="scheduledImageNowIdInput" value="">
+</form>
+
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     const buttons = Array.from(document.querySelectorAll('[data-line-tab]'));
     const panels = Array.from(document.querySelectorAll('[data-line-panel]'));
-    const allowedTabs = new Set(['settings', 'shared-templates', 'send-image', 'auto-text', 'groups']);
+    const allowedTabs = new Set(['settings', 'shared-templates', 'send-image', 'auto-text', 'auto-image', 'groups']);
     const scheduledMessagesList = document.getElementById('scheduledMessagesList');
     const addScheduledMessageBtn = document.getElementById('addScheduledMessageBtn');
     const scheduledMessagesCount = document.getElementById('scheduledMessagesCount');
     const sendScheduledNowForm = document.getElementById('sendScheduledNowForm');
     const scheduledMessageNowInput = document.getElementById('scheduledMessageNowInput');
+    const scheduledImagesList = document.getElementById('scheduledImagesList');
+    const addScheduledImageBtn = document.getElementById('addScheduledImageBtn');
+    const scheduledImagesCount = document.getElementById('scheduledImagesCount');
+    const sendScheduledImageNowForm = document.getElementById('sendScheduledImageNowForm');
+    const scheduledImageNowIdInput = document.getElementById('scheduledImageNowIdInput');
     let scheduledMessageIndex = <?= count($scheduledMessages) ?>;
+    let scheduledImageIndex = <?= count($scheduledImages) ?>;
 
     function activateTab(tabName) {
         const resolvedTab = allowedTabs.has(tabName) ? tabName : 'settings';
@@ -743,6 +958,9 @@ document.addEventListener('DOMContentLoaded', function () {
                         <button type="button" class="send-scheduled-now bg-blue-50 text-blue-700 border border-blue-200 px-3 py-2 rounded-lg text-sm font-medium hover:bg-blue-100 transition">
                             <i class="fas fa-paper-plane mr-1"></i> ส่งทันที
                         </button>
+                        <button type="button" class="copy-scheduled-message bg-amber-50 text-amber-700 border border-amber-200 px-3 py-2 rounded-lg text-sm font-medium hover:bg-amber-100 transition">
+                            <i class="fas fa-copy mr-1"></i> à¸„à¸±à¸”à¸¥à¸­à¸à¸£à¸²à¸¢à¸à¸²à¸£
+                        </button>
                         <button type="button" class="remove-scheduled-message bg-red-50 text-red-700 border border-red-200 px-3 py-2 rounded-lg text-sm font-medium hover:bg-red-100 transition">
                             <i class="fas fa-trash-alt mr-1"></i> ลบรายการ
                         </button>
@@ -757,6 +975,133 @@ document.addEventListener('DOMContentLoaded', function () {
         return wrapper;
     }
 
+    function cloneScheduledMessageItem(sourceItem) {
+        const newItem = buildScheduledMessageItem(scheduledMessageIndex);
+        const sourceDayStart = sourceItem.querySelector('select[name*="[day_start]"]');
+        const sourceDayEnd = sourceItem.querySelector('select[name*="[day_end]"]');
+        const sourceTime = sourceItem.querySelector('input[type="time"]');
+        const sourceCheckbox = sourceItem.querySelector('input[type="checkbox"]');
+        const sourceTextarea = sourceItem.querySelector('textarea');
+
+        const targetDayStart = newItem.querySelector('select[name*="[day_start]"]');
+        const targetDayEnd = newItem.querySelector('select[name*="[day_end]"]');
+        const targetTime = newItem.querySelector('input[type="time"]');
+        const targetCheckbox = newItem.querySelector('input[type="checkbox"]');
+        const targetTextarea = newItem.querySelector('textarea');
+
+        if (targetDayStart && sourceDayStart) targetDayStart.value = sourceDayStart.value;
+        if (targetDayEnd && sourceDayEnd) targetDayEnd.value = sourceDayEnd.value;
+        if (targetTime && sourceTime) targetTime.value = sourceTime.value;
+        if (targetCheckbox && sourceCheckbox) targetCheckbox.checked = sourceCheckbox.checked;
+        if (targetTextarea && sourceTextarea) targetTextarea.value = sourceTextarea.value;
+
+        scheduledMessageIndex += 1;
+        return newItem;
+    }
+
+    function buildScheduledImageItem(index) {
+        const wrapper = document.createElement('div');
+        const generatedId = 'msg_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+        wrapper.className = 'scheduled-image-item rounded-xl border border-gray-200 bg-gray-50 p-4 space-y-3';
+        wrapper.innerHTML = `
+            <input type="hidden" name="scheduled_images[${index}][id]" value="${generatedId}">
+            <input type="hidden" name="scheduled_images[${index}][image]" value="">
+            <div class="grid grid-cols-1 xl:grid-cols-[180px_180px_180px_auto] gap-3">
+                <div>
+                    <label class="text-xs text-gray-500 block mb-1">วันเริ่ม</label>
+                    <select name="scheduled_images[${index}][day_start]" class="w-full border rounded-lg px-3 py-2 text-sm outline-none bg-white">
+                        <option value="">ทุกวัน</option>
+                        <option value="0">อาทิตย์</option>
+                        <option value="1">จันทร์</option>
+                        <option value="2">อังคาร</option>
+                        <option value="3">พุธ</option>
+                        <option value="4">พฤหัสบดี</option>
+                        <option value="5">ศุกร์</option>
+                        <option value="6">เสาร์</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="text-xs text-gray-500 block mb-1">วันสิ้นสุด</label>
+                    <select name="scheduled_images[${index}][day_end]" class="w-full border rounded-lg px-3 py-2 text-sm outline-none bg-white">
+                        <option value="">ทุกวัน</option>
+                        <option value="0">อาทิตย์</option>
+                        <option value="1">จันทร์</option>
+                        <option value="2">อังคาร</option>
+                        <option value="3">พุธ</option>
+                        <option value="4">พฤหัสบดี</option>
+                        <option value="5">ศุกร์</option>
+                        <option value="6">เสาร์</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="text-xs text-gray-500 block mb-1">เวลาส่ง</label>
+                    <input type="time" name="scheduled_images[${index}][time]" value="" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+                </div>
+                <div class="flex items-center gap-2 pt-0 xl:pt-6">
+                    <input type="hidden" name="scheduled_images[${index}][enabled]" value="0">
+                    <label class="inline-flex items-center gap-2 text-sm text-gray-700">
+                        <input type="checkbox" name="scheduled_images[${index}][enabled]" value="1" class="rounded border-gray-300" checked>
+                        <span>เปิดใช้</span>
+                    </label>
+                </div>
+            </div>
+            <div class="grid grid-cols-1 lg:grid-cols-[220px_1fr] gap-4 items-start">
+                <div class="space-y-2">
+                    <label class="text-xs text-gray-500 block">รูปภาพ</label>
+                    <div class="rounded-xl border border-dashed border-gray-300 bg-white p-3">
+                        <div class="h-40 rounded-lg border border-dashed border-gray-200 flex items-center justify-center text-xs text-gray-400">ยังไม่มีรูปอัปโหลด</div>
+                    </div>
+                    <input type="file" name="scheduled_image_files[${index}]" accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp" class="block w-full text-xs text-gray-500 border rounded-lg px-3 py-2 bg-white">
+                </div>
+                <div class="space-y-3">
+                    <div class="text-xs text-gray-500">สถานะตอนนี้: ยังไม่ได้อัปโหลดรูป</div>
+                    <div class="flex flex-wrap gap-2">
+                        <button type="button" class="send-scheduled-image-now bg-blue-50 text-blue-700 border border-blue-200 px-3 py-2 rounded-lg text-sm font-medium hover:bg-blue-100 transition">
+                            <i class="fas fa-paper-plane mr-1"></i> ส่งทันที
+                        </button>
+                        <button type="button" class="copy-scheduled-image bg-amber-50 text-amber-700 border border-amber-200 px-3 py-2 rounded-lg text-sm font-medium hover:bg-amber-100 transition">
+                            <i class="fas fa-copy mr-1"></i> คัดลอกรายการ
+                        </button>
+                        <button type="button" class="remove-scheduled-image bg-red-50 text-red-700 border border-red-200 px-3 py-2 rounded-lg text-sm font-medium hover:bg-red-100 transition">
+                            <i class="fas fa-trash-alt mr-1"></i> ลบรายการ
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+        return wrapper;
+    }
+
+    function cloneScheduledImageItem(sourceItem) {
+        const newItem = buildScheduledImageItem(scheduledImageIndex);
+        const sourceDayStart = sourceItem.querySelector('select[name*="[day_start]"]');
+        const sourceDayEnd = sourceItem.querySelector('select[name*="[day_end]"]');
+        const sourceTime = sourceItem.querySelector('input[type="time"]');
+        const sourceCheckbox = sourceItem.querySelector('input[type="checkbox"]');
+        const sourceImageHidden = sourceItem.querySelector('input[name*="[image]"]');
+        const sourcePreviewBox = sourceItem.querySelector('.rounded-xl.border.border-dashed');
+        const sourceStatusText = sourceItem.querySelector('.space-y-3 > .text-xs.text-gray-500');
+
+        const targetDayStart = newItem.querySelector('select[name*="[day_start]"]');
+        const targetDayEnd = newItem.querySelector('select[name*="[day_end]"]');
+        const targetTime = newItem.querySelector('input[type="time"]');
+        const targetCheckbox = newItem.querySelector('input[type="checkbox"]');
+        const targetImageHidden = newItem.querySelector('input[name*="[image]"]');
+        const targetPreviewBox = newItem.querySelector('.rounded-xl.border.border-dashed');
+        const targetStatusText = newItem.querySelector('.space-y-3 > .text-xs.text-gray-500');
+
+        if (targetDayStart && sourceDayStart) targetDayStart.value = sourceDayStart.value;
+        if (targetDayEnd && sourceDayEnd) targetDayEnd.value = sourceDayEnd.value;
+        if (targetTime && sourceTime) targetTime.value = sourceTime.value;
+        if (targetCheckbox && sourceCheckbox) targetCheckbox.checked = sourceCheckbox.checked;
+        if (targetImageHidden && sourceImageHidden) targetImageHidden.value = sourceImageHidden.value;
+        if (targetPreviewBox && sourcePreviewBox) targetPreviewBox.innerHTML = sourcePreviewBox.innerHTML;
+        if (targetStatusText && sourceStatusText) targetStatusText.textContent = sourceStatusText.textContent;
+
+        scheduledImageIndex += 1;
+        return newItem;
+    }
+
     function updateScheduledMessagesCount() {
         if (!scheduledMessagesCount || !scheduledMessagesList) {
             return;
@@ -764,6 +1109,15 @@ document.addEventListener('DOMContentLoaded', function () {
 
         const items = scheduledMessagesList.querySelectorAll('.scheduled-message-item').length;
         scheduledMessagesCount.textContent = `ตอนนี้มี ${items} รายการ`;
+    }
+
+    function updateScheduledImagesCount() {
+        if (!scheduledImagesCount || !scheduledImagesList) {
+            return;
+        }
+
+        const items = scheduledImagesList.querySelectorAll('.scheduled-image-item').length;
+        scheduledImagesCount.textContent = `ตอนนี้มี ${items} รายการ`;
     }
 
     buttons.forEach((button) => {
@@ -803,6 +1157,20 @@ document.addEventListener('DOMContentLoaded', function () {
                 return;
             }
 
+            const copyButton = event.target.closest('.copy-scheduled-message');
+            if (copyButton) {
+                const item = copyButton.closest('.scheduled-message-item');
+                if (!item) {
+                    return;
+                }
+
+                const copiedItem = cloneScheduledMessageItem(item);
+                scheduledMessagesList.appendChild(copiedItem);
+                updateScheduledMessagesCount();
+                copiedItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                return;
+            }
+
             const removeButton = event.target.closest('.remove-scheduled-message');
             if (!removeButton) {
                 return;
@@ -832,7 +1200,81 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
+    if (addScheduledImageBtn && scheduledImagesList) {
+        addScheduledImageBtn.addEventListener('click', function () {
+            const newItem = buildScheduledImageItem(scheduledImageIndex);
+            scheduledImagesList.appendChild(newItem);
+            scheduledImageIndex += 1;
+            updateScheduledImagesCount();
+            newItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        });
+
+        scheduledImagesList.addEventListener('click', function (event) {
+            const sendNowButton = event.target.closest('.send-scheduled-image-now');
+            if (sendNowButton) {
+                const item = sendNowButton.closest('.scheduled-image-item');
+                const idInput = item ? item.querySelector('input[name*="[id]"]') : null;
+                const imageInput = item ? item.querySelector('input[name*="[image]"]') : null;
+                const hasImage = imageInput ? imageInput.value.trim() !== '' : false;
+                if (!hasImage) {
+                    window.alert('กรุณาอัปโหลดรูปภาพก่อนกดส่งทันที');
+                    return;
+                }
+
+                if (sendScheduledImageNowForm && scheduledImageNowIdInput && idInput) {
+                    scheduledImageNowIdInput.value = idInput.value;
+                    sendScheduledImageNowForm.submit();
+                }
+                return;
+            }
+
+            const copyButton = event.target.closest('.copy-scheduled-image');
+            if (copyButton) {
+                const item = copyButton.closest('.scheduled-image-item');
+                if (!item) {
+                    return;
+                }
+
+                const copiedItem = cloneScheduledImageItem(item);
+                scheduledImagesList.appendChild(copiedItem);
+                updateScheduledImagesCount();
+                copiedItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                return;
+            }
+
+            const removeButton = event.target.closest('.remove-scheduled-image');
+            if (!removeButton) {
+                return;
+            }
+            const item = removeButton.closest('.scheduled-image-item');
+            if (!item) {
+                return;
+            }
+
+            const items = scheduledImagesList.querySelectorAll('.scheduled-image-item');
+            if (items.length === 1) {
+                const selects = item.querySelectorAll('select');
+                const timeInput = item.querySelector('input[type="time"]');
+                const checkbox = item.querySelector('input[type="checkbox"]');
+                const imageHiddenInput = item.querySelector('input[name*="[image]"]');
+                const fileInput = item.querySelector('input[type="file"]');
+                selects.forEach((select) => {
+                    select.value = '';
+                });
+                if (timeInput) timeInput.value = '';
+                if (checkbox) checkbox.checked = true;
+                if (imageHiddenInput) imageHiddenInput.value = '';
+                if (fileInput) fileInput.value = '';
+                return;
+            }
+
+            item.remove();
+            updateScheduledImagesCount();
+        });
+    }
+
     updateScheduledMessagesCount();
+    updateScheduledImagesCount();
 
     let initialTab = 'settings';
     try {

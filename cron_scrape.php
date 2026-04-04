@@ -1179,6 +1179,21 @@ try {
     lineLog('Scheduled LINE text failed: ' . $scheduledTextError->getMessage());
 }
 
+try {
+    $scheduledImageStats = lineSendDueScheduledImages($pdo);
+    if (!empty($scheduledImageStats['sent_messages'])) {
+        echo "ðŸ–¼ï¸ Scheduled LINE image: {$scheduledImageStats['sent_messages']} à¸£à¸²à¸¢à¸à¸²à¸£ / {$scheduledImageStats['sent_groups']} à¸à¸¥à¸¸à¹ˆà¸¡ ({$scheduledImageStats['time']})\n\n";
+    } elseif (!empty($scheduledImageStats['due_messages'])) {
+        echo "â„¹ï¸  Scheduled LINE image due: {$scheduledImageStats['due_messages']} à¸£à¸²à¸¢à¸à¸²à¸£ à¹à¸•à¹ˆà¸¢à¸±à¸‡à¹„à¸¡à¹ˆà¸ªà¹ˆà¸‡à¸ªà¸³à¹€à¸£à¹‡à¸ˆ ({$scheduledImageStats['time']}, grace {$scheduledImageStats['grace_minutes']}m)\n\n";
+    } elseif (!empty($scheduledImageStats['skipped'])) {
+        $scheduledImageSkipReason = (string) ($scheduledImageStats['reason'] ?? 'unknown');
+        echo "Scheduled LINE image skipped: {$scheduledImageSkipReason}\n\n";
+    }
+} catch (Exception $scheduledImageError) {
+    echo "Scheduled LINE image failed: " . $scheduledImageError->getMessage() . "\n\n";
+    lineLog('Scheduled LINE image failed: ' . $scheduledImageError->getMessage());
+}
+
 switch ($scraper) {
     case 'smart':
         scrapeSmart($pdo);

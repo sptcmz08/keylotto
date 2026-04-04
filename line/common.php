@@ -99,6 +99,22 @@ function ensureLineTables(PDO $pdo): void
             KEY idx_message_id (message_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS line_image_schedule_logs (
+            id INT(11) NOT NULL AUTO_INCREMENT,
+            message_id VARCHAR(64) NOT NULL,
+            scheduled_date DATE NOT NULL,
+            scheduled_time VARCHAR(5) NOT NULL,
+            image_name VARCHAR(255) DEFAULT NULL,
+            sent_groups INT(11) NOT NULL DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            UNIQUE KEY uniq_image_message_schedule (message_id, scheduled_date, scheduled_time),
+            KEY idx_image_scheduled_date (scheduled_date),
+            KEY idx_image_message_id (message_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
 }
 
 function lineGetSetting(PDO $pdo, string $key, string $default = ''): string
@@ -359,6 +375,453 @@ function lineDiagnoseScheduledTextMessages(PDO $pdo, ?DateTimeImmutable $now = n
             'range' => $messageDate !== '' ? $messageDate : lineDescribeWeekdayRange($messageDayStart, $messageDayEnd),
             'reason' => $reason,
             'preview' => substr((string) preg_replace('/\s+/', ' ', $messageText), 0, 120),
+        ];
+    }
+
+    return $diagnostics;
+}
+
+function lineScheduledImagesDir(): string
+{
+    return __DIR__ . '/scheduled_uploads';
+}
+
+function lineEnsureScheduledImagesDir(): bool
+{
+    $dir = lineScheduledImagesDir();
+    if (is_dir($dir)) {
+        if (!is_writable($dir)) {
+            @chmod($dir, 0775);
+        }
+        return is_writable($dir);
+    }
+
+    if (!mkdir($dir, 0775, true) && !is_dir($dir)) {
+        return false;
+    }
+
+    if (!is_writable($dir)) {
+        @chmod($dir, 0775);
+    }
+
+    return is_writable($dir);
+}
+
+function lineNormalizeScheduledImageName(string $value): string
+{
+    $value = trim(basename($value));
+    if ($value === '') {
+        return '';
+    }
+
+    if (!preg_match('/^[A-Za-z0-9._-]+$/', $value)) {
+        return '';
+    }
+
+    return $value;
+}
+
+function lineScheduledImagePath(string $imageName): ?string
+{
+    $imageName = lineNormalizeScheduledImageName($imageName);
+    if ($imageName === '') {
+        return null;
+    }
+
+    $path = lineScheduledImagesDir() . '/' . $imageName;
+    return is_file($path) ? $path : null;
+}
+
+function lineScheduledImageUrl(PDO $pdo, string $imageName): ?string
+{
+    $path = lineScheduledImagePath($imageName);
+    if ($path === null) {
+        return null;
+    }
+
+    $version = @filemtime($path) ?: time();
+    return lineResolvedPublicBaseUrl($pdo) . '/line/scheduled_uploads/' . rawurlencode(basename($path)) . '?v=' . $version;
+}
+
+function lineIndexedUploadFile(array $files, int $index): ?array
+{
+    if (!isset($files['error'][$index])) {
+        return null;
+    }
+
+    return [
+        'name' => $files['name'][$index] ?? '',
+        'type' => $files['type'][$index] ?? '',
+        'tmp_name' => $files['tmp_name'][$index] ?? '',
+        'error' => $files['error'][$index] ?? UPLOAD_ERR_NO_FILE,
+        'size' => $files['size'][$index] ?? 0,
+    ];
+}
+
+function lineSaveScheduledImageUpload(array $upload, string $messageId): array
+{
+    $uploadError = (int) ($upload['error'] ?? UPLOAD_ERR_NO_FILE);
+    if ($uploadError !== UPLOAD_ERR_OK) {
+        return ['ok' => false, 'message' => lineUploadErrorMessage($uploadError)];
+    }
+
+    if (!lineEnsureScheduledImagesDir()) {
+        return ['ok' => false, 'message' => 'Unable to access scheduled image directory'];
+    }
+
+    $tmpPath = (string) ($upload['tmp_name'] ?? '');
+    if ($tmpPath === '' || !file_exists($tmpPath)) {
+        return ['ok' => false, 'message' => 'Uploaded image temporary file is missing'];
+    }
+
+    $originalName = (string) ($upload['name'] ?? '');
+    $extension = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
+    if (!in_array($extension, ['png', 'jpg', 'jpeg', 'webp'], true)) {
+        return ['ok' => false, 'message' => 'Supported image types are PNG, JPG, JPEG, and WEBP'];
+    }
+
+    $safeId = preg_replace('/[^A-Za-z0-9_-]/', '', $messageId);
+    $fileName = 'scheduled-image-' . ($safeId !== '' ? $safeId : date('YmdHis')) . '-' . time() . '.' . $extension;
+    $targetPath = lineScheduledImagesDir() . '/' . $fileName;
+    $saveResult = lineStoreUploadedFile($tmpPath, $targetPath);
+    if (empty($saveResult['ok'])) {
+        return ['ok' => false, 'message' => 'Unable to save uploaded image (' . ($saveResult['error'] ?? 'unknown error') . ')'];
+    }
+
+    @chmod($targetPath, 0664);
+    return ['ok' => true, 'name' => $fileName, 'path' => $targetPath];
+}
+
+function lineGetScheduledImageMessages(PDO $pdo): array
+{
+    $raw = lineGetSetting($pdo, 'scheduled_image_messages', '[]');
+    $decoded = json_decode($raw, true);
+    if (!is_array($decoded)) {
+        return [];
+    }
+
+    $messages = [];
+    foreach ($decoded as $row) {
+        if (!is_array($row)) {
+            continue;
+        }
+
+        $id = lineNormalizeScheduledMessageId((string) ($row['id'] ?? ''));
+        if ($id === '') {
+            $id = lineGenerateScheduledMessageId();
+        }
+
+        $dayStart = lineNormalizeScheduledWeekday((string) ($row['day_start'] ?? ''));
+        $dayEnd = lineNormalizeScheduledWeekday((string) ($row['day_end'] ?? ''));
+        $time = lineNormalizeScheduledMessageTime((string) ($row['time'] ?? ''));
+        $enabled = (string) ($row['enabled'] ?? '1') !== '0';
+        $imageName = lineNormalizeScheduledImageName((string) ($row['image'] ?? ''));
+
+        $messages[] = [
+            'id' => $id,
+            'day_start' => $dayStart,
+            'day_end' => $dayEnd,
+            'time' => $time,
+            'image' => $imageName,
+            'enabled' => $enabled,
+        ];
+    }
+
+    return $messages;
+}
+
+function lineSetScheduledImageMessages(PDO $pdo, array $messages, array $uploadedFiles = []): void
+{
+    $normalized = [];
+    foreach ($messages as $index => $row) {
+        if (!is_array($row)) {
+            continue;
+        }
+
+        $id = lineNormalizeScheduledMessageId((string) ($row['id'] ?? ''));
+        if ($id === '') {
+            $id = lineGenerateScheduledMessageId();
+        }
+
+        $dayStart = lineNormalizeScheduledWeekday((string) ($row['day_start'] ?? ''));
+        $dayEnd = lineNormalizeScheduledWeekday((string) ($row['day_end'] ?? ''));
+        $time = lineNormalizeScheduledMessageTime((string) ($row['time'] ?? ''));
+        $enabled = (string) ($row['enabled'] ?? '0') === '1';
+        $imageName = lineNormalizeScheduledImageName((string) ($row['image'] ?? ''));
+
+        if ($dayStart === '' && $dayEnd !== '') {
+            $dayStart = $dayEnd;
+        } elseif ($dayEnd === '' && $dayStart !== '') {
+            $dayEnd = $dayStart;
+        }
+
+        $upload = lineIndexedUploadFile($uploadedFiles, (int) $index);
+        if (is_array($upload) && (int) ($upload['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
+            $savedUpload = lineSaveScheduledImageUpload($upload, $id);
+            if (empty($savedUpload['ok'])) {
+                throw new RuntimeException((string) ($savedUpload['message'] ?? 'Unable to upload scheduled image'));
+            }
+            $imageName = (string) ($savedUpload['name'] ?? '');
+        }
+
+        $normalized[] = [
+            'id' => $id,
+            'day_start' => $dayStart,
+            'day_end' => $dayEnd,
+            'time' => $time,
+            'image' => $imageName,
+            'enabled' => $enabled ? 1 : 0,
+        ];
+    }
+
+    lineSetSetting(
+        $pdo,
+        'scheduled_image_messages',
+        json_encode($normalized, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
+    );
+}
+
+function lineScheduledImageAlreadySent(PDO $pdo, string $messageId, string $scheduledDate, string $scheduledTime): bool
+{
+    ensureLineTables($pdo);
+
+    $stmt = $pdo->prepare("
+        SELECT 1
+        FROM line_image_schedule_logs
+        WHERE message_id = ?
+          AND scheduled_date = ?
+          AND scheduled_time = ?
+        LIMIT 1
+    ");
+    $stmt->execute([$messageId, $scheduledDate, $scheduledTime]);
+
+    return (bool) $stmt->fetchColumn();
+}
+
+function lineMarkScheduledImageSent(
+    PDO $pdo,
+    string $messageId,
+    string $scheduledDate,
+    string $scheduledTime,
+    string $imageName,
+    int $sentGroups
+): void {
+    ensureLineTables($pdo);
+
+    $stmt = $pdo->prepare("
+        INSERT INTO line_image_schedule_logs (message_id, scheduled_date, scheduled_time, image_name, sent_groups)
+        VALUES (?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+            image_name = VALUES(image_name),
+            sent_groups = VALUES(sent_groups)
+    ");
+    $stmt->execute([$messageId, $scheduledDate, $scheduledTime, $imageName, $sentGroups]);
+}
+
+function linePushImageMessage(PDO $pdo, string $groupId, string $imageUrl): array
+{
+    return linePushMessages($pdo, $groupId, [
+        [
+            'type' => 'image',
+            'originalContentUrl' => $imageUrl,
+            'previewImageUrl' => $imageUrl,
+        ],
+    ]);
+}
+
+function linePushImageToActiveGroups(PDO $pdo, string $imageUrl, string $label = '[scheduled image]'): array
+{
+    if ($imageUrl === '') {
+        return ['sent' => 0, 'failed' => 0, 'skipped' => true, 'reason' => 'image_missing'];
+    }
+
+    if (!lineConfigReady($pdo)) {
+        return ['sent' => 0, 'failed' => 0, 'skipped' => true, 'reason' => 'config_not_ready'];
+    }
+
+    $groups = $pdo->query("SELECT group_id FROM line_groups WHERE is_active = 1 ORDER BY id ASC")->fetchAll();
+    if (empty($groups)) {
+        return ['sent' => 0, 'failed' => 0, 'skipped' => true, 'reason' => 'no_groups'];
+    }
+
+    $sent = 0;
+    $failed = 0;
+    foreach ($groups as $group) {
+        $groupId = (string) ($group['group_id'] ?? '');
+        if ($groupId === '') {
+            continue;
+        }
+
+        $result = linePushImageMessage($pdo, $groupId, $imageUrl);
+        lineLogPushResult($pdo, $groupId, $label . ' ' . $imageUrl, $result);
+        if (!empty($result['ok'])) {
+            $sent++;
+        } else {
+            $failed++;
+        }
+    }
+
+    return ['sent' => $sent, 'failed' => $failed, 'skipped' => false];
+}
+
+function lineSendDueScheduledImages(PDO $pdo, ?DateTimeImmutable $now = null): array
+{
+    if (!lineConfigReady($pdo)) {
+        return ['sent_messages' => 0, 'sent_groups' => 0, 'due_messages' => 0, 'skipped' => true, 'reason' => 'config_not_ready'];
+    }
+
+    $messages = lineGetScheduledImageMessages($pdo);
+    if (empty($messages)) {
+        return ['sent_messages' => 0, 'sent_groups' => 0, 'due_messages' => 0, 'skipped' => true, 'reason' => 'no_messages'];
+    }
+
+    $groups = $pdo->query("SELECT group_id FROM line_groups WHERE is_active = 1 ORDER BY id ASC")->fetchAll();
+    if (empty($groups)) {
+        return ['sent_messages' => 0, 'sent_groups' => 0, 'due_messages' => 0, 'skipped' => true, 'reason' => 'no_groups'];
+    }
+
+    $now = $now ?: new DateTimeImmutable('now', new DateTimeZone('Asia/Bangkok'));
+    $scheduledDate = $now->format('Y-m-d');
+    $scheduledTime = $now->format('H:i');
+    $scheduledWeekday = (int) $now->format('w');
+    $currentMinutes = ((int) $now->format('H') * 60) + (int) $now->format('i');
+    $graceMinutes = 15;
+
+    $sentMessages = 0;
+    $sentGroups = 0;
+    $dueMessages = 0;
+    foreach ($messages as $row) {
+        $messageId = (string) ($row['id'] ?? '');
+        $messageDayStart = (string) ($row['day_start'] ?? '');
+        $messageDayEnd = (string) ($row['day_end'] ?? '');
+        $messageTime = (string) ($row['time'] ?? '');
+        $imageName = (string) ($row['image'] ?? '');
+        $enabled = !empty($row['enabled']);
+        $messageMinutes = lineTimeToMinutes($messageTime);
+        $imageUrl = lineScheduledImageUrl($pdo, $imageName);
+
+        if (!$enabled || $messageId === '' || $messageMinutes === null || $imageUrl === null) {
+            continue;
+        }
+
+        if (!lineWeekdayInRange($scheduledWeekday, $messageDayStart, $messageDayEnd)) {
+            continue;
+        }
+
+        if ($messageMinutes > $currentMinutes || ($currentMinutes - $messageMinutes) > $graceMinutes) {
+            continue;
+        }
+
+        $dueMessages++;
+
+        if (lineScheduledImageAlreadySent($pdo, $messageId, $scheduledDate, $messageTime)) {
+            continue;
+        }
+
+        $deliveredGroups = 0;
+        foreach ($groups as $group) {
+            $groupId = (string) ($group['group_id'] ?? '');
+            if ($groupId === '') {
+                continue;
+            }
+
+            $result = linePushImageMessage($pdo, $groupId, $imageUrl);
+            lineLogPushResult($pdo, $groupId, '[scheduled image] ' . $imageUrl, $result);
+            if (!empty($result['ok'])) {
+                $deliveredGroups++;
+            }
+        }
+
+        if ($deliveredGroups <= 0) {
+            continue;
+        }
+
+        lineMarkScheduledImageSent($pdo, $messageId, $scheduledDate, $messageTime, $imageName, $deliveredGroups);
+        $sentMessages++;
+        $sentGroups += $deliveredGroups;
+    }
+
+    return [
+        'sent_messages' => $sentMessages,
+        'sent_groups' => $sentGroups,
+        'due_messages' => $dueMessages,
+        'skipped' => false,
+        'time' => $scheduledTime,
+        'grace_minutes' => $graceMinutes,
+    ];
+}
+
+function lineDiagnoseScheduledImages(PDO $pdo, ?DateTimeImmutable $now = null): array
+{
+    $now = $now ?: new DateTimeImmutable('now', new DateTimeZone('Asia/Bangkok'));
+    $scheduledDate = $now->format('Y-m-d');
+    $scheduledTime = $now->format('H:i');
+    $scheduledWeekday = (int) $now->format('w');
+    $currentMinutes = ((int) $now->format('H') * 60) + (int) $now->format('i');
+    $graceMinutes = 15;
+    $messages = lineGetScheduledImageMessages($pdo);
+    $groups = $pdo->query("SELECT group_id FROM line_groups WHERE is_active = 1 ORDER BY id ASC")->fetchAll();
+
+    $diagnostics = [
+        'server_time' => $scheduledTime,
+        'server_date' => $scheduledDate,
+        'server_weekday' => lineWeekdayLabel((string) $scheduledWeekday),
+        'grace_minutes' => $graceMinutes,
+        'config_ready' => lineConfigReady($pdo),
+        'active_groups' => count($groups),
+        'total_messages' => count($messages),
+        'ready_messages' => 0,
+        'due_messages' => 0,
+        'reason_counts' => [],
+        'items' => [],
+    ];
+
+    foreach ($messages as $row) {
+        $messageId = (string) ($row['id'] ?? '');
+        $messageDayStart = (string) ($row['day_start'] ?? '');
+        $messageDayEnd = (string) ($row['day_end'] ?? '');
+        $messageTime = (string) ($row['time'] ?? '');
+        $imageName = (string) ($row['image'] ?? '');
+        $enabled = !empty($row['enabled']);
+        $messageMinutes = lineTimeToMinutes($messageTime);
+        $imageUrl = lineScheduledImageUrl($pdo, $imageName);
+        $reason = 'ready';
+
+        if (!$enabled) {
+            $reason = 'disabled';
+        } elseif ($messageMinutes === null) {
+            $reason = 'time_empty';
+        } elseif ($imageUrl === null) {
+            $reason = 'image_missing';
+        } else {
+            $diagnostics['ready_messages']++;
+
+            if (!lineWeekdayInRange($scheduledWeekday, $messageDayStart, $messageDayEnd)) {
+                $reason = 'weekday_mismatch';
+            } elseif ($messageMinutes > $currentMinutes) {
+                $reason = 'not_due_yet';
+            } elseif (($currentMinutes - $messageMinutes) > $graceMinutes) {
+                $reason = 'outside_grace_window';
+            } elseif (lineScheduledImageAlreadySent($pdo, $messageId, $scheduledDate, $messageTime)) {
+                $reason = 'already_sent';
+            } else {
+                $reason = 'due_now';
+                $diagnostics['due_messages']++;
+            }
+        }
+
+        if (!isset($diagnostics['reason_counts'][$reason])) {
+            $diagnostics['reason_counts'][$reason] = 0;
+        }
+        $diagnostics['reason_counts'][$reason]++;
+
+        $diagnostics['items'][] = [
+            'id' => $messageId,
+            'time' => $messageTime,
+            'range' => lineDescribeWeekdayRange($messageDayStart, $messageDayEnd),
+            'reason' => $reason,
+            'preview' => $imageName !== '' ? $imageName : '-',
+            'image_url' => $imageUrl,
         ];
     }
 
