@@ -186,6 +186,21 @@ function lineNormalizeScheduledMessageTime(string $value): string
     return sprintf('%02d:%02d', (int) $matches[1], (int) $matches[2]);
 }
 
+function lineNormalizeScheduledMessageDate(string $value): string
+{
+    $value = trim($value);
+    if ($value === '') {
+        return '';
+    }
+
+    $date = DateTimeImmutable::createFromFormat('Y-m-d', $value);
+    if (!$date || $date->format('Y-m-d') !== $value) {
+        return '';
+    }
+
+    return $value;
+}
+
 function lineGetScheduledTextMessages(PDO $pdo): array
 {
     $raw = lineGetSetting($pdo, 'scheduled_text_messages', '[]');
@@ -205,6 +220,7 @@ function lineGetScheduledTextMessages(PDO $pdo): array
             $id = lineGenerateScheduledMessageId();
         }
 
+        $date = lineNormalizeScheduledMessageDate((string) ($row['date'] ?? ''));
         $time = lineNormalizeScheduledMessageTime((string) ($row['time'] ?? ''));
         $message = trim((string) ($row['message'] ?? ''));
         $enabled = (string) ($row['enabled'] ?? '1') !== '0';
@@ -214,6 +230,7 @@ function lineGetScheduledTextMessages(PDO $pdo): array
 
         $messages[] = [
             'id' => $id,
+            'date' => $date,
             'time' => $time,
             'message' => $message,
             'enabled' => $enabled,
@@ -236,6 +253,7 @@ function lineSetScheduledTextMessages(PDO $pdo, array $messages): void
             $id = lineGenerateScheduledMessageId();
         }
 
+        $date = lineNormalizeScheduledMessageDate((string) ($row['date'] ?? ''));
         $time = lineNormalizeScheduledMessageTime((string) ($row['time'] ?? ''));
         $message = trim((string) ($row['message'] ?? ''));
         $enabled = (string) ($row['enabled'] ?? '0') === '1';
@@ -245,6 +263,7 @@ function lineSetScheduledTextMessages(PDO $pdo, array $messages): void
 
         $normalized[] = [
             'id' => $id,
+            'date' => $date,
             'time' => $time,
             'message' => $message,
             'enabled' => $enabled ? 1 : 0,
@@ -319,11 +338,16 @@ function lineSendDueScheduledMessages(PDO $pdo, ?DateTimeImmutable $now = null):
     $sentGroups = 0;
     foreach ($messages as $row) {
         $messageId = (string) ($row['id'] ?? '');
+        $messageDate = (string) ($row['date'] ?? '');
         $messageTime = (string) ($row['time'] ?? '');
         $messageText = trim((string) ($row['message'] ?? ''));
         $enabled = !empty($row['enabled']);
 
         if (!$enabled || $messageId === '' || $messageTime !== $scheduledTime || $messageText === '') {
+            continue;
+        }
+
+        if ($messageDate !== '' && $messageDate !== $scheduledDate) {
             continue;
         }
 

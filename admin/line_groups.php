@@ -40,7 +40,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'save_scheduled_messages') {
         $messages = $_POST['scheduled_messages'] ?? [];
         lineSetScheduledTextMessages($pdo, is_array($messages) ? $messages : []);
-        lineGroupsRedirectWithFlash('success', 'บันทึกข้อความอัตโนมัติตามเวลาสำเร็จ');
+        lineGroupsRedirectWithFlash('success', 'บันทึกข้อความอัตโนมัติตามวันและเวลาสำเร็จ');
     }
 
     if ($action === 'send_test') {
@@ -142,6 +142,7 @@ $scheduledMessages = lineGetScheduledTextMessages($pdo);
 if (empty($scheduledMessages)) {
     $scheduledMessages = [[
         'id' => lineGenerateScheduledMessageId(),
+        'date' => '',
         'time' => '',
         'message' => '',
         'enabled' => true,
@@ -360,9 +361,9 @@ require_once 'includes/header.php';
         </div>
 
         <div class="xl:col-span-2 bg-white rounded-xl shadow-sm border overflow-hidden">
-            <div class="px-4 py-3 border-b bg-gray-50 font-semibold text-gray-700">ข้อความอัตโนมัติตามเวลา</div>
+            <div class="px-4 py-3 border-b bg-gray-50 font-semibold text-gray-700">ข้อความอัตโนมัติตามวันและเวลา</div>
             <div class="px-4 py-3 text-xs text-gray-500 border-b bg-gray-50/60">
-                เพิ่มข้อความตามเวลาที่ต้องการได้เลย ระบบจะส่งไปทุกกลุ่มที่ active ทุกวันเมื่อถึงเวลาที่ตั้งไว้ในรูปแบบ HH:MM
+                กำหนดวันที่ส่งและเวลาส่งได้เลย ถ้าเว้นวันที่ไว้ ระบบจะส่งทุกวันตามเวลาที่ตั้งไว้ แต่ถ้าเลือกวันที่ ระบบจะส่งเฉพาะวันนั้น
             </div>
             <form method="POST" class="p-4 space-y-4">
                 <input type="hidden" name="form_action" value="save_scheduled_messages">
@@ -377,6 +378,10 @@ require_once 'includes/header.php';
                     <div class="scheduled-message-item rounded-xl border border-gray-200 bg-gray-50 p-4 space-y-3">
                         <input type="hidden" name="scheduled_messages[<?= $index ?>][id]" value="<?= htmlspecialchars((string) $scheduledMessage['id']) ?>">
                         <div class="flex flex-col gap-3 lg:flex-row lg:items-center">
+                            <div class="w-full lg:w-48">
+                                <label class="text-xs text-gray-500 block mb-1">วันที่ส่ง</label>
+                                <input type="date" name="scheduled_messages[<?= $index ?>][date]" value="<?= htmlspecialchars((string) ($scheduledMessage['date'] ?? '')) ?>" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+                            </div>
                             <div class="w-full lg:w-44">
                                 <label class="text-xs text-gray-500 block mb-1">เวลาส่ง</label>
                                 <input type="time" name="scheduled_messages[<?= $index ?>][time]" value="<?= htmlspecialchars((string) $scheduledMessage['time']) ?>" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
@@ -403,7 +408,7 @@ require_once 'includes/header.php';
                 </div>
                 <div class="border-t pt-4">
                     <button type="submit" class="bg-[#2e7d32] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#1b5e20] transition">
-                        <i class="fas fa-save mr-1"></i> บันทึกข้อความตามเวลา
+                        <i class="fas fa-save mr-1"></i> บันทึกข้อความตามวันและเวลา
                     </button>
                 </div>
             </form>
@@ -534,6 +539,10 @@ document.addEventListener('DOMContentLoaded', function () {
         wrapper.innerHTML = `
             <input type="hidden" name="scheduled_messages[${index}][id]" value="${generatedId}">
             <div class="flex flex-col gap-3 lg:flex-row lg:items-center">
+                <div class="w-full lg:w-48">
+                    <label class="text-xs text-gray-500 block mb-1">วันที่ส่ง</label>
+                    <input type="date" name="scheduled_messages[${index}][date]" value="" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
+                </div>
                 <div class="w-full lg:w-44">
                     <label class="text-xs text-gray-500 block mb-1">เวลาส่ง</label>
                     <input type="time" name="scheduled_messages[${index}][time]" value="" class="w-full border rounded-lg px-3 py-2 text-sm outline-none">
@@ -583,9 +592,11 @@ document.addEventListener('DOMContentLoaded', function () {
 
             const items = scheduledMessagesList.querySelectorAll('.scheduled-message-item');
             if (items.length === 1) {
+                const dateInput = item.querySelector('input[type="date"]');
                 const timeInput = item.querySelector('input[type=\"time\"]');
                 const textarea = item.querySelector('textarea');
                 const checkbox = item.querySelector('input[type=\"checkbox\"]');
+                if (dateInput) dateInput.value = '';
                 if (timeInput) timeInput.value = '';
                 if (textarea) textarea.value = '';
                 if (checkbox) checkbox.checked = true;
