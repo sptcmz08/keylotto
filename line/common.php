@@ -875,6 +875,7 @@ function lineSendDueScheduledImages(PDO $pdo, ?DateTimeImmutable $now = null): a
         }
 
         if ($deliveredGroups <= 0) {
+            lineLog('Scheduled LINE image not delivered for message ' . $messageId . ' at ' . $scheduledDate . ' ' . $messageTime);
             continue;
         }
 

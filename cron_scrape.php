@@ -1250,6 +1250,38 @@ switch ($scraper) {
         exit(1);
 }
 
+echo "\nScheduled LINE dispatch phase: after-scrape\n";
+
+try {
+    $scheduledTextStats = lineSendDueScheduledMessages($pdo);
+    if (!empty($scheduledTextStats['sent_messages'])) {
+        echo "Scheduled LINE text (after-scrape): {$scheduledTextStats['sent_messages']} รายการ / {$scheduledTextStats['sent_groups']} กลุ่ม ({$scheduledTextStats['time']})\n\n";
+    } elseif (!empty($scheduledTextStats['due_messages'])) {
+        echo "Scheduled LINE text due (after-scrape): {$scheduledTextStats['due_messages']} รายการ แต่ยังไม่ส่งสำเร็จ ({$scheduledTextStats['time']}, grace {$scheduledTextStats['grace_minutes']}m)\n\n";
+    } elseif (!empty($scheduledTextStats['skipped'])) {
+        $scheduledSkipReason = (string) ($scheduledTextStats['reason'] ?? 'unknown');
+        echo "Scheduled LINE text skipped (after-scrape): {$scheduledSkipReason}\n\n";
+    }
+} catch (Exception $scheduledTextError) {
+    echo "Scheduled LINE text failed (after-scrape): " . $scheduledTextError->getMessage() . "\n\n";
+    lineLog('Scheduled LINE text failed (after-scrape): ' . $scheduledTextError->getMessage());
+}
+
+try {
+    $scheduledImageStats = lineSendDueScheduledImages($pdo);
+    if (!empty($scheduledImageStats['sent_messages'])) {
+        echo "Scheduled LINE image (after-scrape): {$scheduledImageStats['sent_messages']} รายการ / {$scheduledImageStats['sent_groups']} กลุ่ม ({$scheduledImageStats['time']})\n\n";
+    } elseif (!empty($scheduledImageStats['due_messages'])) {
+        echo "Scheduled LINE image due (after-scrape): {$scheduledImageStats['due_messages']} รายการ แต่ยังไม่ส่งสำเร็จ ({$scheduledImageStats['time']}, grace {$scheduledImageStats['grace_minutes']}m)\n\n";
+    } elseif (!empty($scheduledImageStats['skipped'])) {
+        $scheduledImageSkipReason = (string) ($scheduledImageStats['reason'] ?? 'unknown');
+        echo "Scheduled LINE image skipped (after-scrape): {$scheduledImageSkipReason}\n\n";
+    }
+} catch (Exception $scheduledImageError) {
+    echo "Scheduled LINE image failed (after-scrape): " . $scheduledImageError->getMessage() . "\n\n";
+    lineLog('Scheduled LINE image failed (after-scrape): ' . $scheduledImageError->getMessage());
+}
+
 $elapsed = round(microtime(true) - $startTime, 2);
 echo "\n═══════════════════════════════════════\n";
 echo "⏱️  เสร็จใน {$elapsed} วินาที\n";
