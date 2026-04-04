@@ -375,8 +375,12 @@ function lineMarkScheduledTextSent(
 
 function lineSendDueScheduledMessages(PDO $pdo, ?DateTimeImmutable $now = null): array
 {
-    if (!lineConfigReady($pdo) || !lineAutoSendTextsEnabled($pdo)) {
-        return ['sent_messages' => 0, 'sent_groups' => 0, 'due_messages' => 0, 'skipped' => true];
+    if (!lineConfigReady($pdo)) {
+        return ['sent_messages' => 0, 'sent_groups' => 0, 'due_messages' => 0, 'skipped' => true, 'reason' => 'config_not_ready'];
+    }
+
+    if (!lineAutoSendTextsEnabled($pdo)) {
+        return ['sent_messages' => 0, 'sent_groups' => 0, 'due_messages' => 0, 'skipped' => true, 'reason' => 'auto_send_texts_disabled'];
     }
 
     $messages = lineGetScheduledTextMessages($pdo);
@@ -443,6 +447,11 @@ function lineSendDueScheduledMessages(PDO $pdo, ?DateTimeImmutable $now = null):
             if (!empty($result['ok'])) {
                 $deliveredGroups++;
             }
+        }
+
+        if ($deliveredGroups <= 0) {
+            lineLog('Scheduled LINE text not delivered for message ' . $messageId . ' at ' . $scheduledDate . ' ' . $messageTime);
+            continue;
         }
 
         lineMarkScheduledTextSent($pdo, $messageId, $scheduledDate, $messageTime, $messageText, $deliveredGroups);

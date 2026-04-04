@@ -40,6 +40,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'save_scheduled_messages') {
         $messages = $_POST['scheduled_messages'] ?? [];
         lineSetScheduledTextMessages($pdo, is_array($messages) ? $messages : []);
+        $savedScheduledMessages = lineGetScheduledTextMessages($pdo);
+        $hasEnabledScheduledMessage = false;
+        foreach ($savedScheduledMessages as $scheduledMessage) {
+            if (!empty($scheduledMessage['enabled']) && trim((string) ($scheduledMessage['time'] ?? '')) !== '' && trim((string) ($scheduledMessage['message'] ?? '')) !== '') {
+                $hasEnabledScheduledMessage = true;
+                break;
+            }
+        }
+
+        if ($hasEnabledScheduledMessage && !lineAutoSendTextsEnabled($pdo)) {
+            lineSetSetting($pdo, 'auto_send_texts', '1');
+            lineGroupsRedirectWithFlash('success', 'บันทึกข้อความอัตโนมัติสำเร็จ และเปิดส่งข้อความอัตโนมัติตามเวลาให้แล้ว');
+        }
+
         lineGroupsRedirectWithFlash('success', 'บันทึกข้อความอัตโนมัติตามช่วงวันและเวลาสำเร็จ');
     }
 

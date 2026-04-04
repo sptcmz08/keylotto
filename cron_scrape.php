@@ -1170,6 +1170,9 @@ try {
         echo "ðŸ’¬ Scheduled LINE text: {$scheduledTextStats['sent_messages']} à¸£à¸²à¸¢à¸à¸²à¸£ / {$scheduledTextStats['sent_groups']} à¸à¸¥à¸¸à¹ˆà¸¡ ({$scheduledTextStats['time']})\n\n";
     } elseif (!empty($scheduledTextStats['due_messages'])) {
         echo "â„¹ï¸  Scheduled LINE text due: {$scheduledTextStats['due_messages']} à¸£à¸²à¸¢à¸à¸²à¸£ à¹à¸•à¹ˆà¸¢à¸±à¸‡à¹„à¸¡à¹ˆà¸ªà¹ˆà¸‡à¸ªà¸³à¹€à¸£à¹‡à¸ˆ ({$scheduledTextStats['time']}, grace {$scheduledTextStats['grace_minutes']}m)\n\n";
+    } elseif (!empty($scheduledTextStats['skipped'])) {
+        $scheduledSkipReason = (string) ($scheduledTextStats['reason'] ?? 'unknown');
+        echo "Scheduled LINE text skipped: {$scheduledSkipReason}\n\n";
     }
 } catch (Exception $scheduledTextError) {
     echo "âš ï¸  Scheduled LINE text failed: " . $scheduledTextError->getMessage() . "\n\n";
