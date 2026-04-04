@@ -104,29 +104,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         lineGroupsRedirectWithFlash('error', 'ส่งรูปผลหวยไม่สำเร็จ (HTTP ' . ($result['status'] ?: 0) . ')');
     }
 
-    if ($action === 'upload_template') {
-        $lotteryTypeId = (int) ($_POST['lottery_type_id'] ?? 0);
-        $upload = lineSaveTemplateUpload($lotteryTypeId, $_FILES['template_image'] ?? []);
-        lineGroupsRedirectWithFlash($upload['ok'] ? 'success' : 'error', $upload['message']);
-    }
-
     if ($action === 'upload_shared_template') {
         $groupKey = trim((string) ($_POST['shared_group_key'] ?? ''));
         $upload = lineSaveSharedTemplateUpload($groupKey, $_FILES['template_image'] ?? []);
         lineGroupsRedirectWithFlash($upload['ok'] ? 'success' : 'error', $upload['message']);
-    }
-
-    if ($action === 'delete_template') {
-        $lotteryTypeId = (int) ($_POST['lottery_type_id'] ?? 0);
-        if ($lotteryTypeId <= 0) {
-            lineGroupsRedirectWithFlash('error', 'Lottery type is invalid');
-        }
-
-        if (lineDeleteTemplateImage($lotteryTypeId)) {
-            lineGroupsRedirectWithFlash('success', 'Template image removed');
-        }
-
-        lineGroupsRedirectWithFlash('error', 'Template image was not found');
     }
 
     if ($action === 'delete_shared_template') {
@@ -171,7 +152,6 @@ $recentResults = $pdo->query("
         r.two_top,
         r.two_bot,
         r.updated_at,
-        lt.flag_emoji,
         lt.name AS lottery_name,
         lc.name AS category_name
     FROM results r
@@ -184,7 +164,6 @@ $recentResults = $pdo->query("
 $lotteryTypes = $pdo->query("
     SELECT
         lt.id,
-        lt.flag_emoji,
         lt.name AS lottery_name,
         lc.name AS category_name
     FROM lottery_types lt
@@ -192,11 +171,6 @@ $lotteryTypes = $pdo->query("
     WHERE lt.is_active = 1
     ORDER BY lc.sort_order ASC, lt.sort_order ASC, lt.id ASC
 ")->fetchAll();
-
-$templateInfos = [];
-foreach ($lotteryTypes as $lotteryType) {
-    $templateInfos[(int) $lotteryType['id']] = lineResolveTemplateImageInfo($pdo, $lotteryType);
-}
 
 $sharedTemplateGroups = lineSharedTemplateGroups();
 $sharedTemplateUrls = [];
@@ -220,10 +194,19 @@ require_once 'includes/header.php';
 </div>
 <?php endif; ?>
 
-<div class="flex justify-between items-center mb-4">
-    <div>
-        <h1 class="text-lg font-bold text-gray-800"><i class="fab fa-line text-green-600 mr-2"></i>LINE Groups</h1>
-        <p class="text-xs text-gray-400">กลุ่มที่เชื่อมผ่าน webhook แล้ว <?= count($groups) ?> กลุ่ม</p>
+<div class="mb-4">
+    <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+            <h1 class="text-lg font-bold text-gray-800"><i class="fab fa-line text-green-600 mr-2"></i>LINE Groups</h1>
+            <p class="text-xs text-gray-400">จัดการการส่งรูปผลหวย ข้อความอัตโนมัติ และกลุ่ม LINE ที่เชื่อมผ่าน webhook แล้ว <?= count($groups) ?> กลุ่ม</p>
+        </div>
+        <div class="flex flex-wrap gap-2">
+            <button type="button" data-line-tab="settings" class="line-tab-btn bg-[#1b5e20] text-white px-4 py-2 rounded-full text-sm font-medium">ตั้งค่า</button>
+            <button type="button" data-line-tab="shared-templates" class="line-tab-btn bg-white text-gray-700 border border-gray-200 px-4 py-2 rounded-full text-sm font-medium">Shared Templates</button>
+            <button type="button" data-line-tab="send-image" class="line-tab-btn bg-white text-gray-700 border border-gray-200 px-4 py-2 rounded-full text-sm font-medium">ส่งรูปภาพ</button>
+            <button type="button" data-line-tab="auto-text" class="line-tab-btn bg-white text-gray-700 border border-gray-200 px-4 py-2 rounded-full text-sm font-medium">ส่งข้อความ Auto</button>
+            <button type="button" data-line-tab="groups" class="line-tab-btn bg-white text-gray-700 border border-gray-200 px-4 py-2 rounded-full text-sm font-medium">กลุ่มและประวัติ</button>
+        </div>
     </div>
 </div>
 
@@ -234,358 +217,355 @@ require_once 'includes/header.php';
 </div>
 <?php endif; ?>
 
-<div class="mb-4 bg-white rounded-xl shadow-sm border overflow-hidden">
-    <div class="px-4 py-3 border-b bg-gray-50 font-semibold text-gray-700">ตั้งค่า LINE Settings</div>
-    <form method="POST" class="p-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <input type="hidden" name="form_action" value="save_credentials">
-        <div>
-            <label class="text-xs text-gray-500 block mb-1">Channel secret</label>
-            <input type="text" name="channel_secret" class="w-full border rounded-lg px-3 py-2 text-sm outline-none" value="<?= htmlspecialchars($savedChannelSecret) ?>" placeholder="LINE Channel secret">
-        </div>
-        <div>
-            <label class="text-xs text-gray-500 block mb-1">Channel access token</label>
-            <textarea name="channel_access_token" rows="3" class="w-full border rounded-lg px-3 py-2 text-sm outline-none" placeholder="LINE Channel access token"><?= htmlspecialchars($savedChannelAccessToken) ?></textarea>
-        </div>
-        <div>
-            <label class="text-xs text-gray-500 block mb-1">Public base URL</label>
-            <input type="text" name="public_base_url" class="w-full border rounded-lg px-3 py-2 text-sm outline-none" value="<?= htmlspecialchars($savedPublicBaseUrl) ?>" placeholder="https://member.imzshop97.com">
-            <div class="text-[11px] text-gray-400 mt-1">ใช้สำหรับสร้าง URL รูปภาพที่ LINE จะดึงไปแสดง</div>
-        </div>
-        <div class="pt-4 space-y-3">
-        <div class="pt-1">
-            <label class="inline-flex items-center gap-2 text-sm text-gray-700">
-                <input type="checkbox" name="auto_send_results" value="1" class="rounded border-gray-300" <?= $autoSendResults ? 'checked' : '' ?>>
-                เปิดส่งผลหวยอัตโนมัติเป็นรูปเมื่อมีผลใหม่
-            </label>
-        </div>
-            <label class="inline-flex items-center gap-2 text-sm text-gray-700">
-                <input type="checkbox" name="auto_send_texts" value="1" class="rounded border-gray-300" <?= $autoSendTexts ? 'checked' : '' ?>>
-                เปิดส่งข้อความอัตโนมัติตามข้อความที่ตั้งไว้เมื่อมีผลใหม่
-            </label>
-        </div>
-        <div class="lg:col-span-2">
-            <button type="submit" class="bg-[#2e7d32] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#1b5e20] transition">
-                <i class="fas fa-save mr-1"></i> บันทึก LINE Settings
-            </button>
-        </div>
-    </form>
-</div>
-
-<div class="mb-4 bg-white rounded-xl shadow-sm border overflow-hidden">
-    <div class="px-4 py-3 border-b bg-gray-50 font-semibold text-gray-700">Result Image Templates</div>
-    <div class="px-4 py-3 text-xs text-gray-500 border-b bg-gray-50/60">
-        Upload one base image per lottery. The system will reuse that image and only place the lottery name, draw date, and result numbers on top.
-    </div>
-    <div class="overflow-x-auto">
-        <table class="w-full text-sm">
-            <thead class="bg-gray-50 border-b">
-                <tr>
-                    <th class="px-3 py-2 text-left text-xs text-gray-500">Lottery</th>
-                    <th class="px-3 py-2 text-left text-xs text-gray-500">Category</th>
-                    <th class="px-3 py-2 text-left text-xs text-gray-500">Current template</th>
-                    <th class="px-3 py-2 text-left text-xs text-gray-500">Upload / Remove</th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php foreach ($lotteryTypes as $lotteryType): ?>
-                <?php $templateInfo = $templateInfos[(int) $lotteryType['id']] ?? null; ?>
-                <?php $templateUrl = is_array($templateInfo) ? ($templateInfo['url'] ?? null) : null; ?>
-                <tr class="border-b hover:bg-gray-50 align-top">
-                    <td class="px-3 py-3 font-medium text-gray-800"><?= htmlspecialchars($lotteryType['lottery_name']) ?></td>
-                    <td class="px-3 py-3 text-gray-500"><?= htmlspecialchars($lotteryType['category_name']) ?></td>
-                    <td class="px-3 py-3">
-                        <?php if ($templateUrl): ?>
-                        <a href="<?= htmlspecialchars($templateUrl) ?>" target="_blank" class="inline-block">
-                            <img src="<?= htmlspecialchars($templateUrl) ?>" alt="Template preview" class="w-40 h-24 object-cover rounded-lg border border-gray-200 shadow-sm">
-                        </a>
-                        <div class="mt-1 text-[11px] text-gray-500"><?= htmlspecialchars((string) ($templateInfo['source_label'] ?? '')) ?></div>
-                        <?php else: ?>
-                        <span class="text-xs text-gray-400">No template uploaded</span>
-                        <?php endif; ?>
-                    </td>
-                    <td class="px-3 py-3 min-w-[320px]">
-                        <form method="POST" enctype="multipart/form-data" class="space-y-2">
-                            <input type="hidden" name="form_action" value="upload_template">
-                            <input type="hidden" name="lottery_type_id" value="<?= (int) $lotteryType['id'] ?>">
-                            <input type="file" name="template_image" accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp" class="block w-full text-xs text-gray-500 border rounded-lg px-3 py-2 bg-white">
-                            <button type="submit" class="bg-[#6a1b9a] text-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-[#4a148c] transition">
-                                <i class="fas fa-upload mr-1"></i> Upload template
-                            </button>
-                        </form>
-                        <?php if ($templateUrl): ?>
-                        <form method="POST" class="mt-2">
-                            <input type="hidden" name="form_action" value="delete_template">
-                            <input type="hidden" name="lottery_type_id" value="<?= (int) $lotteryType['id'] ?>">
-                            <button type="submit" class="bg-red-50 text-red-700 border border-red-200 px-3 py-2 rounded-lg text-sm font-medium hover:bg-red-100 transition">
-                                <i class="fas fa-trash-alt mr-1"></i> Remove template
-                            </button>
-                        </form>
-                        <?php endif; ?>
-                    </td>
-                </tr>
-                <?php endforeach; ?>
-                <?php if (empty($lotteryTypes)): ?>
-                <tr>
-                    <td colspan="4" class="px-3 py-6 text-center text-sm text-gray-400">No active lottery types found</td>
-                </tr>
-                <?php endif; ?>
-            </tbody>
-        </table>
-    </div>
-</div>
-
-<div class="mb-4 bg-white rounded-xl shadow-sm border overflow-hidden">
-    <div class="px-4 py-3 border-b bg-gray-50 font-semibold text-gray-700">Shared Template Groups</div>
-    <div class="px-4 py-3 text-xs text-gray-500 border-b bg-gray-50/60">
-        Upload one shared image per country/group. Lotteries without their own template will reuse the shared one automatically.
-    </div>
-    <div class="overflow-x-auto">
-        <table class="w-full text-sm">
-            <thead class="bg-gray-50 border-b">
-                <tr>
-                    <th class="px-3 py-2 text-left text-xs text-gray-500">Group</th>
-                    <th class="px-3 py-2 text-left text-xs text-gray-500">Current template</th>
-                    <th class="px-3 py-2 text-left text-xs text-gray-500">Upload / Remove</th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php foreach ($sharedTemplateGroups as $groupKey => $groupLabel): ?>
-                <?php $sharedTemplateUrl = $sharedTemplateUrls[$groupKey] ?? null; ?>
-                <tr class="border-b hover:bg-gray-50 align-top">
-                    <td class="px-3 py-3 font-medium text-gray-800"><?= htmlspecialchars($groupLabel) ?></td>
-                    <td class="px-3 py-3">
-                        <?php if ($sharedTemplateUrl): ?>
-                        <a href="<?= htmlspecialchars($sharedTemplateUrl) ?>" target="_blank" class="inline-block">
-                            <img src="<?= htmlspecialchars($sharedTemplateUrl) ?>" alt="Shared template preview" class="w-40 h-24 object-cover rounded-lg border border-gray-200 shadow-sm">
-                        </a>
-                        <?php else: ?>
-                        <span class="text-xs text-gray-400">No shared template uploaded</span>
-                        <?php endif; ?>
-                    </td>
-                    <td class="px-3 py-3 min-w-[320px]">
-                        <form method="POST" enctype="multipart/form-data" class="space-y-2">
-                            <input type="hidden" name="form_action" value="upload_shared_template">
-                            <input type="hidden" name="shared_group_key" value="<?= htmlspecialchars($groupKey) ?>">
-                            <input type="file" name="template_image" accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp" class="block w-full text-xs text-gray-500 border rounded-lg px-3 py-2 bg-white">
-                            <button type="submit" class="bg-[#7b1fa2] text-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-[#6a1b9a] transition">
-                                <i class="fas fa-layer-group mr-1"></i> Upload shared template
-                            </button>
-                        </form>
-                        <?php if ($sharedTemplateUrl): ?>
-                        <form method="POST" class="mt-2">
-                            <input type="hidden" name="form_action" value="delete_shared_template">
-                            <input type="hidden" name="shared_group_key" value="<?= htmlspecialchars($groupKey) ?>">
-                            <button type="submit" class="bg-red-50 text-red-700 border border-red-200 px-3 py-2 rounded-lg text-sm font-medium hover:bg-red-100 transition">
-                                <i class="fas fa-trash-alt mr-1"></i> Remove shared template
-                            </button>
-                        </form>
-                        <?php endif; ?>
-                    </td>
-                </tr>
-                <?php endforeach; ?>
-            </tbody>
-        </table>
-    </div>
-</div>
-
-<div class="mb-4 bg-white rounded-xl shadow-sm border overflow-hidden">
-    <div class="px-4 py-3 border-b bg-gray-50 font-semibold text-gray-700">Auto Message Templates</div>
-    <div class="px-4 py-3 text-xs text-gray-500 border-b bg-gray-50/60">
-        ตั้งข้อความอัตโนมัติรายหวยได้ที่นี่ ระบบจะส่งข้อความนี้ไปทุกกลุ่มที่ active เมื่อหวยรายการนั้นมีผลใหม่
-        ตัวแปรที่ใช้ได้: <code>{lottery_name}</code>, <code>{draw_date}</code>, <code>{draw_date_display}</code>, <code>{three_top}</code>, <code>{two_top}</code>, <code>{two_bot}</code>
-    </div>
-    <form method="POST">
-        <input type="hidden" name="form_action" value="save_auto_text_templates">
-        <div class="overflow-x-auto">
-            <table class="w-full text-sm">
-                <thead class="bg-gray-50 border-b">
-                    <tr>
-                        <th class="px-3 py-2 text-left text-xs text-gray-500">Lottery</th>
-                        <th class="px-3 py-2 text-left text-xs text-gray-500">Category</th>
-                        <th class="px-3 py-2 text-left text-xs text-gray-500">Message template</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php foreach ($lotteryTypes as $lotteryType): ?>
-                    <tr class="border-b hover:bg-gray-50 align-top">
-                        <td class="px-3 py-3 font-medium text-gray-800"><?= htmlspecialchars($lotteryType['lottery_name']) ?></td>
-                        <td class="px-3 py-3 text-gray-500"><?= htmlspecialchars($lotteryType['category_name']) ?></td>
-                        <td class="px-3 py-3 min-w-[420px]">
-                            <textarea
-                                name="auto_text_templates[<?= (int) $lotteryType['id'] ?>]"
-                                rows="5"
-                                class="w-full border rounded-lg px-3 py-2 text-sm outline-none"
-                                placeholder="เว้นว่างไว้ถ้าไม่ต้องการส่งข้อความอัตโนมัติสำหรับหวยรายการนี้"
-                            ><?= htmlspecialchars((string) ($autoTextTemplates[(int) $lotteryType['id']] ?? '')) ?></textarea>
-                        </td>
-                    </tr>
-                    <?php endforeach; ?>
-                    <?php if (empty($lotteryTypes)): ?>
-                    <tr>
-                        <td colspan="3" class="px-3 py-6 text-center text-sm text-gray-400">No active lottery types found</td>
-                    </tr>
-                    <?php endif; ?>
-                </tbody>
-            </table>
-        </div>
-        <div class="px-4 py-3 border-t bg-white">
-            <button type="submit" class="bg-[#2e7d32] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#1b5e20] transition">
-                <i class="fas fa-save mr-1"></i> บันทึกข้อความอัตโนมัติ
-            </button>
-        </div>
-    </form>
-</div>
-
-<div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
-    <div class="xl:col-span-2 bg-white rounded-xl shadow-sm border overflow-hidden">
-        <div class="px-4 py-3 border-b bg-gray-50 font-semibold text-gray-700">รายชื่อกลุ่ม LINE</div>
-        <div class="overflow-x-auto">
-            <table class="w-full text-sm">
-                <thead class="bg-gray-50 border-b">
-                    <tr>
-                        <th class="px-3 py-2 text-left text-xs text-gray-500">สถานะ</th>
-                        <th class="px-3 py-2 text-left text-xs text-gray-500">ชื่อกลุ่ม</th>
-                        <th class="px-3 py-2 text-left text-xs text-gray-500">Group ID</th>
-                        <th class="px-3 py-2 text-left text-xs text-gray-500">ล่าสุด</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php foreach ($groups as $group): ?>
-                    <tr class="border-b hover:bg-gray-50">
-                        <td class="px-3 py-2">
-                            <span class="px-2 py-1 rounded-full text-[11px] font-medium <?= !empty($group['is_active']) ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700' ?>">
-                                <?= !empty($group['is_active']) ? 'active' : 'inactive' ?>
-                            </span>
-                        </td>
-                        <td class="px-3 py-2 font-medium text-gray-800"><?= htmlspecialchars($group['group_name'] ?: '(ยังไม่ทราบชื่อกลุ่ม)') ?></td>
-                        <td class="px-3 py-2 text-xs text-gray-500"><?= htmlspecialchars($group['group_id']) ?></td>
-                        <td class="px-3 py-2 text-xs text-gray-500"><?= htmlspecialchars($group['last_seen_at']) ?></td>
-                    </tr>
-                    <?php endforeach; ?>
-                    <?php if (empty($groups)): ?>
-                    <tr>
-                        <td colspan="4" class="px-3 py-6 text-center text-sm text-gray-400">ยังไม่พบกลุ่ม LINE</td>
-                    </tr>
-                    <?php endif; ?>
-                </tbody>
-            </table>
-        </div>
-    </div>
-
+<section data-line-panel="settings" class="line-panel">
     <div class="bg-white rounded-xl shadow-sm border overflow-hidden">
-        <div class="px-4 py-3 border-b bg-gray-50 font-semibold text-gray-700">ส่งข้อความทดสอบ</div>
-        <form method="POST" class="p-4 space-y-4">
-            <input type="hidden" name="form_action" value="send_test">
+        <div class="px-4 py-3 border-b bg-gray-50 font-semibold text-gray-700">ตั้งค่า LINE Settings</div>
+        <form method="POST" class="p-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <input type="hidden" name="form_action" value="save_credentials">
             <div>
-                <label class="text-xs text-gray-500 block mb-1">เลือกกลุ่ม</label>
-                <select name="group_id" class="w-full border rounded-lg px-3 py-2 text-sm outline-none" <?= empty($groups) ? 'disabled' : '' ?>>
-                    <?php foreach ($groups as $group): ?>
-                    <option value="<?= htmlspecialchars($group['group_id']) ?>">
-                        <?= htmlspecialchars(($group['group_name'] ?: 'group') . ' - ' . $group['group_id']) ?>
-                    </option>
-                    <?php endforeach; ?>
-                </select>
+                <label class="text-xs text-gray-500 block mb-1">Channel secret</label>
+                <input type="text" name="channel_secret" class="w-full border rounded-lg px-3 py-2 text-sm outline-none" value="<?= htmlspecialchars($savedChannelSecret) ?>" placeholder="LINE Channel secret">
             </div>
             <div>
-                <label class="text-xs text-gray-500 block mb-1">ข้อความ</label>
-                <textarea name="message" rows="5" class="w-full border rounded-lg px-3 py-2 text-sm outline-none" placeholder="ทดสอบส่งข้อความจากระบบ LINE">ทดสอบส่งข้อความจากระบบ LINE</textarea>
+                <label class="text-xs text-gray-500 block mb-1">Channel access token</label>
+                <textarea name="channel_access_token" rows="3" class="w-full border rounded-lg px-3 py-2 text-sm outline-none" placeholder="LINE Channel access token"><?= htmlspecialchars($savedChannelAccessToken) ?></textarea>
             </div>
-            <button type="submit" class="w-full bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition disabled:opacity-50" <?= empty($groups) ? 'disabled' : '' ?>>
-                <i class="fab fa-line mr-1"></i> ส่งข้อความทดสอบ
-            </button>
+            <div>
+                <label class="text-xs text-gray-500 block mb-1">Public base URL</label>
+                <input type="text" name="public_base_url" class="w-full border rounded-lg px-3 py-2 text-sm outline-none" value="<?= htmlspecialchars($savedPublicBaseUrl) ?>" placeholder="https://member.imzshop97.com">
+                <div class="text-[11px] text-gray-400 mt-1">ใช้สำหรับสร้าง URL รูปภาพที่ LINE จะดึงไปแสดง</div>
+            </div>
+            <div class="rounded-xl border border-gray-200 bg-gray-50 p-4 space-y-3">
+                <div class="font-medium text-gray-700 text-sm">ตัวเลือกการส่งอัตโนมัติ</div>
+                <label class="flex items-start gap-2 text-sm text-gray-700">
+                    <input type="checkbox" name="auto_send_results" value="1" class="mt-1 rounded border-gray-300" <?= $autoSendResults ? 'checked' : '' ?>>
+                    <span>เปิดส่งผลหวยอัตโนมัติเป็นรูปเมื่อมีผลใหม่</span>
+                </label>
+                <label class="flex items-start gap-2 text-sm text-gray-700">
+                    <input type="checkbox" name="auto_send_texts" value="1" class="mt-1 rounded border-gray-300" <?= $autoSendTexts ? 'checked' : '' ?>>
+                    <span>เปิดส่งข้อความอัตโนมัติตามข้อความที่ตั้งไว้เมื่อมีผลใหม่</span>
+                </label>
+            </div>
+            <div class="lg:col-span-2">
+                <button type="submit" class="bg-[#2e7d32] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#1b5e20] transition">
+                    <i class="fas fa-save mr-1"></i> บันทึก LINE Settings
+                </button>
+            </div>
         </form>
     </div>
-</div>
+</section>
 
-<div class="mt-4 bg-white rounded-xl shadow-sm border overflow-hidden">
-    <div class="px-4 py-3 border-b bg-gray-50 font-semibold text-gray-700">ผลหวยที่ออกแล้ว</div>
-    <div class="overflow-x-auto">
-        <table class="w-full text-sm">
-            <thead class="bg-gray-50 border-b">
-                <tr>
-                    <th class="px-3 py-2 text-left text-xs text-gray-500">หวย</th>
-                    <th class="px-3 py-2 text-left text-xs text-gray-500">หมวด</th>
-                    <th class="px-3 py-2 text-left text-xs text-gray-500">งวด</th>
-                    <th class="px-3 py-2 text-center text-xs text-gray-500">3 ตัวบน</th>
-                    <th class="px-3 py-2 text-center text-xs text-gray-500">2 ตัวบน</th>
-                    <th class="px-3 py-2 text-center text-xs text-gray-500">2 ตัวล่าง</th>
-                    <th class="px-3 py-2 text-left text-xs text-gray-500">ส่งเข้ากลุ่ม</th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php foreach ($recentResults as $resultRow): ?>
-                <tr class="border-b hover:bg-gray-50 align-top">
-                    <td class="px-3 py-3 font-medium text-gray-800"><?= htmlspecialchars($resultRow['lottery_name']) ?></td>
-                    <td class="px-3 py-3 text-gray-500"><?= htmlspecialchars($resultRow['category_name']) ?></td>
-                    <td class="px-3 py-3 text-gray-500"><?= htmlspecialchars($resultRow['draw_date']) ?></td>
-                    <td class="px-3 py-3 text-center font-bold text-green-700"><?= htmlspecialchars($resultRow['three_top'] ?: '-') ?></td>
-                    <td class="px-3 py-3 text-center font-bold text-blue-600"><?= htmlspecialchars($resultRow['two_top'] ?: '-') ?></td>
-                    <td class="px-3 py-3 text-center font-bold text-cyan-600"><?= htmlspecialchars($resultRow['two_bot'] ?: '-') ?></td>
-                    <td class="px-3 py-3 min-w-[280px]">
-                        <form method="POST" class="space-y-2">
-                            <input type="hidden" name="form_action" value="send_result_image">
-                            <input type="hidden" name="lottery_type_id" value="<?= (int) $resultRow['lottery_type_id'] ?>">
-                            <input type="hidden" name="draw_date" value="<?= htmlspecialchars($resultRow['draw_date']) ?>">
-                            <select name="group_id" class="w-full border rounded-lg px-3 py-2 text-sm outline-none" <?= empty($groups) ? 'disabled' : '' ?>>
-                                <?php foreach ($groups as $group): ?>
-                                <option value="<?= htmlspecialchars($group['group_id']) ?>">
-                                    <?= htmlspecialchars(($group['group_name'] ?: 'group') . ' - ' . $group['group_id']) ?>
-                                </option>
-                                <?php endforeach; ?>
-                            </select>
-                            <button type="submit" class="w-full bg-[#1565c0] text-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-[#0d47a1] transition disabled:opacity-50" <?= empty($groups) ? 'disabled' : '' ?>>
-                                <i class="fas fa-image mr-1"></i> ส่งรูปผลหวยนี้
-                            </button>
-                        </form>
-                        <a href="line_preview.php?lottery_type_id=<?= (int) $resultRow['lottery_type_id'] ?>&draw_date=<?= urlencode((string) $resultRow['draw_date']) ?>" target="_blank" class="mt-2 inline-flex items-center justify-center w-full bg-white text-[#6a1b9a] border border-[#d1b3e5] px-3 py-2 rounded-lg text-sm font-medium hover:bg-[#faf5ff] transition">
-                            <i class="fas fa-eye mr-1"></i> Preview image
-                        </a>
-                    </td>
-                </tr>
-                <?php endforeach; ?>
-                <?php if (empty($recentResults)): ?>
-                <tr>
-                    <td colspan="7" class="px-3 py-6 text-center text-sm text-gray-400">ยังไม่พบผลหวยในระบบ</td>
-                </tr>
-                <?php endif; ?>
-            </tbody>
-        </table>
+<section data-line-panel="shared-templates" class="line-panel hidden">
+    <div class="bg-white rounded-xl shadow-sm border overflow-hidden">
+        <div class="px-4 py-3 border-b bg-gray-50 font-semibold text-gray-700">Shared Template Groups</div>
+        <div class="px-4 py-3 text-xs text-gray-500 border-b bg-gray-50/60">
+            ใช้แค่ template รวมรายกลุ่มประเทศพอ ระบบจะ fallback มาใช้ให้อัตโนมัติเมื่อไม่มี template เฉพาะรายหวย
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead class="bg-gray-50 border-b">
+                    <tr>
+                        <th class="px-3 py-2 text-left text-xs text-gray-500">กลุ่ม</th>
+                        <th class="px-3 py-2 text-left text-xs text-gray-500">Current template</th>
+                        <th class="px-3 py-2 text-left text-xs text-gray-500">Upload / Remove</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($sharedTemplateGroups as $groupKey => $groupLabel): ?>
+                    <?php $sharedTemplateUrl = $sharedTemplateUrls[$groupKey] ?? null; ?>
+                    <tr class="border-b hover:bg-gray-50 align-top">
+                        <td class="px-3 py-3 font-medium text-gray-800"><?= htmlspecialchars($groupLabel) ?></td>
+                        <td class="px-3 py-3">
+                            <?php if ($sharedTemplateUrl): ?>
+                            <a href="<?= htmlspecialchars($sharedTemplateUrl) ?>" target="_blank" class="inline-block">
+                                <img src="<?= htmlspecialchars($sharedTemplateUrl) ?>" alt="Shared template preview" class="w-44 h-28 object-cover rounded-lg border border-gray-200 shadow-sm">
+                            </a>
+                            <?php else: ?>
+                            <span class="text-xs text-gray-400">ยังไม่มี shared template</span>
+                            <?php endif; ?>
+                        </td>
+                        <td class="px-3 py-3 min-w-[340px]">
+                            <form method="POST" enctype="multipart/form-data" class="space-y-2">
+                                <input type="hidden" name="form_action" value="upload_shared_template">
+                                <input type="hidden" name="shared_group_key" value="<?= htmlspecialchars($groupKey) ?>">
+                                <input type="file" name="template_image" accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp" class="block w-full text-xs text-gray-500 border rounded-lg px-3 py-2 bg-white">
+                                <button type="submit" class="bg-[#7b1fa2] text-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-[#6a1b9a] transition">
+                                    <i class="fas fa-layer-group mr-1"></i> Upload shared template
+                                </button>
+                            </form>
+                            <?php if ($sharedTemplateUrl): ?>
+                            <form method="POST" class="mt-2">
+                                <input type="hidden" name="form_action" value="delete_shared_template">
+                                <input type="hidden" name="shared_group_key" value="<?= htmlspecialchars($groupKey) ?>">
+                                <button type="submit" class="bg-red-50 text-red-700 border border-red-200 px-3 py-2 rounded-lg text-sm font-medium hover:bg-red-100 transition">
+                                    <i class="fas fa-trash-alt mr-1"></i> Remove shared template
+                                </button>
+                            </form>
+                            <?php endif; ?>
+                        </td>
+                    </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
     </div>
-</div>
+</section>
 
-<div class="mt-4 bg-white rounded-xl shadow-sm border overflow-hidden">
-    <div class="px-4 py-3 border-b bg-gray-50 font-semibold text-gray-700">ประวัติการส่งล่าสุด</div>
-    <div class="overflow-x-auto">
-        <table class="w-full text-sm">
-            <thead class="bg-gray-50 border-b">
-                <tr>
-                    <th class="px-3 py-2 text-left text-xs text-gray-500">เวลา</th>
-                    <th class="px-3 py-2 text-left text-xs text-gray-500">Group ID</th>
-                    <th class="px-3 py-2 text-left text-xs text-gray-500">ข้อความ</th>
-                    <th class="px-3 py-2 text-left text-xs text-gray-500">ผลลัพธ์</th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php foreach ($recentLogs as $log): ?>
-                <tr class="border-b hover:bg-gray-50">
-                    <td class="px-3 py-2 text-xs text-gray-500"><?= htmlspecialchars($log['created_at']) ?></td>
-                    <td class="px-3 py-2 text-xs text-gray-500"><?= htmlspecialchars($log['group_id']) ?></td>
-                    <td class="px-3 py-2"><?= nl2br(htmlspecialchars($log['message_text'])) ?></td>
-                    <td class="px-3 py-2">
-                        <span class="px-2 py-1 rounded-full text-[11px] font-medium <?= $log['status'] === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700' ?>">
-                            <?= htmlspecialchars($log['status']) ?><?= $log['response_code'] ? ' (' . (int) $log['response_code'] . ')' : '' ?>
-                        </span>
-                    </td>
-                </tr>
-                <?php endforeach; ?>
-                <?php if (empty($recentLogs)): ?>
-                <tr>
-                    <td colspan="4" class="px-3 py-6 text-center text-sm text-gray-400">ยังไม่มีประวัติการส่งข้อความ</td>
-                </tr>
-                <?php endif; ?>
-            </tbody>
-        </table>
+<section data-line-panel="send-image" class="line-panel hidden">
+    <div class="bg-white rounded-xl shadow-sm border overflow-hidden">
+        <div class="px-4 py-3 border-b bg-gray-50 font-semibold text-gray-700">ผลหวยที่ออกแล้ว</div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead class="bg-gray-50 border-b">
+                    <tr>
+                        <th class="px-3 py-2 text-left text-xs text-gray-500">หวย</th>
+                        <th class="px-3 py-2 text-left text-xs text-gray-500">หมวด</th>
+                        <th class="px-3 py-2 text-left text-xs text-gray-500">งวด</th>
+                        <th class="px-3 py-2 text-center text-xs text-gray-500">3 ตัวบน</th>
+                        <th class="px-3 py-2 text-center text-xs text-gray-500">2 ตัวบน</th>
+                        <th class="px-3 py-2 text-center text-xs text-gray-500">2 ตัวล่าง</th>
+                        <th class="px-3 py-2 text-left text-xs text-gray-500">ส่งเข้ากลุ่ม</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($recentResults as $resultRow): ?>
+                    <tr class="border-b hover:bg-gray-50 align-top">
+                        <td class="px-3 py-3 font-medium text-gray-800"><?= htmlspecialchars($resultRow['lottery_name']) ?></td>
+                        <td class="px-3 py-3 text-gray-500"><?= htmlspecialchars($resultRow['category_name']) ?></td>
+                        <td class="px-3 py-3 text-gray-500"><?= htmlspecialchars($resultRow['draw_date']) ?></td>
+                        <td class="px-3 py-3 text-center font-bold text-green-700"><?= htmlspecialchars($resultRow['three_top'] ?: '-') ?></td>
+                        <td class="px-3 py-3 text-center font-bold text-blue-600"><?= htmlspecialchars($resultRow['two_top'] ?: '-') ?></td>
+                        <td class="px-3 py-3 text-center font-bold text-cyan-600"><?= htmlspecialchars($resultRow['two_bot'] ?: '-') ?></td>
+                        <td class="px-3 py-3 min-w-[280px]">
+                            <form method="POST" class="space-y-2">
+                                <input type="hidden" name="form_action" value="send_result_image">
+                                <input type="hidden" name="lottery_type_id" value="<?= (int) $resultRow['lottery_type_id'] ?>">
+                                <input type="hidden" name="draw_date" value="<?= htmlspecialchars($resultRow['draw_date']) ?>">
+                                <select name="group_id" class="w-full border rounded-lg px-3 py-2 text-sm outline-none" <?= empty($groups) ? 'disabled' : '' ?>>
+                                    <?php foreach ($groups as $group): ?>
+                                    <option value="<?= htmlspecialchars($group['group_id']) ?>">
+                                        <?= htmlspecialchars(($group['group_name'] ?: 'group') . ' - ' . $group['group_id']) ?>
+                                    </option>
+                                    <?php endforeach; ?>
+                                </select>
+                                <button type="submit" class="w-full bg-[#1565c0] text-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-[#0d47a1] transition disabled:opacity-50" <?= empty($groups) ? 'disabled' : '' ?>>
+                                    <i class="fas fa-image mr-1"></i> ส่งรูปผลหวยนี้
+                                </button>
+                            </form>
+                            <a href="line_preview.php?lottery_type_id=<?= (int) $resultRow['lottery_type_id'] ?>&draw_date=<?= urlencode((string) $resultRow['draw_date']) ?>" target="_blank" class="mt-2 inline-flex items-center justify-center w-full bg-white text-[#6a1b9a] border border-[#d1b3e5] px-3 py-2 rounded-lg text-sm font-medium hover:bg-[#faf5ff] transition">
+                                <i class="fas fa-eye mr-1"></i> Preview image
+                            </a>
+                        </td>
+                    </tr>
+                    <?php endforeach; ?>
+                    <?php if (empty($recentResults)): ?>
+                    <tr>
+                        <td colspan="7" class="px-3 py-6 text-center text-sm text-gray-400">ยังไม่พบผลหวยในระบบ</td>
+                    </tr>
+                    <?php endif; ?>
+                </tbody>
+            </table>
+        </div>
     </div>
-</div>
+</section>
+
+<section data-line-panel="auto-text" class="line-panel hidden">
+    <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
+        <div class="bg-white rounded-xl shadow-sm border overflow-hidden">
+            <div class="px-4 py-3 border-b bg-gray-50 font-semibold text-gray-700">ส่งข้อความทดสอบ</div>
+            <form method="POST" class="p-4 space-y-4">
+                <input type="hidden" name="form_action" value="send_test">
+                <div>
+                    <label class="text-xs text-gray-500 block mb-1">เลือกกลุ่ม</label>
+                    <select name="group_id" class="w-full border rounded-lg px-3 py-2 text-sm outline-none" <?= empty($groups) ? 'disabled' : '' ?>>
+                        <?php foreach ($groups as $group): ?>
+                        <option value="<?= htmlspecialchars($group['group_id']) ?>">
+                            <?= htmlspecialchars(($group['group_name'] ?: 'group') . ' - ' . $group['group_id']) ?>
+                        </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div>
+                    <label class="text-xs text-gray-500 block mb-1">ข้อความ</label>
+                    <textarea name="message" rows="6" class="w-full border rounded-lg px-3 py-2 text-sm outline-none" placeholder="ทดสอบส่งข้อความจากระบบ LINE">ทดสอบส่งข้อความจากระบบ LINE</textarea>
+                </div>
+                <button type="submit" class="w-full bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition disabled:opacity-50" <?= empty($groups) ? 'disabled' : '' ?>>
+                    <i class="fab fa-line mr-1"></i> ส่งข้อความทดสอบ
+                </button>
+            </form>
+        </div>
+
+        <div class="xl:col-span-2 bg-white rounded-xl shadow-sm border overflow-hidden">
+            <div class="px-4 py-3 border-b bg-gray-50 font-semibold text-gray-700">Auto Message Templates</div>
+            <div class="px-4 py-3 text-xs text-gray-500 border-b bg-gray-50/60">
+                ตั้งข้อความอัตโนมัติรายหวยได้ที่นี่ ระบบจะส่งข้อความนี้ไปทุกกลุ่มที่ active เมื่อหวยรายการนั้นมีผลใหม่
+                ตัวแปรที่ใช้ได้: <code>{lottery_name}</code>, <code>{draw_date}</code>, <code>{draw_date_display}</code>, <code>{three_top}</code>, <code>{two_top}</code>, <code>{two_bot}</code>
+            </div>
+            <form method="POST">
+                <input type="hidden" name="form_action" value="save_auto_text_templates">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead class="bg-gray-50 border-b">
+                            <tr>
+                                <th class="px-3 py-2 text-left text-xs text-gray-500">Lottery</th>
+                                <th class="px-3 py-2 text-left text-xs text-gray-500">Category</th>
+                                <th class="px-3 py-2 text-left text-xs text-gray-500">Message template</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($lotteryTypes as $lotteryType): ?>
+                            <tr class="border-b hover:bg-gray-50 align-top">
+                                <td class="px-3 py-3 font-medium text-gray-800"><?= htmlspecialchars($lotteryType['lottery_name']) ?></td>
+                                <td class="px-3 py-3 text-gray-500"><?= htmlspecialchars($lotteryType['category_name']) ?></td>
+                                <td class="px-3 py-3 min-w-[420px]">
+                                    <textarea
+                                        name="auto_text_templates[<?= (int) $lotteryType['id'] ?>]"
+                                        rows="5"
+                                        class="w-full border rounded-lg px-3 py-2 text-sm outline-none"
+                                        placeholder="เว้นว่างไว้ถ้าไม่ต้องการส่งข้อความอัตโนมัติสำหรับหวยรายการนี้"
+                                    ><?= htmlspecialchars((string) ($autoTextTemplates[(int) $lotteryType['id']] ?? '')) ?></textarea>
+                                </td>
+                            </tr>
+                            <?php endforeach; ?>
+                            <?php if (empty($lotteryTypes)): ?>
+                            <tr>
+                                <td colspan="3" class="px-3 py-6 text-center text-sm text-gray-400">No active lottery types found</td>
+                            </tr>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="px-4 py-3 border-t bg-white">
+                    <button type="submit" class="bg-[#2e7d32] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#1b5e20] transition">
+                        <i class="fas fa-save mr-1"></i> บันทึกข้อความอัตโนมัติ
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</section>
+
+<section data-line-panel="groups" class="line-panel hidden">
+    <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
+        <div class="xl:col-span-2 bg-white rounded-xl shadow-sm border overflow-hidden">
+            <div class="px-4 py-3 border-b bg-gray-50 font-semibold text-gray-700">รายชื่อกลุ่ม LINE</div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead class="bg-gray-50 border-b">
+                        <tr>
+                            <th class="px-3 py-2 text-left text-xs text-gray-500">สถานะ</th>
+                            <th class="px-3 py-2 text-left text-xs text-gray-500">ชื่อกลุ่ม</th>
+                            <th class="px-3 py-2 text-left text-xs text-gray-500">Group ID</th>
+                            <th class="px-3 py-2 text-left text-xs text-gray-500">ล่าสุด</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($groups as $group): ?>
+                        <tr class="border-b hover:bg-gray-50">
+                            <td class="px-3 py-2">
+                                <span class="px-2 py-1 rounded-full text-[11px] font-medium <?= !empty($group['is_active']) ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700' ?>">
+                                    <?= !empty($group['is_active']) ? 'active' : 'inactive' ?>
+                                </span>
+                            </td>
+                            <td class="px-3 py-2 font-medium text-gray-800"><?= htmlspecialchars($group['group_name'] ?: '(ยังไม่ทราบชื่อกลุ่ม)') ?></td>
+                            <td class="px-3 py-2 text-xs text-gray-500"><?= htmlspecialchars($group['group_id']) ?></td>
+                            <td class="px-3 py-2 text-xs text-gray-500"><?= htmlspecialchars($group['last_seen_at']) ?></td>
+                        </tr>
+                        <?php endforeach; ?>
+                        <?php if (empty($groups)): ?>
+                        <tr>
+                            <td colspan="4" class="px-3 py-6 text-center text-sm text-gray-400">ยังไม่พบกลุ่ม LINE</td>
+                        </tr>
+                        <?php endif; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-sm border overflow-hidden">
+            <div class="px-4 py-3 border-b bg-gray-50 font-semibold text-gray-700">สรุปการเชื่อมต่อ</div>
+            <div class="p-4 space-y-3 text-sm">
+                <div class="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                    <div class="text-xs text-gray-500">จำนวนกลุ่มที่เชื่อมแล้ว</div>
+                    <div class="mt-1 text-2xl font-bold text-gray-800"><?= number_format(count($groups)) ?></div>
+                </div>
+                <div class="rounded-lg border border-green-200 bg-green-50 p-3">
+                    <div class="text-xs text-green-700">กลุ่มที่ active</div>
+                    <div class="mt-1 text-2xl font-bold text-green-700"><?= number_format(count(array_filter($groups, static fn($group) => !empty($group['is_active'])))) ?></div>
+                </div>
+                <div class="rounded-lg border border-blue-200 bg-blue-50 p-3">
+                    <div class="text-xs text-blue-700">ประวัติการส่งล่าสุด</div>
+                    <div class="mt-1 text-sm text-blue-700"><?= !empty($recentLogs) ? htmlspecialchars((string) ($recentLogs[0]['created_at'] ?? '-')) : '-' ?></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="mt-4 bg-white rounded-xl shadow-sm border overflow-hidden">
+        <div class="px-4 py-3 border-b bg-gray-50 font-semibold text-gray-700">ประวัติการส่งล่าสุด</div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead class="bg-gray-50 border-b">
+                    <tr>
+                        <th class="px-3 py-2 text-left text-xs text-gray-500">เวลา</th>
+                        <th class="px-3 py-2 text-left text-xs text-gray-500">Group ID</th>
+                        <th class="px-3 py-2 text-left text-xs text-gray-500">ข้อความ</th>
+                        <th class="px-3 py-2 text-left text-xs text-gray-500">ผลลัพธ์</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($recentLogs as $log): ?>
+                    <tr class="border-b hover:bg-gray-50">
+                        <td class="px-3 py-2 text-xs text-gray-500"><?= htmlspecialchars($log['created_at']) ?></td>
+                        <td class="px-3 py-2 text-xs text-gray-500"><?= htmlspecialchars($log['group_id']) ?></td>
+                        <td class="px-3 py-2"><?= nl2br(htmlspecialchars($log['message_text'])) ?></td>
+                        <td class="px-3 py-2">
+                            <span class="px-2 py-1 rounded-full text-[11px] font-medium <?= $log['status'] === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700' ?>">
+                                <?= htmlspecialchars($log['status']) ?><?= $log['response_code'] ? ' (' . (int) $log['response_code'] . ')' : '' ?>
+                            </span>
+                        </td>
+                    </tr>
+                    <?php endforeach; ?>
+                    <?php if (empty($recentLogs)): ?>
+                    <tr>
+                        <td colspan="4" class="px-3 py-6 text-center text-sm text-gray-400">ยังไม่มีประวัติการส่งข้อความ</td>
+                    </tr>
+                    <?php endif; ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const buttons = Array.from(document.querySelectorAll('[data-line-tab]'));
+    const panels = Array.from(document.querySelectorAll('[data-line-panel]'));
+
+    function activateTab(tabName) {
+        buttons.forEach((button) => {
+            const active = button.dataset.lineTab === tabName;
+            button.classList.toggle('bg-[#1b5e20]', active);
+            button.classList.toggle('text-white', active);
+            button.classList.toggle('border', !active);
+            button.classList.toggle('border-gray-200', !active);
+            button.classList.toggle('bg-white', !active);
+            button.classList.toggle('text-gray-700', !active);
+        });
+
+        panels.forEach((panel) => {
+            panel.classList.toggle('hidden', panel.dataset.linePanel !== tabName);
+        });
+    }
+
+    buttons.forEach((button) => {
+        button.addEventListener('click', function () {
+            activateTab(button.dataset.lineTab);
+        });
+    });
+
+    activateTab('settings');
+});
+</script>
 
 <?php require_once 'includes/footer.php'; ?>
