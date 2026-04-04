@@ -376,17 +376,17 @@ function lineMarkScheduledTextSent(
 function lineSendDueScheduledMessages(PDO $pdo, ?DateTimeImmutable $now = null): array
 {
     if (!lineConfigReady($pdo) || !lineAutoSendTextsEnabled($pdo)) {
-        return ['sent_messages' => 0, 'sent_groups' => 0, 'skipped' => true];
+        return ['sent_messages' => 0, 'sent_groups' => 0, 'due_messages' => 0, 'skipped' => true];
     }
 
     $messages = lineGetScheduledTextMessages($pdo);
     if (empty($messages)) {
-        return ['sent_messages' => 0, 'sent_groups' => 0, 'skipped' => true, 'reason' => 'no_messages'];
+        return ['sent_messages' => 0, 'sent_groups' => 0, 'due_messages' => 0, 'skipped' => true, 'reason' => 'no_messages'];
     }
 
     $groups = $pdo->query("SELECT group_id FROM line_groups WHERE is_active = 1 ORDER BY id ASC")->fetchAll();
     if (empty($groups)) {
-        return ['sent_messages' => 0, 'sent_groups' => 0, 'skipped' => true, 'reason' => 'no_groups'];
+        return ['sent_messages' => 0, 'sent_groups' => 0, 'due_messages' => 0, 'skipped' => true, 'reason' => 'no_groups'];
     }
 
     $now = $now ?: new DateTimeImmutable('now', new DateTimeZone('Asia/Bangkok'));
@@ -394,10 +394,11 @@ function lineSendDueScheduledMessages(PDO $pdo, ?DateTimeImmutable $now = null):
     $scheduledTime = $now->format('H:i');
     $scheduledWeekday = (int) $now->format('w');
     $currentMinutes = ((int) $now->format('H') * 60) + (int) $now->format('i');
-    $graceMinutes = 5;
+    $graceMinutes = 15;
 
     $sentMessages = 0;
     $sentGroups = 0;
+    $dueMessages = 0;
     foreach ($messages as $row) {
         $messageId = (string) ($row['id'] ?? '');
         $messageDate = (string) ($row['date'] ?? '');
@@ -423,6 +424,8 @@ function lineSendDueScheduledMessages(PDO $pdo, ?DateTimeImmutable $now = null):
         if ($messageMinutes > $currentMinutes || ($currentMinutes - $messageMinutes) > $graceMinutes) {
             continue;
         }
+
+        $dueMessages++;
 
         if (lineScheduledTextAlreadySent($pdo, $messageId, $scheduledDate, $messageTime)) {
             continue;
@@ -450,8 +453,10 @@ function lineSendDueScheduledMessages(PDO $pdo, ?DateTimeImmutable $now = null):
     return [
         'sent_messages' => $sentMessages,
         'sent_groups' => $sentGroups,
+        'due_messages' => $dueMessages,
         'skipped' => false,
         'time' => $scheduledTime,
+        'grace_minutes' => $graceMinutes,
     ];
 }
 
