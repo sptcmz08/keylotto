@@ -8,10 +8,14 @@ ensureLineTables($pdo);
 $adminPage = 'line_groups';
 $adminTitle = 'LINE Groups';
 
-function lineGroupsRedirectWithFlash(string $type, string $message): void
+function lineGroupsRedirectWithFlash(string $type, string $message, string $tab = 'settings'): void
 {
     $_SESSION['line_groups_flash'] = ['type' => $type, 'message' => $message];
-    header('Location: line_groups.php');
+    $allowedTabs = ['settings', 'shared-templates', 'send-image', 'auto-text', 'groups'];
+    if (!in_array($tab, $allowedTabs, true)) {
+        $tab = 'settings';
+    }
+    header('Location: line_groups.php?tab=' . rawurlencode($tab));
     exit;
 }
 
@@ -26,7 +30,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $autoSendTexts = isset($_POST['auto_send_texts']) ? '1' : '0';
 
         if ($channelSecret === '' || $channelAccessToken === '') {
-            lineGroupsRedirectWithFlash('error', 'กรุณากรอก Channel secret และ Channel access token ให้ครบ');
+            lineGroupsRedirectWithFlash('error', 'กรุณากรอก Channel secret และ Channel access token ให้ครบ', 'settings');
         }
 
         lineSetSetting($pdo, 'channel_secret', $channelSecret);
@@ -34,7 +38,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         lineSetSetting($pdo, 'public_base_url', $publicBaseUrl !== '' ? $publicBaseUrl : 'https://member.imzshop97.com');
         lineSetSetting($pdo, 'auto_send_results', $autoSendResults);
         lineSetSetting($pdo, 'auto_send_texts', $autoSendTexts);
-        lineGroupsRedirectWithFlash('success', 'บันทึก LINE settings สำเร็จ');
+        lineGroupsRedirectWithFlash('success', 'บันทึก LINE settings สำเร็จ', 'settings');
     }
 
     if ($action === 'save_scheduled_messages') {
@@ -51,49 +55,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($hasEnabledScheduledMessage && !lineAutoSendTextsEnabled($pdo)) {
             lineSetSetting($pdo, 'auto_send_texts', '1');
-            lineGroupsRedirectWithFlash('success', 'บันทึกข้อความอัตโนมัติสำเร็จ และเปิดส่งข้อความอัตโนมัติตามเวลาให้แล้ว');
+            lineGroupsRedirectWithFlash('success', 'บันทึกข้อความอัตโนมัติสำเร็จ และเปิดส่งข้อความอัตโนมัติตามเวลาให้แล้ว', 'auto-text');
         }
 
-        lineGroupsRedirectWithFlash('success', 'บันทึกข้อความอัตโนมัติตามช่วงวันและเวลาสำเร็จ');
+        lineGroupsRedirectWithFlash('success', 'บันทึกข้อความอัตโนมัติตามช่วงวันและเวลาสำเร็จ', 'auto-text');
     }
 
     if ($action === 'send_test') {
         $groupId = trim($_POST['group_id'] ?? '');
         $message = trim($_POST['message'] ?? '');
         if ($groupId === '' || $message === '') {
-            lineGroupsRedirectWithFlash('error', 'กรุณาเลือกกลุ่มและใส่ข้อความทดสอบ');
+            lineGroupsRedirectWithFlash('error', 'กรุณาเลือกกลุ่มและใส่ข้อความทดสอบ', 'auto-text');
         }
         if (!lineConfigReady($pdo)) {
-            lineGroupsRedirectWithFlash('error', 'ยังไม่ได้ตั้งค่า LINE channel secret และ access token บน server');
+            lineGroupsRedirectWithFlash('error', 'ยังไม่ได้ตั้งค่า LINE channel secret และ access token บน server', 'auto-text');
         }
 
         $result = linePushTextMessage($pdo, $groupId, $message);
         lineLogPushResult($pdo, $groupId, $message, $result);
         if (!empty($result['ok'])) {
-            lineGroupsRedirectWithFlash('success', 'ส่งข้อความทดสอบไป LINE สำเร็จ');
+            lineGroupsRedirectWithFlash('success', 'ส่งข้อความทดสอบไป LINE สำเร็จ', 'auto-text');
         }
-        lineGroupsRedirectWithFlash('error', 'ส่งข้อความไม่สำเร็จ (HTTP ' . ($result['status'] ?: 0) . ')');
+        lineGroupsRedirectWithFlash('error', 'ส่งข้อความไม่สำเร็จ (HTTP ' . ($result['status'] ?: 0) . ')', 'auto-text');
     }
 
     if ($action === 'send_scheduled_message_now') {
         $message = trim($_POST['scheduled_message_now'] ?? '');
         if ($message === '') {
-            lineGroupsRedirectWithFlash('error', 'กรุณาใส่ข้อความก่อนกดส่งทันที');
+            lineGroupsRedirectWithFlash('error', 'กรุณาใส่ข้อความก่อนกดส่งทันที', 'auto-text');
         }
 
         $result = linePushTextToActiveGroups($pdo, $message);
         if (!empty($result['sent'])) {
-            lineGroupsRedirectWithFlash('success', 'ส่งข้อความทันทีสำเร็จไป ' . (int) $result['sent'] . ' กลุ่ม');
+            lineGroupsRedirectWithFlash('success', 'ส่งข้อความทันทีสำเร็จไป ' . (int) $result['sent'] . ' กลุ่ม', 'auto-text');
         }
 
         if (($result['reason'] ?? '') === 'config_not_ready') {
-            lineGroupsRedirectWithFlash('error', 'ยังไม่ได้ตั้งค่า LINE channel secret และ access token บน server');
+            lineGroupsRedirectWithFlash('error', 'ยังไม่ได้ตั้งค่า LINE channel secret และ access token บน server', 'auto-text');
         }
         if (($result['reason'] ?? '') === 'no_groups') {
-            lineGroupsRedirectWithFlash('error', 'ยังไม่มีกลุ่ม LINE ที่ active สำหรับส่งข้อความ');
+            lineGroupsRedirectWithFlash('error', 'ยังไม่มีกลุ่ม LINE ที่ active สำหรับส่งข้อความ', 'auto-text');
         }
 
-        lineGroupsRedirectWithFlash('error', 'ส่งข้อความทันทีไม่สำเร็จ');
+        lineGroupsRedirectWithFlash('error', 'ส่งข้อความทันทีไม่สำเร็จ', 'auto-text');
     }
 
     if ($action === 'send_result_image') {
@@ -101,47 +105,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $lotteryTypeId = (int) ($_POST['lottery_type_id'] ?? 0);
         $drawDate = trim($_POST['draw_date'] ?? '');
         if ($groupId === '' || $lotteryTypeId <= 0 || $drawDate === '') {
-            lineGroupsRedirectWithFlash('error', 'ข้อมูลสำหรับส่งรูปผลหวยไม่ครบ');
+            lineGroupsRedirectWithFlash('error', 'ข้อมูลสำหรับส่งรูปผลหวยไม่ครบ', 'send-image');
         }
 
         $result = linePushResultImageToGroup($pdo, $groupId, $lotteryTypeId, $drawDate);
         if (!empty($result['ok'])) {
             $renderer = !empty($result['renderer']) ? ' (' . $result['renderer'] . ')' : '';
-            lineGroupsRedirectWithFlash('success', 'ส่งรูปผลหวยไป LINE สำเร็จ' . $renderer);
+            lineGroupsRedirectWithFlash('success', 'ส่งรูปผลหวยไป LINE สำเร็จ' . $renderer, 'send-image');
         }
 
         $reason = $result['reason'] ?? '';
         $detail = trim((string) ($result['detail'] ?? ''));
         if ($reason === 'image_generation_failed' && $detail !== '') {
-            lineGroupsRedirectWithFlash('error', 'Image generation failed - ' . $detail);
+            lineGroupsRedirectWithFlash('error', 'Image generation failed - ' . $detail, 'send-image');
         }
         if ($reason === 'image_generation_failed') {
-            lineGroupsRedirectWithFlash('error', 'สร้างรูปผลหวยไม่สำเร็จ กรุณาตรวจ Node/Puppeteer หรือ GD บน server');
+            lineGroupsRedirectWithFlash('error', 'สร้างรูปผลหวยไม่สำเร็จ กรุณาตรวจ Node/Puppeteer หรือ GD บน server', 'send-image');
         }
         if ($reason === 'result_not_found') {
-            lineGroupsRedirectWithFlash('error', 'ไม่พบผลหวยรายการนี้ในฐานข้อมูล');
+            lineGroupsRedirectWithFlash('error', 'ไม่พบผลหวยรายการนี้ในฐานข้อมูล', 'send-image');
         }
         if ($reason === 'config_not_ready') {
-            lineGroupsRedirectWithFlash('error', 'ยังไม่ได้ตั้งค่า LINE channel secret และ access token บน server');
+            lineGroupsRedirectWithFlash('error', 'ยังไม่ได้ตั้งค่า LINE channel secret และ access token บน server', 'send-image');
         }
-        lineGroupsRedirectWithFlash('error', 'ส่งรูปผลหวยไม่สำเร็จ (HTTP ' . ($result['status'] ?: 0) . ')');
+        lineGroupsRedirectWithFlash('error', 'ส่งรูปผลหวยไม่สำเร็จ (HTTP ' . ($result['status'] ?: 0) . ')', 'send-image');
     }
 
     if ($action === 'upload_shared_template') {
         $groupKey = trim((string) ($_POST['shared_group_key'] ?? ''));
         $upload = lineSaveSharedTemplateUpload($groupKey, $_FILES['template_image'] ?? []);
-        lineGroupsRedirectWithFlash($upload['ok'] ? 'success' : 'error', $upload['message']);
+        lineGroupsRedirectWithFlash($upload['ok'] ? 'success' : 'error', $upload['message'], 'shared-templates');
     }
 
     if ($action === 'delete_shared_template') {
         $groupKey = trim((string) ($_POST['shared_group_key'] ?? ''));
         if ($groupKey === '') {
-            lineGroupsRedirectWithFlash('error', 'Template group is invalid');
+            lineGroupsRedirectWithFlash('error', 'Template group is invalid', 'shared-templates');
         }
         if (lineDeleteSharedTemplateImage($groupKey)) {
-            lineGroupsRedirectWithFlash('success', 'Shared template image removed');
+            lineGroupsRedirectWithFlash('success', 'Shared template image removed', 'shared-templates');
         }
-        lineGroupsRedirectWithFlash('error', 'Shared template image was not found');
+        lineGroupsRedirectWithFlash('error', 'Shared template image was not found', 'shared-templates');
     }
 }
 
@@ -656,6 +660,7 @@ require_once 'includes/header.php';
 document.addEventListener('DOMContentLoaded', function () {
     const buttons = Array.from(document.querySelectorAll('[data-line-tab]'));
     const panels = Array.from(document.querySelectorAll('[data-line-panel]'));
+    const allowedTabs = new Set(['settings', 'shared-templates', 'send-image', 'auto-text', 'groups']);
     const scheduledMessagesList = document.getElementById('scheduledMessagesList');
     const addScheduledMessageBtn = document.getElementById('addScheduledMessageBtn');
     const scheduledMessagesCount = document.getElementById('scheduledMessagesCount');
@@ -664,8 +669,9 @@ document.addEventListener('DOMContentLoaded', function () {
     let scheduledMessageIndex = <?= count($scheduledMessages) ?>;
 
     function activateTab(tabName) {
+        const resolvedTab = allowedTabs.has(tabName) ? tabName : 'settings';
         buttons.forEach((button) => {
-            const active = button.dataset.lineTab === tabName;
+            const active = button.dataset.lineTab === resolvedTab;
             button.classList.toggle('bg-[#1b5e20]', active);
             button.classList.toggle('text-white', active);
             button.classList.toggle('border', !active);
@@ -675,8 +681,17 @@ document.addEventListener('DOMContentLoaded', function () {
         });
 
         panels.forEach((panel) => {
-            panel.classList.toggle('hidden', panel.dataset.linePanel !== tabName);
+            panel.classList.toggle('hidden', panel.dataset.linePanel !== resolvedTab);
         });
+
+        try {
+            const url = new URL(window.location.href);
+            url.searchParams.set('tab', resolvedTab);
+            window.history.replaceState({}, '', url.toString());
+            window.localStorage.setItem('lineGroupsActiveTab', resolvedTab);
+        } catch (error) {
+            // Ignore browser history/localStorage failures.
+        }
     }
 
     function buildScheduledMessageItem(index) {
@@ -818,7 +833,22 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     updateScheduledMessagesCount();
-    activateTab('settings');
+
+    let initialTab = 'settings';
+    try {
+        const url = new URL(window.location.href);
+        const tabFromUrl = url.searchParams.get('tab');
+        const tabFromStorage = window.localStorage.getItem('lineGroupsActiveTab');
+        if (tabFromUrl && allowedTabs.has(tabFromUrl)) {
+            initialTab = tabFromUrl;
+        } else if (tabFromStorage && allowedTabs.has(tabFromStorage)) {
+            initialTab = tabFromStorage;
+        }
+    } catch (error) {
+        // Ignore browser URL/localStorage failures and fall back to default tab.
+    }
+
+    activateTab(initialTab);
 });
 </script>
 
