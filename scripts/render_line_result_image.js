@@ -260,6 +260,8 @@ const main = async () => {
       body {
         margin: 0;
         font-family: "LineThai", "Tahoma", sans-serif;
+        text-rendering: geometricPrecision;
+        -webkit-font-smoothing: antialiased;
         background:
           radial-gradient(circle at 20% 18%, rgba(255, 186, 72, 0.16), transparent 18%),
           radial-gradient(circle at 80% 74%, rgba(255, 122, 72, 0.14), transparent 20%),
@@ -305,14 +307,14 @@ const main = async () => {
         font-weight: 900;
         color: #ffd45e;
         letter-spacing: 0.5px;
-        -webkit-text-stroke: 8px #1f0700;
+        -webkit-text-stroke: 10px #1f0700;
         paint-order: stroke fill;
         text-wrap: balance;
         word-break: break-word;
         text-shadow:
-          0 8px 0 #1f0700,
-          0 16px 22px rgba(0,0,0,0.26),
-          0 0 18px rgba(255, 226, 150, 0.15);
+          0 10px 0 #1f0700,
+          0 18px 24px rgba(0,0,0,0.3),
+          0 0 22px rgba(255, 226, 150, 0.18);
       }
       .title-meta {
         margin-top: 6px;
@@ -325,9 +327,12 @@ const main = async () => {
         background: rgba(18, 5, 0, 0.34);
         border: 1px solid rgba(255, 226, 162, 0.22);
         font-size: 28px;
-        font-weight: 700;
+        font-weight: 900;
         color: #ffe6b0;
-        text-shadow: 0 3px 0 rgba(0,0,0,0.3);
+        letter-spacing: 0.2px;
+        -webkit-text-stroke: 1.2px rgba(57, 20, 0, 0.55);
+        paint-order: stroke fill;
+        text-shadow: 0 4px 0 rgba(0,0,0,0.32);
       }
       .results {
         display: grid;
@@ -355,10 +360,14 @@ const main = async () => {
         background: linear-gradient(180deg, rgba(88, 40, 0, 0.66) 0%, rgba(120, 52, 0, 0.78) 100%);
       }
       .result-chip__label {
-        font-size: 30px;
+        font-size: 32px;
         color: #ffe5a6;
-        font-weight: 700;
+        font-weight: 900;
+        letter-spacing: 0.2px;
         text-align: center;
+        -webkit-text-stroke: 1.2px rgba(57, 20, 0, 0.5);
+        paint-order: stroke fill;
+        text-shadow: 0 3px 0 rgba(0,0,0,0.28);
       }
       .result-chip__value {
         margin-top: 12px;
@@ -367,7 +376,12 @@ const main = async () => {
         font-weight: 900;
         color: #ffffff;
         text-align: center;
-        text-shadow: 0 5px 0 rgba(0,0,0,0.34);
+        letter-spacing: -1px;
+        -webkit-text-stroke: 2.4px rgba(39, 10, 0, 0.38);
+        paint-order: stroke fill;
+        text-shadow:
+          0 6px 0 rgba(24, 7, 0, 0.4),
+          0 10px 18px rgba(0,0,0,0.18);
       }
     </style>
   </head>
