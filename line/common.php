@@ -266,9 +266,6 @@ function lineGetScheduledTextMessages(PDO $pdo): array
         $time = lineNormalizeScheduledMessageTime((string) ($row['time'] ?? ''));
         $message = trim((string) ($row['message'] ?? ''));
         $enabled = (string) ($row['enabled'] ?? '1') !== '0';
-        if ($time === '' || $message === '') {
-            continue;
-        }
 
         $messages[] = [
             'id' => $id,
@@ -303,9 +300,6 @@ function lineSetScheduledTextMessages(PDO $pdo, array $messages): void
         $time = lineNormalizeScheduledMessageTime((string) ($row['time'] ?? ''));
         $message = trim((string) ($row['message'] ?? ''));
         $enabled = (string) ($row['enabled'] ?? '0') === '1';
-        if ($time === '' || $message === '') {
-            continue;
-        }
 
         if ($dayStart === '' && $dayEnd !== '') {
             $dayStart = $dayEnd;
