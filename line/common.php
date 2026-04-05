@@ -2109,32 +2109,42 @@ function lineRenderResultImageWithGd(array $payload, string $outputPath): bool
     if ($fontFile === null) {
         lineLog('GD renderer fallback: no TTF font found, using built-in font');
 
-        $width = 1040;
-        $height = 900;
+        $width = 1920;
+        $height = 1080;
         $image = imagecreatetruecolor($width, $height);
         if (!$image) {
             return false;
         }
 
         $white = imagecolorallocate($image, 255, 255, 255);
-        $green = imagecolorallocate($image, 18, 144, 75);
-        $light = imagecolorallocate($image, 242, 249, 244);
-        $dark = imagecolorallocate($image, 24, 44, 31);
-        $blue = imagecolorallocate($image, 37, 99, 235);
+        $gold = imagecolorallocate($image, 255, 212, 94);
+        $green = imagecolorallocate($image, 79, 238, 133);
+        $dark = imagecolorallocate($image, 36, 7, 0);
+        $maroon = imagecolorallocate($image, 126, 9, 9);
+        $cardBrown = imagecolorallocate($image, 104, 40, 0);
+        $cardGreen = imagecolorallocate($image, 14, 91, 33);
 
-        imagefill($image, 0, 0, $light);
-        imagefilledrectangle($image, 40, 40, 1000, 170, $green);
-        imagefilledrectangle($image, 40, 200, 1000, 860, $white);
+        imagefill($image, 0, 0, $maroon);
+        imagerectangle($image, 24, 24, 1896, 1056, $gold);
+        imagerectangle($image, 28, 28, 1892, 1052, $dark);
 
-        imagestring($image, 5, 70, 70, 'LOTTERY RESULT', $white);
-        imagestring($image, 4, 70, 110, substr((string) ($payload['site_name'] ?? ''), 0, 50), $white);
-        imagestring($image, 4, 70, 230, 'DATE: ' . (string) ($payload['draw_date_display'] ?? $payload['draw_date'] ?? ''), $dark);
-        imagestring($image, 5, 70, 320, '3 TOP : ' . (string) ($payload['three_top'] ?? '-'), $dark);
-        imagestring($image, 5, 70, 420, '2 TOP : ' . (string) ($payload['two_top'] ?? '-'), $dark);
-        imagestring($image, 5, 70, 520, '2 BOT : ' . (string) ($payload['two_bot'] ?? '-'), $dark);
-        imagestring($image, 4, 70, 650, 'SUMMARY', $blue);
-        imagestring($image, 3, 70, 700, substr((string) ($payload['summary_text'] ?? ''), 0, 120), $dark);
-        imagestring($image, 3, 70, 780, 'Generated: ' . (string) ($payload['generated_at'] ?? ''), $dark);
+        imagestring($image, 5, 52, 58, 'DRAW ' . (string) ($payload['draw_date_display'] ?? $payload['draw_date'] ?? ''), $white);
+        imagestring($image, 5, 640, 160, substr((string) ($payload['lottery_name'] ?? 'LOTTERY RESULT'), 0, 24), $gold);
+        imagestring($image, 5, 795, 300, 'RESULT ' . (string) ($payload['result_time_display'] ?? ''), $green);
+
+        imagefilledrectangle($image, 40, 600, 620, 1020, $cardBrown);
+        imagefilledrectangle($image, 670, 600, 1250, 1020, $cardGreen);
+        imagefilledrectangle($image, 1300, 600, 1880, 1020, $cardBrown);
+        imagerectangle($image, 40, 600, 620, 1020, $gold);
+        imagerectangle($image, 670, 600, 1250, 1020, $gold);
+        imagerectangle($image, 1300, 600, 1880, 1020, $gold);
+
+        imagestring($image, 5, 220, 660, '3 TOP', $white);
+        imagestring($image, 5, 860, 660, '2 TOP', $white);
+        imagestring($image, 5, 1490, 660, '2 BOT', $white);
+        imagestring($image, 5, 220, 820, (string) ($payload['three_top'] ?? '-'), $white);
+        imagestring($image, 5, 860, 820, (string) ($payload['two_top'] ?? '-'), $white);
+        imagestring($image, 5, 1490, 820, (string) ($payload['two_bot'] ?? '-'), $white);
 
         $saved = imagepng($image, $outputPath, 6);
         imagedestroy($image);
@@ -2142,8 +2152,8 @@ function lineRenderResultImageWithGd(array $payload, string $outputPath): bool
         return $saved && file_exists($outputPath);
     }
 
-    $width = 1040;
-    $height = 1280;
+    $width = 1920;
+    $height = 1080;
     $image = imagecreatetruecolor($width, $height);
     if (!$image) {
         return false;
@@ -2152,63 +2162,77 @@ function lineRenderResultImageWithGd(array $payload, string $outputPath): bool
     imageantialias($image, true);
     imagesavealpha($image, true);
 
-    $white = lineGdColor($image, '#FFFFFF');
-    $bg = lineGdColor($image, '#F4FBF6');
-    $hero = lineGdColor($image, '#12904B');
-    $heroAlt = lineGdColor($image, '#28B764');
-    $border = lineGdColor($image, '#DCEEE2');
-    $textDark = lineGdColor($image, '#173525');
-    $textMuted = lineGdColor($image, '#547062');
-    $primaryBox = lineGdColor($image, '#E9FFF0');
-    $secondaryBox = lineGdColor($image, '#EEF6FF');
-    $accentBox = lineGdColor($image, '#FFF6E7');
-    $stampBg = lineGdColor($image, '#143B28');
+    $bg = lineGdColor($image, '#7E0909');
+    $border = lineGdColor($image, '#D59B46');
+    $shadow = lineGdColor($image, '#230600');
+    $gold = lineGdColor($image, '#FFD45E');
+    $light = lineGdColor($image, '#FFF0C2');
+    $timeGreen = lineGdColor($image, '#59F186');
+    $panel = lineGdColor($image, '#511707');
+    $panelGreen = lineGdColor($image, '#0E5B21');
+    $panelOrange = lineGdColor($image, '#7B3500');
+    $panelText = lineGdColor($image, '#FFFFFF');
 
     imagefill($image, 0, 0, $bg);
+    imagefilledrectangle($image, 20, 20, 1900, 1060, $border);
+    imagefilledrectangle($image, 26, 26, 1894, 1054, $bg);
 
-    imagefilledrectangle($image, 40, 40, 1000, 1240, $white);
-    imagerectangle($image, 40, 40, 1000, 1240, $border);
+    $drawOutlinedText = static function (int $fontSize, int $x, int $y, int $fillColor, int $outlineColor, string $text, int $spread = 4) use ($image, $fontFile): void {
+        for ($dx = -$spread; $dx <= $spread; $dx++) {
+            for ($dy = -$spread; $dy <= $spread; $dy++) {
+                if ($dx === 0 && $dy === 0) {
+                    continue;
+                }
+                imagettftext($image, $fontSize, 0, $x + $dx, $y + $dy, $outlineColor, $fontFile, $text);
+            }
+        }
+        imagettftext($image, $fontSize, 0, $x, $y, $fillColor, $fontFile, $text);
+    };
 
-    imagefilledrectangle($image, 40, 40, 1000, 330, $hero);
-    imagefilledrectangle($image, 520, 40, 1000, 330, $heroAlt);
+    $centerTextX = static function (string $text, int $fontSize) use ($fontFile, $width): int {
+        $box = imagettfbbox($fontSize, 0, $fontFile, $text);
+        $textWidth = $box ? abs($box[2] - $box[0]) : 0;
+        return (int) round(($width - $textWidth) / 2);
+    };
 
-    imagettftext($image, 30, 0, 90, 110, $white, $fontFile, 'ประกาศผลหวย');
-    imagettftext($image, 20, 0, 90, 160, $white, $fontFile, (string) ($payload['site_name'] ?? ''));
-    imagettftext($image, 40, 0, 90, 230, $white, $fontFile, (string) ($payload['lottery_name'] ?? 'ผลหวย'));
-    imagettftext($image, 22, 0, 90, 285, $white, $fontFile, (string) ($payload['category_name'] ?? ''));
-    imagettftext($image, 22, 0, 640, 285, $white, $fontFile, 'งวดวันที่ ' . (string) ($payload['draw_date_display'] ?? ''));
+    imagefilledrectangle($image, 40, 40, 470, 120, $border);
+    imagefilledrectangle($image, 46, 46, 464, 114, $panel);
+    $drawOutlinedText(34, 72, 88, $light, $shadow, 'งวด ' . (string) ($payload['draw_date_display'] ?? ''), 2);
+
+    $lotteryName = (string) ($payload['lottery_name'] ?? 'ผลหวย');
+    $titleSize = 126;
+    $drawOutlinedText($titleSize, $centerTextX($lotteryName, $titleSize), 360, $gold, $shadow, $lotteryName, 8);
+
+    $timeText = trim((string) ($payload['result_time_display'] ?? ''));
+    if ($timeText !== '') {
+        imagefilledrectangle($image, 690, 390, 1230, 500, $border);
+        imagefilledrectangle($image, 696, 396, 1224, 494, $panel);
+        $drawOutlinedText(42, 760, 458, $light, $shadow, 'ผลออก', 2);
+        $drawOutlinedText(66, 925, 465, $timeGreen, $shadow, $timeText, 3);
+        $drawOutlinedText(38, 1105, 458, $light, $shadow, 'น.', 2);
+    }
 
     $cards = [
-        ['x1' => 90, 'x2' => 380, 'label' => '3 ตัวบน', 'value' => (string) ($payload['three_top'] ?? '-'), 'bg' => $primaryBox],
-        ['x1' => 400, 'x2' => 690, 'label' => '2 ตัวบน', 'value' => (string) ($payload['two_top'] ?? '-'), 'bg' => $secondaryBox],
-        ['x1' => 710, 'x2' => 950, 'label' => '2 ตัวล่าง', 'value' => (string) ($payload['two_bot'] ?? '-'), 'bg' => $accentBox],
+        ['x1' => 40, 'x2' => 620, 'label' => '3 ตัวบน', 'value' => (string) ($payload['three_top'] ?? '-'), 'bg' => $panel],
+        ['x1' => 670, 'x2' => 1250, 'label' => '2 ตัวบน', 'value' => (string) ($payload['two_top'] ?? '-'), 'bg' => $panelGreen],
+        ['x1' => 1300, 'x2' => 1880, 'label' => '2 ตัวล่าง', 'value' => (string) ($payload['two_bot'] ?? '-'), 'bg' => $panelOrange],
     ];
 
     foreach ($cards as $card) {
-        imagefilledrectangle($image, $card['x1'], 390, $card['x2'], 690, $card['bg']);
-        imagerectangle($image, $card['x1'], 390, $card['x2'], 690, $border);
-        imagettftext($image, 24, 0, $card['x1'] + 22, 450, $textMuted, $fontFile, $card['label']);
-        imagettftext($image, 60, 0, $card['x1'] + 30, 590, $textDark, $fontFile, $card['value'] !== '' ? $card['value'] : '-');
-    }
+        imagefilledrectangle($image, $card['x1'], 610, $card['x2'], 1020, $border);
+        imagefilledrectangle($image, $card['x1'] + 6, 616, $card['x2'] - 6, 1014, $card['bg']);
 
-    imagefilledrectangle($image, 90, 740, 700, 1030, $bg);
-    imagerectangle($image, 90, 740, 700, 1030, $border);
-    imagettftext($image, 20, 0, 120, 790, $textMuted, $fontFile, 'สรุปผลล่าสุด');
+        $labelBox = imagettfbbox(44, 0, $fontFile, $card['label']);
+        $labelWidth = $labelBox ? abs($labelBox[2] - $labelBox[0]) : 0;
+        $labelX = (int) round(($card['x1'] + $card['x2'] - $labelWidth) / 2);
+        $drawOutlinedText(44, $labelX, 740, $light, $shadow, $card['label'], 2);
 
-    $summaryLines = lineWrapTextForImage((string) ($payload['summary_text'] ?? ''), $fontFile, 28, 540);
-    $summaryY = 850;
-    foreach (array_slice($summaryLines, 0, 5) as $line) {
-        imagettftext($image, 28, 0, 120, $summaryY, $textDark, $fontFile, $line);
-        $summaryY += 52;
-    }
-
-    imagefilledrectangle($image, 730, 740, 950, 1030, $stampBg);
-    imagettftext($image, 18, 0, 760, 790, $white, $fontFile, 'สร้างภาพเมื่อ');
-    $stampLines = lineWrapTextForImage((string) ($payload['generated_at'] ?? ''), $fontFile, 24, 150);
-    $stampY = 860;
-    foreach (array_slice($stampLines, 0, 3) as $line) {
-        imagettftext($image, 24, 0, 760, $stampY, $white, $fontFile, $line);
-        $stampY += 42;
+        $valueText = $card['value'] !== '' ? $card['value'] : '-';
+        $valueSize = 146;
+        $valueBox = imagettfbbox($valueSize, 0, $fontFile, $valueText);
+        $valueWidth = $valueBox ? abs($valueBox[2] - $valueBox[0]) : 0;
+        $valueX = (int) round(($card['x1'] + $card['x2'] - $valueWidth) / 2);
+        $drawOutlinedText($valueSize, $valueX, 940, $panelText, $shadow, $valueText, 6);
     }
 
     $saved = imagepng($image, $outputPath, 6);

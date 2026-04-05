@@ -266,12 +266,12 @@ const main = async () => {
       ${embeddedFontFace}
       * { box-sizing: border-box; }
       html {
-        width: 1080px;
-        height: 1350px;
+        width: 1920px;
+        height: 1080px;
       }
       body {
-        width: 1080px;
-        height: 1350px;
+        width: 1920px;
+        height: 1080px;
         margin: 0;
         overflow: hidden;
         font-family: "LineThai", "Tahoma", sans-serif;
@@ -339,24 +339,24 @@ const main = async () => {
         flex-direction: column;
         width: 100%;
         height: 100%;
-        padding: 18px 18px 20px;
+        padding: 18px 22px 24px;
       }
       .poster-top {
         display: flex;
         align-items: center;
         justify-content: flex-start;
-        min-height: 98px;
+        min-height: 108px;
       }
       .title-meta__text {
-        min-height: 76px;
-        padding: 12px 28px;
+        min-height: 84px;
+        padding: 12px 30px;
         border-radius: 999px;
         border: 3px solid rgba(255, 142, 67, 0.72);
         background: rgba(62, 14, 3, 0.48);
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        font-size: 34px;
+        font-size: 38px;
         font-weight: 900;
         color: #ffe6b0;
         letter-spacing: 0.3px;
@@ -369,35 +369,36 @@ const main = async () => {
           0 12px 24px rgba(0,0,0,0.18);
       }
       .hero {
-        flex: 0 0 auto;
+        flex: 1;
         display: flex;
         flex-direction: column;
+        justify-content: center;
         align-items: center;
-        gap: 26px;
-        padding: 30px 24px 28px;
+        gap: 22px;
+        padding: 10px 64px 20px;
       }
       .lottery-name {
-        max-width: 980px;
-        font-size: clamp(120px, 12.4vw, 164px);
-        line-height: 0.84;
+        max-width: 1720px;
+        font-size: clamp(180px, 11.8vw, 226px);
+        line-height: 0.86;
         font-weight: 900;
         color: #ffd45e;
         text-align: center;
         letter-spacing: 0.2px;
-        -webkit-text-stroke: 14px #1f0700;
+        -webkit-text-stroke: 18px #1f0700;
         paint-order: stroke fill;
         text-wrap: balance;
         word-break: break-word;
         text-shadow:
-          0 14px 0 #1f0700,
-          0 26px 32px rgba(0,0,0,0.32),
-          0 0 24px rgba(255, 226, 150, 0.2);
+          0 16px 0 #1f0700,
+          0 28px 34px rgba(0,0,0,0.32),
+          0 0 28px rgba(255, 226, 150, 0.22);
       }
       .time-pill {
         display: inline-flex;
         align-items: center;
-        gap: 12px;
-        padding: 16px 28px;
+        gap: 14px;
+        padding: 18px 34px;
         border-radius: 999px;
         border: 3px solid rgba(255, 214, 116, 0.5);
         background: rgba(48, 9, 2, 0.44);
@@ -407,7 +408,7 @@ const main = async () => {
       }
       .time-pill__label,
       .time-pill__suffix {
-        font-size: 34px;
+        font-size: 38px;
         line-height: 1;
         font-weight: 900;
         color: #fff0c2;
@@ -416,7 +417,7 @@ const main = async () => {
         text-shadow: 0 4px 0 rgba(0,0,0,0.3);
       }
       .time-pill__value {
-        font-size: 68px;
+        font-size: 88px;
         line-height: 0.95;
         font-weight: 900;
         color: #5af186;
@@ -432,17 +433,14 @@ const main = async () => {
         justify-content: center;
       }
       .results {
-        flex: 1;
-        min-height: 0;
         display: grid;
-        grid-template-columns: 1fr;
-        grid-template-rows: repeat(3, minmax(0, 1fr));
-        gap: 18px;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 22px;
         align-items: stretch;
       }
       .result-chip {
-        min-height: 0;
-        padding: 24px 24px 28px;
+        min-height: 356px;
+        padding: 28px 22px 30px;
         border-radius: 28px;
         border: 4px solid rgba(255, 177, 73, 0.54);
         box-shadow:
@@ -463,7 +461,7 @@ const main = async () => {
         background: linear-gradient(180deg, rgba(88, 40, 0, 0.7) 0%, rgba(120, 52, 0, 0.84) 100%);
       }
       .result-chip__label {
-        font-size: 48px;
+        font-size: 54px;
         color: #ffe5a6;
         font-weight: 900;
         letter-spacing: 0.28px;
@@ -473,18 +471,18 @@ const main = async () => {
         text-shadow: 0 4px 0 rgba(0,0,0,0.32);
       }
       .result-chip__value {
-        margin-top: 20px;
-        font-size: clamp(150px, 17vw, 188px);
+        margin-top: 22px;
+        font-size: clamp(182px, 11vw, 238px);
         line-height: 0.88;
         font-weight: 900;
         color: #ffffff;
         text-align: center;
-        letter-spacing: -2.5px;
-        -webkit-text-stroke: 4px rgba(39, 10, 0, 0.44);
+        letter-spacing: -3px;
+        -webkit-text-stroke: 5px rgba(39, 10, 0, 0.44);
         paint-order: stroke fill;
         text-shadow:
-          0 7px 0 rgba(24, 7, 0, 0.48),
-          0 14px 20px rgba(0,0,0,0.18);
+          0 8px 0 rgba(24, 7, 0, 0.5),
+          0 16px 22px rgba(0,0,0,0.2);
       }
     </style>
   </head>
@@ -537,7 +535,7 @@ const main = async () => {
 
   try {
     const page = await browser.newPage();
-    await page.setViewport({ width: 1080, height: 1350, deviceScaleFactor: 2 });
+    await page.setViewport({ width: 1920, height: 1080, deviceScaleFactor: 2 });
     await page.setContent(html, { waitUntil: 'networkidle0' });
     await page.evaluate(async () => {
       if (document.fonts?.ready) {
