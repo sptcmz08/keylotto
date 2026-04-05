@@ -266,12 +266,12 @@ const main = async () => {
       ${embeddedFontFace}
       * { box-sizing: border-box; }
       html {
-        width: 1280px;
-        height: 720px;
+        width: 1080px;
+        height: 1350px;
       }
       body {
-        width: 1280px;
-        height: 720px;
+        width: 1080px;
+        height: 1350px;
         margin: 0;
         overflow: hidden;
         font-family: "LineThai", "Tahoma", sans-serif;
@@ -339,24 +339,24 @@ const main = async () => {
         flex-direction: column;
         width: 100%;
         height: 100%;
-        padding: 16px 18px 18px;
+        padding: 18px 18px 20px;
       }
       .poster-top {
         display: flex;
         align-items: center;
         justify-content: flex-start;
-        min-height: 92px;
+        min-height: 98px;
       }
       .title-meta__text {
-        min-height: 72px;
-        padding: 12px 26px;
+        min-height: 76px;
+        padding: 12px 28px;
         border-radius: 999px;
         border: 3px solid rgba(255, 142, 67, 0.72);
         background: rgba(62, 14, 3, 0.48);
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        font-size: 28px;
+        font-size: 34px;
         font-weight: 900;
         color: #ffe6b0;
         letter-spacing: 0.3px;
@@ -369,36 +369,35 @@ const main = async () => {
           0 12px 24px rgba(0,0,0,0.18);
       }
       .hero {
-        flex: 1;
+        flex: 0 0 auto;
         display: flex;
         flex-direction: column;
-        justify-content: center;
         align-items: center;
-        gap: 18px;
-        padding: 8px 28px 14px;
+        gap: 26px;
+        padding: 30px 24px 28px;
       }
       .lottery-name {
-        max-width: 1180px;
-        font-size: clamp(118px, 11vw, 174px);
-        line-height: 0.86;
+        max-width: 980px;
+        font-size: clamp(120px, 12.4vw, 164px);
+        line-height: 0.84;
         font-weight: 900;
         color: #ffd45e;
         text-align: center;
         letter-spacing: 0.2px;
-        -webkit-text-stroke: 13px #1f0700;
+        -webkit-text-stroke: 14px #1f0700;
         paint-order: stroke fill;
         text-wrap: balance;
         word-break: break-word;
         text-shadow:
-          0 12px 0 #1f0700,
-          0 24px 30px rgba(0,0,0,0.32),
+          0 14px 0 #1f0700,
+          0 26px 32px rgba(0,0,0,0.32),
           0 0 24px rgba(255, 226, 150, 0.2);
       }
       .time-pill {
         display: inline-flex;
         align-items: center;
         gap: 12px;
-        padding: 14px 24px;
+        padding: 16px 28px;
         border-radius: 999px;
         border: 3px solid rgba(255, 214, 116, 0.5);
         background: rgba(48, 9, 2, 0.44);
@@ -408,7 +407,7 @@ const main = async () => {
       }
       .time-pill__label,
       .time-pill__suffix {
-        font-size: 30px;
+        font-size: 34px;
         line-height: 1;
         font-weight: 900;
         color: #fff0c2;
@@ -417,7 +416,7 @@ const main = async () => {
         text-shadow: 0 4px 0 rgba(0,0,0,0.3);
       }
       .time-pill__value {
-        font-size: 56px;
+        font-size: 68px;
         line-height: 0.95;
         font-weight: 900;
         color: #5af186;
@@ -433,14 +432,17 @@ const main = async () => {
         justify-content: center;
       }
       .results {
+        flex: 1;
+        min-height: 0;
         display: grid;
-        grid-template-columns: repeat(3, 1fr);
+        grid-template-columns: 1fr;
+        grid-template-rows: repeat(3, minmax(0, 1fr));
         gap: 18px;
         align-items: stretch;
       }
       .result-chip {
-        min-height: 312px;
-        padding: 24px 20px 26px;
+        min-height: 0;
+        padding: 24px 24px 28px;
         border-radius: 28px;
         border: 4px solid rgba(255, 177, 73, 0.54);
         box-shadow:
@@ -461,23 +463,23 @@ const main = async () => {
         background: linear-gradient(180deg, rgba(88, 40, 0, 0.7) 0%, rgba(120, 52, 0, 0.84) 100%);
       }
       .result-chip__label {
-        font-size: 36px;
+        font-size: 48px;
         color: #ffe5a6;
         font-weight: 900;
-        letter-spacing: 0.25px;
+        letter-spacing: 0.28px;
         text-align: center;
-        -webkit-text-stroke: 1.8px rgba(57, 20, 0, 0.58);
+        -webkit-text-stroke: 2px rgba(57, 20, 0, 0.6);
         paint-order: stroke fill;
         text-shadow: 0 4px 0 rgba(0,0,0,0.32);
       }
       .result-chip__value {
-        margin-top: 18px;
-        font-size: 150px;
+        margin-top: 20px;
+        font-size: clamp(150px, 17vw, 188px);
         line-height: 0.88;
         font-weight: 900;
         color: #ffffff;
         text-align: center;
-        letter-spacing: -2px;
+        letter-spacing: -2.5px;
         -webkit-text-stroke: 4px rgba(39, 10, 0, 0.44);
         paint-order: stroke fill;
         text-shadow:
@@ -535,7 +537,7 @@ const main = async () => {
 
   try {
     const page = await browser.newPage();
-    await page.setViewport({ width: 1280, height: 720, deviceScaleFactor: 2 });
+    await page.setViewport({ width: 1080, height: 1350, deviceScaleFactor: 2 });
     await page.setContent(html, { waitUntil: 'networkidle0' });
     await page.evaluate(async () => {
       if (document.fonts?.ready) {
