@@ -1882,6 +1882,25 @@ function lineResultSummaryText(array $resultRow): string
     return implode(' | ', $parts);
 }
 
+function lineFormatResultTimeDisplay(string $value): string
+{
+    $value = trim($value);
+    if ($value === '') {
+        return '';
+    }
+
+    if (preg_match('/^(\d{2}):(\d{2})/', $value, $matches)) {
+        return $matches[1] . '.' . $matches[2];
+    }
+
+    $timestamp = strtotime($value);
+    if ($timestamp !== false) {
+        return date('H.i', $timestamp);
+    }
+
+    return $value;
+}
+
 function linePushTextToActiveGroups(PDO $pdo, string $message): array
 {
     $message = trim($message);
@@ -2225,6 +2244,7 @@ function lineGenerateResultImage(PDO $pdo, array $resultRow): ?array
         'category_name' => $resultRow['category_name'] ?? '',
         'draw_date' => $resultRow['draw_date'] ?? '',
         'draw_date_display' => formatDateDisplay($resultRow['draw_date'] ?? ''),
+        'result_time_display' => lineFormatResultTimeDisplay((string) ($resultRow['result_time'] ?? '')),
         'three_top' => $resultRow['three_top'] ?? '',
         'two_top' => $resultRow['two_top'] ?? '',
         'two_bot' => $resultRow['two_bot'] ?? '',
@@ -2314,7 +2334,7 @@ function lineFetchResultRow(PDO $pdo, int $lotteryTypeId, string $drawDate): ?ar
 {
     $stmt = $pdo->prepare("
         SELECT r.lottery_type_id, r.draw_date, r.three_top, r.two_top, r.two_bot,
-               lt.flag_emoji,
+               lt.flag_emoji, lt.result_time,
                lt.name AS lottery_name, lc.name AS category_name
         FROM results r
         JOIN lottery_types lt ON r.lottery_type_id = lt.id

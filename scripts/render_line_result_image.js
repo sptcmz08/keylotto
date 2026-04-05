@@ -247,6 +247,14 @@ const main = async () => {
   const { userDataDir } = await ensureWritableBrowserDirs();
   const embeddedFontFace = buildEmbeddedFontFace();
   const posterBackground = buildPosterBackground(data.background_image_path);
+  const resultTimeMarkup = String(data.result_time_display || '').trim() !== ''
+    ? `
+        <div class="time-pill">
+          <span class="time-pill__label">ผลออก</span>
+          <span class="time-pill__value">${escapeHtml(data.result_time_display)}</span>
+          <span class="time-pill__suffix">น.</span>
+        </div>`
+    : '';
 
   const html = `
   <!doctype html>
@@ -331,32 +339,34 @@ const main = async () => {
         flex-direction: column;
         width: 100%;
         height: 100%;
-        padding: 24px 30px 26px;
+        padding: 16px 18px 18px;
       }
       .poster-top {
         display: flex;
         align-items: center;
-        justify-content: space-between;
-        gap: 18px;
+        justify-content: flex-end;
+        min-height: 92px;
       }
-      .brand-pill,
       .title-meta__text {
-        min-height: 52px;
-        padding: 10px 22px;
+        min-height: 72px;
+        padding: 12px 26px;
         border-radius: 999px;
-        border: 1px solid rgba(255, 226, 162, 0.26);
-        background: rgba(18, 5, 0, 0.36);
+        border: 3px solid rgba(255, 142, 67, 0.72);
+        background: rgba(62, 14, 3, 0.48);
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        font-size: 26px;
+        font-size: 28px;
         font-weight: 900;
         color: #ffe6b0;
-        letter-spacing: 0.25px;
-        -webkit-text-stroke: 1px rgba(57, 20, 0, 0.55);
+        letter-spacing: 0.3px;
+        -webkit-text-stroke: 1.4px rgba(57, 20, 0, 0.7);
         paint-order: stroke fill;
-        text-shadow: 0 4px 0 rgba(0,0,0,0.32);
+        text-shadow: 0 4px 0 rgba(0,0,0,0.34);
         white-space: nowrap;
+        box-shadow:
+          inset 0 1px 0 rgba(255,255,255,0.08),
+          0 12px 24px rgba(0,0,0,0.18);
       }
       .hero {
         flex: 1;
@@ -364,36 +374,59 @@ const main = async () => {
         flex-direction: column;
         justify-content: center;
         align-items: center;
-        gap: 12px;
-        padding: 12px 54px 8px;
-      }
-      .category-line {
-        font-size: 46px;
-        line-height: 1;
-        font-weight: 900;
-        color: #fff1c6;
-        text-align: center;
-        letter-spacing: 0.6px;
-        -webkit-text-stroke: 2px rgba(40, 10, 0, 0.5);
-        paint-order: stroke fill;
-        text-shadow: 0 5px 0 rgba(22, 5, 0, 0.35);
+        gap: 18px;
+        padding: 8px 28px 14px;
       }
       .lottery-name {
-        max-width: 1120px;
-        font-size: clamp(102px, 10.5vw, 156px);
-        line-height: 0.88;
+        max-width: 1180px;
+        font-size: clamp(118px, 11vw, 174px);
+        line-height: 0.86;
         font-weight: 900;
         color: #ffd45e;
         text-align: center;
-        letter-spacing: 0.35px;
-        -webkit-text-stroke: 11px #1f0700;
+        letter-spacing: 0.2px;
+        -webkit-text-stroke: 13px #1f0700;
         paint-order: stroke fill;
         text-wrap: balance;
         word-break: break-word;
         text-shadow:
-          0 10px 0 #1f0700,
-          0 20px 26px rgba(0,0,0,0.3),
-          0 0 22px rgba(255, 226, 150, 0.18);
+          0 12px 0 #1f0700,
+          0 24px 30px rgba(0,0,0,0.32),
+          0 0 24px rgba(255, 226, 150, 0.2);
+      }
+      .time-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 12px;
+        padding: 14px 24px;
+        border-radius: 999px;
+        border: 3px solid rgba(255, 214, 116, 0.5);
+        background: rgba(48, 9, 2, 0.44);
+        box-shadow:
+          inset 0 1px 0 rgba(255,255,255,0.08),
+          0 14px 28px rgba(0,0,0,0.18);
+      }
+      .time-pill__label,
+      .time-pill__suffix {
+        font-size: 30px;
+        line-height: 1;
+        font-weight: 900;
+        color: #fff0c2;
+        -webkit-text-stroke: 1.6px rgba(37, 10, 0, 0.56);
+        paint-order: stroke fill;
+        text-shadow: 0 4px 0 rgba(0,0,0,0.3);
+      }
+      .time-pill__value {
+        font-size: 56px;
+        line-height: 0.95;
+        font-weight: 900;
+        color: #5af186;
+        letter-spacing: 0.5px;
+        -webkit-text-stroke: 2.6px rgba(8, 58, 18, 0.76);
+        paint-order: stroke fill;
+        text-shadow:
+          0 5px 0 rgba(0, 59, 23, 0.45),
+          0 10px 18px rgba(0,0,0,0.18);
       }
       .title-meta {
         display: flex;
@@ -406,12 +439,13 @@ const main = async () => {
         align-items: stretch;
       }
       .result-chip {
-        min-height: 282px;
-        padding: 22px 18px 24px;
+        min-height: 312px;
+        padding: 24px 20px 26px;
         border-radius: 28px;
-        border: 2px solid rgba(255, 236, 185, 0.28);
+        border: 4px solid rgba(255, 177, 73, 0.54);
         box-shadow:
           inset 0 1px 0 rgba(255,255,255,0.08),
+          inset 0 0 0 2px rgba(255, 247, 222, 0.06),
           0 18px 28px rgba(0,0,0,0.18);
         display: flex;
         flex-direction: column;
@@ -427,28 +461,28 @@ const main = async () => {
         background: linear-gradient(180deg, rgba(88, 40, 0, 0.7) 0%, rgba(120, 52, 0, 0.84) 100%);
       }
       .result-chip__label {
-        font-size: 34px;
+        font-size: 36px;
         color: #ffe5a6;
         font-weight: 900;
-        letter-spacing: 0.2px;
+        letter-spacing: 0.25px;
         text-align: center;
-        -webkit-text-stroke: 1.2px rgba(57, 20, 0, 0.5);
+        -webkit-text-stroke: 1.8px rgba(57, 20, 0, 0.58);
         paint-order: stroke fill;
-        text-shadow: 0 3px 0 rgba(0,0,0,0.28);
+        text-shadow: 0 4px 0 rgba(0,0,0,0.32);
       }
       .result-chip__value {
-        margin-top: 16px;
-        font-size: 134px;
+        margin-top: 18px;
+        font-size: 150px;
         line-height: 0.88;
         font-weight: 900;
         color: #ffffff;
         text-align: center;
-        letter-spacing: -1.5px;
-        -webkit-text-stroke: 2.4px rgba(39, 10, 0, 0.38);
+        letter-spacing: -2px;
+        -webkit-text-stroke: 4px rgba(39, 10, 0, 0.44);
         paint-order: stroke fill;
         text-shadow:
-          0 6px 0 rgba(24, 7, 0, 0.4),
-          0 10px 18px rgba(0,0,0,0.18);
+          0 7px 0 rgba(24, 7, 0, 0.48),
+          0 14px 20px rgba(0,0,0,0.18);
       }
     </style>
   </head>
@@ -457,15 +491,14 @@ const main = async () => {
       <main class="poster">
         <div class="content">
           <header class="poster-top">
-            <div class="brand-pill">${escapeHtml(data.site_name || 'ประกาศผลหวย')}</div>
             <div class="title-meta">
               <div class="title-meta__text">${TEXT.draw} ${escapeHtml(data.draw_date_display || data.draw_date || '-')}</div>
             </div>
           </header>
 
           <section class="hero">
-            <div class="category-line">${escapeHtml(data.category_name || 'ผลออกรอบล่าสุด')}</div>
             <div class="lottery-name">${escapeHtml(data.lottery_name || '-')}</div>
+            ${resultTimeMarkup}
           </section>
 
           <section class="results">
