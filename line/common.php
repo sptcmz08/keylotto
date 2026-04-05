@@ -2372,6 +2372,53 @@ function lineFetchResultRow(PDO $pdo, int $lotteryTypeId, string $drawDate): ?ar
     return $resultRow ?: null;
 }
 
+function lineResultFlexAspectRatio(?string $imagePath, string $default = '16:9'): string
+{
+    $imagePath = is_string($imagePath) ? trim($imagePath) : '';
+    if ($imagePath === '' || !is_file($imagePath)) {
+        return $default;
+    }
+
+    $imageSize = @getimagesize($imagePath);
+    $width = (int) ($imageSize[0] ?? 0);
+    $height = (int) ($imageSize[1] ?? 0);
+    if ($width <= 0 || $height <= 0) {
+        return $default;
+    }
+
+    return $width . ':' . $height;
+}
+
+function lineBuildResultFlexMessage(array $resultRow, array $image): array
+{
+    $summaryText = trim(lineResultSummaryText($resultRow));
+    if ($summaryText === '') {
+        $summaryText = 'ผลรางวัลหวย';
+    }
+
+    $imageUrl = (string) ($image['url'] ?? '');
+
+    return [
+        'type' => 'flex',
+        'altText' => $summaryText,
+        'contents' => [
+            'type' => 'bubble',
+            'size' => 'giga',
+            'hero' => [
+                'type' => 'image',
+                'url' => $imageUrl,
+                'size' => 'full',
+                'aspectRatio' => lineResultFlexAspectRatio((string) ($image['path'] ?? ''), '16:9'),
+                'aspectMode' => 'cover',
+            ],
+            'action' => [
+                'type' => 'uri',
+                'uri' => $imageUrl,
+            ],
+        ],
+    ];
+}
+
 function linePrepareResultImageMessage(PDO $pdo, array $resultRow): array
 {
     $image = lineGenerateResultImage($pdo, $resultRow);
@@ -2386,11 +2433,7 @@ function linePrepareResultImageMessage(PDO $pdo, array $resultRow): array
     return [
         'ok' => true,
         'summary_text' => lineResultSummaryText($resultRow),
-        'messages' => [[
-            'type' => 'image',
-            'originalContentUrl' => $image['url'],
-            'previewImageUrl' => $image['url'],
-        ]],
+        'messages' => [lineBuildResultFlexMessage($resultRow, $image)],
         'image_url' => $image['url'],
         'renderer' => $image['renderer'] ?? '',
     ];
