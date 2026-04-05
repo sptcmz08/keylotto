@@ -257,20 +257,27 @@ const main = async () => {
     <style>
       ${embeddedFontFace}
       * { box-sizing: border-box; }
+      html {
+        width: 1280px;
+        height: 720px;
+      }
       body {
+        width: 1280px;
+        height: 720px;
         margin: 0;
+        overflow: hidden;
         font-family: "LineThai", "Tahoma", sans-serif;
         text-rendering: geometricPrecision;
         -webkit-font-smoothing: antialiased;
         background:
-          radial-gradient(circle at 20% 18%, rgba(255, 186, 72, 0.16), transparent 18%),
-          radial-gradient(circle at 80% 74%, rgba(255, 122, 72, 0.14), transparent 20%),
+          radial-gradient(circle at 20% 18%, rgba(255, 186, 72, 0.18), transparent 18%),
+          radial-gradient(circle at 80% 74%, rgba(255, 122, 72, 0.16), transparent 20%),
           linear-gradient(180deg, #860707 0%, #ad0f0f 42%, #7d0606 100%);
         color: #fff4c8;
       }
       body::before {
         content: "";
-        position: fixed;
+        position: absolute;
         inset: 0;
         background:
           radial-gradient(circle at center, rgba(255, 210, 100, 0.08) 0 3px, transparent 3px 100%),
@@ -280,87 +287,147 @@ const main = async () => {
         opacity: 0.22;
         pointer-events: none;
       }
-      .frame {
-        width: 1280px;
-        height: 720px;
-        padding: 28px 34px;
+      body::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background:
+          linear-gradient(180deg, rgba(0,0,0,0.1), rgba(0,0,0,0.18)),
+          radial-gradient(circle at 50% 18%, rgba(255, 218, 128, 0.12), transparent 24%);
+        pointer-events: none;
       }
-      .poster {
+      .frame {
         width: 100%;
         height: 100%;
-        border-radius: 28px;
-        overflow: hidden;
-        border: 3px solid rgba(255, 211, 109, 0.48);
-        ${posterBackground}
-        box-shadow:
-          inset 0 0 0 3px rgba(255, 214, 116, 0.08),
-          0 20px 60px rgba(0,0,0,0.28);
-        padding: 34px 42px 38px;
       }
-      .title-block {
-        margin-top: 8px;
+      .poster {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        ${posterBackground}
+      }
+      .poster::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background:
+          linear-gradient(180deg, rgba(0, 0, 0, 0.1), rgba(0, 0, 0, 0.2)),
+          linear-gradient(90deg, rgba(255, 212, 96, 0.08), transparent 28%, transparent 72%, rgba(255, 212, 96, 0.08));
+        pointer-events: none;
+      }
+      .poster::after {
+        content: "";
+        position: absolute;
+        inset: 14px;
+        border: 2px solid rgba(255, 216, 114, 0.34);
+        box-shadow: inset 0 0 0 1px rgba(255, 245, 202, 0.06);
+        pointer-events: none;
+      }
+      .content {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+        height: 100%;
+        padding: 24px 30px 26px;
+      }
+      .poster-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+      }
+      .brand-pill,
+      .title-meta__text {
+        min-height: 52px;
+        padding: 10px 22px;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 226, 162, 0.26);
+        background: rgba(18, 5, 0, 0.36);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 26px;
+        font-weight: 900;
+        color: #ffe6b0;
+        letter-spacing: 0.25px;
+        -webkit-text-stroke: 1px rgba(57, 20, 0, 0.55);
+        paint-order: stroke fill;
+        text-shadow: 0 4px 0 rgba(0,0,0,0.32);
+        white-space: nowrap;
+      }
+      .hero {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 54px 8px;
+      }
+      .category-line {
+        font-size: 46px;
+        line-height: 1;
+        font-weight: 900;
+        color: #fff1c6;
         text-align: center;
+        letter-spacing: 0.6px;
+        -webkit-text-stroke: 2px rgba(40, 10, 0, 0.5);
+        paint-order: stroke fill;
+        text-shadow: 0 5px 0 rgba(22, 5, 0, 0.35);
       }
       .lottery-name {
-        font-size: 120px;
-        line-height: 0.96;
+        max-width: 1120px;
+        font-size: clamp(102px, 10.5vw, 156px);
+        line-height: 0.88;
         font-weight: 900;
         color: #ffd45e;
-        letter-spacing: 0.5px;
-        -webkit-text-stroke: 10px #1f0700;
+        text-align: center;
+        letter-spacing: 0.35px;
+        -webkit-text-stroke: 11px #1f0700;
         paint-order: stroke fill;
         text-wrap: balance;
         word-break: break-word;
         text-shadow:
           0 10px 0 #1f0700,
-          0 18px 24px rgba(0,0,0,0.3),
+          0 20px 26px rgba(0,0,0,0.3),
           0 0 22px rgba(255, 226, 150, 0.18);
       }
       .title-meta {
-        margin-top: 6px;
         display: flex;
         justify-content: center;
-      }
-      .title-meta__text {
-        padding: 8px 22px;
-        border-radius: 999px;
-        background: rgba(18, 5, 0, 0.34);
-        border: 1px solid rgba(255, 226, 162, 0.22);
-        font-size: 28px;
-        font-weight: 900;
-        color: #ffe6b0;
-        letter-spacing: 0.2px;
-        -webkit-text-stroke: 1.2px rgba(57, 20, 0, 0.55);
-        paint-order: stroke fill;
-        text-shadow: 0 4px 0 rgba(0,0,0,0.32);
       }
       .results {
         display: grid;
         grid-template-columns: repeat(3, 1fr);
-        gap: 22px;
-        margin-top: 14px;
+        gap: 18px;
+        align-items: stretch;
       }
       .result-chip {
-        min-height: 248px;
-        padding: 18px 18px 20px;
-        border-radius: 24px;
-        border: 2px solid rgba(255, 236, 185, 0.2);
-        box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
+        min-height: 282px;
+        padding: 22px 18px 24px;
+        border-radius: 28px;
+        border: 2px solid rgba(255, 236, 185, 0.28);
+        box-shadow:
+          inset 0 1px 0 rgba(255,255,255,0.08),
+          0 18px 28px rgba(0,0,0,0.18);
         display: flex;
         flex-direction: column;
         justify-content: center;
       }
       .result-chip.gold {
-        background: linear-gradient(180deg, rgba(58, 20, 0, 0.66) 0%, rgba(96, 29, 0, 0.78) 100%);
+        background: linear-gradient(180deg, rgba(58, 20, 0, 0.7) 0%, rgba(96, 29, 0, 0.84) 100%);
       }
       .result-chip.green {
-        background: linear-gradient(180deg, rgba(0, 78, 32, 0.66) 0%, rgba(0, 111, 44, 0.78) 100%);
+        background: linear-gradient(180deg, rgba(0, 78, 32, 0.7) 0%, rgba(0, 111, 44, 0.84) 100%);
       }
       .result-chip.orange {
-        background: linear-gradient(180deg, rgba(88, 40, 0, 0.66) 0%, rgba(120, 52, 0, 0.78) 100%);
+        background: linear-gradient(180deg, rgba(88, 40, 0, 0.7) 0%, rgba(120, 52, 0, 0.84) 100%);
       }
       .result-chip__label {
-        font-size: 32px;
+        font-size: 34px;
         color: #ffe5a6;
         font-weight: 900;
         letter-spacing: 0.2px;
@@ -370,13 +437,13 @@ const main = async () => {
         text-shadow: 0 3px 0 rgba(0,0,0,0.28);
       }
       .result-chip__value {
-        margin-top: 12px;
-        font-size: 118px;
+        margin-top: 16px;
+        font-size: 134px;
         line-height: 0.88;
         font-weight: 900;
         color: #ffffff;
         text-align: center;
-        letter-spacing: -1px;
+        letter-spacing: -1.5px;
         -webkit-text-stroke: 2.4px rgba(39, 10, 0, 0.38);
         paint-order: stroke fill;
         text-shadow:
@@ -388,19 +455,25 @@ const main = async () => {
   <body>
     <div class="frame">
       <main class="poster">
-        <section class="title-block">
-          <div class="lottery-name">${escapeHtml(data.lottery_name || '-')}</div>
-        </section>
+        <div class="content">
+          <header class="poster-top">
+            <div class="brand-pill">${escapeHtml(data.site_name || 'ประกาศผลหวย')}</div>
+            <div class="title-meta">
+              <div class="title-meta__text">${TEXT.draw} ${escapeHtml(data.draw_date_display || data.draw_date || '-')}</div>
+            </div>
+          </header>
 
-        <div class="title-meta">
-          <div class="title-meta__text">${TEXT.draw} ${escapeHtml(data.draw_date_display || data.draw_date || '-')}</div>
+          <section class="hero">
+            <div class="category-line">${escapeHtml(data.category_name || 'ผลออกรอบล่าสุด')}</div>
+            <div class="lottery-name">${escapeHtml(data.lottery_name || '-')}</div>
+          </section>
+
+          <section class="results">
+            ${renderResultChip(TEXT.top3, data.three_top, 'gold')}
+            ${renderResultChip(TEXT.top2, data.two_top, 'green')}
+            ${renderResultChip(TEXT.bot2, data.two_bot, 'orange')}
+          </section>
         </div>
-
-        <section class="results">
-          ${renderResultChip(TEXT.top3, data.three_top, 'gold')}
-          ${renderResultChip(TEXT.top2, data.two_top, 'green')}
-          ${renderResultChip(TEXT.bot2, data.two_bot, 'orange')}
-        </section>
       </main>
     </div>
   </body>
