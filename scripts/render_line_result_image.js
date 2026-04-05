@@ -344,7 +344,7 @@ const main = async () => {
       .poster-top {
         display: flex;
         align-items: center;
-        justify-content: flex-end;
+        justify-content: flex-start;
         min-height: 92px;
       }
       .title-meta__text {
