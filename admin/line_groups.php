@@ -41,6 +41,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         lineGroupsRedirectWithFlash('success', 'บันทึก LINE settings สำเร็จ', 'settings');
     }
 
+    if ($action === 'save_group_delivery_settings') {
+        $groupId = trim((string) ($_POST['group_id'] ?? ''));
+        if ($groupId === '') {
+            lineGroupsRedirectWithFlash('error', 'ไม่พบกลุ่ม LINE ที่ต้องการแก้ไข', 'groups');
+        }
+
+        $isActive = isset($_POST['is_active']) ? 1 : 0;
+        $allowTexts = isset($_POST['allow_texts']) ? 1 : 0;
+        $allowImages = isset($_POST['allow_images']) ? 1 : 0;
+
+        $stmt = $pdo->prepare("
+            UPDATE line_groups
+            SET is_active = ?, allow_texts = ?, allow_images = ?
+            WHERE group_id = ?
+        ");
+        $stmt->execute([$isActive, $allowTexts, $allowImages, $groupId]);
+
+        lineGroupsRedirectWithFlash('success', 'บันทึกการตั้งค่าการส่งของกลุ่มสำเร็จ', 'groups');
+    }
+
     if ($action === 'save_scheduled_messages') {
         $messages = $_POST['scheduled_messages'] ?? [];
         lineSetScheduledTextMessages($pdo, is_array($messages) ? $messages : []);
@@ -272,6 +292,8 @@ if (empty($scheduledImages)) {
     ]];
 }
 $activeGroupsCount = count(array_filter($groups, static fn($group) => !empty($group['is_active'])));
+$activeTextGroupsCount = count(array_filter($groups, static fn($group) => !empty($group['is_active']) && !empty($group['allow_texts'])));
+$activeImageGroupsCount = count(array_filter($groups, static fn($group) => !empty($group['is_active']) && !empty($group['allow_images'])));
 $weekdayOptions = [
     '0' => 'อาทิตย์',
     '1' => 'จันทร์',
@@ -303,12 +325,12 @@ require_once 'includes/header.php';
             <p class="text-xs text-gray-400">จัดการการส่งรูปผลหวย ข้อความอัตโนมัติตามเวลา และกลุ่ม LINE ที่เชื่อมผ่าน webhook แล้ว <?= count($groups) ?> กลุ่ม</p>
         </div>
         <div class="flex flex-wrap gap-2 pt-1 relative z-20">
-            <button type="button" data-line-tab="settings" class="line-tab-btn relative z-20 bg-[#1b5e20] text-white px-4 py-2 rounded-full text-sm font-medium">ตั้งค่า</button>
-            <button type="button" data-line-tab="shared-templates" class="line-tab-btn relative z-20 bg-white text-gray-700 border border-gray-200 px-4 py-2 rounded-full text-sm font-medium">Shared Templates</button>
-            <button type="button" data-line-tab="send-image" class="line-tab-btn relative z-20 bg-white text-gray-700 border border-gray-200 px-4 py-2 rounded-full text-sm font-medium">ส่งรูปภาพ</button>
-            <button type="button" data-line-tab="auto-text" class="line-tab-btn relative z-20 bg-white text-gray-700 border border-gray-200 px-4 py-2 rounded-full text-sm font-medium">ส่งข้อความ Auto</button>
-            <button type="button" data-line-tab="auto-image" class="line-tab-btn relative z-20 bg-white text-gray-700 border border-gray-200 px-4 py-2 rounded-full text-sm font-medium">ส่งรูป Auto</button>
-            <button type="button" data-line-tab="groups" class="line-tab-btn relative z-20 bg-white text-gray-700 border border-gray-200 px-4 py-2 rounded-full text-sm font-medium">กลุ่มและประวัติ</button>
+            <a href="line_groups.php?tab=settings" data-line-tab="settings" class="line-tab-btn relative z-20 px-4 py-2 rounded-full text-sm font-medium <?= $activeTab === 'settings' ? 'bg-[#1b5e20] text-white' : 'bg-white text-gray-700 border border-gray-200' ?>">ตั้งค่า</a>
+            <a href="line_groups.php?tab=shared-templates" data-line-tab="shared-templates" class="line-tab-btn relative z-20 px-4 py-2 rounded-full text-sm font-medium <?= $activeTab === 'shared-templates' ? 'bg-[#1b5e20] text-white' : 'bg-white text-gray-700 border border-gray-200' ?>">Shared Templates</a>
+            <a href="line_groups.php?tab=send-image" data-line-tab="send-image" class="line-tab-btn relative z-20 px-4 py-2 rounded-full text-sm font-medium <?= $activeTab === 'send-image' ? 'bg-[#1b5e20] text-white' : 'bg-white text-gray-700 border border-gray-200' ?>">ส่งรูปภาพ</a>
+            <a href="line_groups.php?tab=auto-text" data-line-tab="auto-text" class="line-tab-btn relative z-20 px-4 py-2 rounded-full text-sm font-medium <?= $activeTab === 'auto-text' ? 'bg-[#1b5e20] text-white' : 'bg-white text-gray-700 border border-gray-200' ?>">ส่งข้อความ Auto</a>
+            <a href="line_groups.php?tab=auto-image" data-line-tab="auto-image" class="line-tab-btn relative z-20 px-4 py-2 rounded-full text-sm font-medium <?= $activeTab === 'auto-image' ? 'bg-[#1b5e20] text-white' : 'bg-white text-gray-700 border border-gray-200' ?>">ส่งรูป Auto</a>
+            <a href="line_groups.php?tab=groups" data-line-tab="groups" class="line-tab-btn relative z-20 px-4 py-2 rounded-full text-sm font-medium <?= $activeTab === 'groups' ? 'bg-[#1b5e20] text-white' : 'bg-white text-gray-700 border border-gray-200' ?>">กลุ่มและประวัติ</a>
         </div>
     </div>
 </div>
@@ -320,7 +342,7 @@ require_once 'includes/header.php';
 </div>
 <?php endif; ?>
 
-<section data-line-panel="settings" class="line-panel">
+<section data-line-panel="settings" class="line-panel <?= $activeTab === 'settings' ? '' : 'hidden' ?>">
     <div class="bg-white rounded-xl shadow-sm border overflow-hidden">
         <div class="px-4 py-3 border-b bg-gray-50 font-semibold text-gray-700">ตั้งค่า LINE Settings</div>
         <form method="POST" class="p-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -358,7 +380,7 @@ require_once 'includes/header.php';
     </div>
 </section>
 
-<section data-line-panel="shared-templates" class="line-panel hidden">
+<section data-line-panel="shared-templates" class="line-panel <?= $activeTab === 'shared-templates' ? '' : 'hidden' ?>">
     <div class="bg-white rounded-xl shadow-sm border overflow-hidden">
         <div class="px-4 py-3 border-b bg-gray-50 font-semibold text-gray-700">Shared Template Groups</div>
         <div class="px-4 py-3 text-xs text-gray-500 border-b bg-gray-50/60">
@@ -414,7 +436,7 @@ require_once 'includes/header.php';
     </div>
 </section>
 
-<section data-line-panel="send-image" class="line-panel hidden">
+<section data-line-panel="send-image" class="line-panel <?= $activeTab === 'send-image' ? '' : 'hidden' ?>">
     <div class="bg-white rounded-xl shadow-sm border overflow-hidden">
         <div class="px-4 py-3 border-b bg-gray-50 font-semibold text-gray-700">ผลหวยที่ออกแล้ว</div>
         <div class="overflow-x-auto">
@@ -472,7 +494,7 @@ require_once 'includes/header.php';
     </div>
 </section>
 
-<section data-line-panel="auto-text" class="line-panel hidden">
+<section data-line-panel="auto-text" class="line-panel <?= $activeTab === 'auto-text' ? '' : 'hidden' ?>">
     <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
         <div class="bg-white rounded-xl shadow-sm border overflow-hidden">
             <div class="px-4 py-3 border-b bg-gray-50 font-semibold text-gray-700">ส่งข้อความทดสอบ</div>
@@ -638,7 +660,7 @@ require_once 'includes/header.php';
     </div>
 </section>
 
-<section data-line-panel="auto-image" class="line-panel hidden">
+<section data-line-panel="auto-image" class="line-panel <?= $activeTab === 'auto-image' ? '' : 'hidden' ?>">
     <div class="bg-white rounded-xl shadow-sm border overflow-hidden">
         <div class="px-4 py-3 border-b bg-gray-50 font-semibold text-gray-700">ส่งรูปภาพอัตโนมัติตามช่วงวันและเวลา</div>
         <div class="px-4 py-3 text-xs text-gray-500 border-b bg-gray-50/60">
@@ -780,7 +802,7 @@ require_once 'includes/header.php';
     </div>
 </section>
 
-<section data-line-panel="groups" class="line-panel hidden">
+<section data-line-panel="groups" class="line-panel <?= $activeTab === 'groups' ? '' : 'hidden' ?>">
     <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
         <div class="xl:col-span-2 bg-white rounded-xl shadow-sm border overflow-hidden">
             <div class="px-4 py-3 border-b bg-gray-50 font-semibold text-gray-700">รายชื่อกลุ่ม LINE</div>
@@ -789,27 +811,56 @@ require_once 'includes/header.php';
                     <thead class="bg-gray-50 border-b">
                         <tr>
                             <th class="px-3 py-2 text-left text-xs text-gray-500">สถานะ</th>
+                            <th class="px-3 py-2 text-left text-xs text-gray-500">ส่งข้อความ</th>
+                            <th class="px-3 py-2 text-left text-xs text-gray-500">ส่งรูป</th>
                             <th class="px-3 py-2 text-left text-xs text-gray-500">ชื่อกลุ่ม</th>
                             <th class="px-3 py-2 text-left text-xs text-gray-500">Group ID</th>
                             <th class="px-3 py-2 text-left text-xs text-gray-500">ล่าสุด</th>
+                            <th class="px-3 py-2 text-left text-xs text-gray-500">บันทึก</th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php foreach ($groups as $group): ?>
                         <tr class="border-b hover:bg-gray-50">
-                            <td class="px-3 py-2">
-                                <span class="px-2 py-1 rounded-full text-[11px] font-medium <?= !empty($group['is_active']) ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700' ?>">
-                                    <?= !empty($group['is_active']) ? 'active' : 'inactive' ?>
-                                </span>
+                            <td colspan="7" class="px-0 py-0">
+                                <form method="POST" class="grid grid-cols-1 md:grid-cols-[120px_120px_120px_minmax(180px,1fr)_minmax(220px,1fr)_140px_120px] gap-0 items-center">
+                                    <input type="hidden" name="form_action" value="save_group_delivery_settings">
+                                    <input type="hidden" name="group_id" value="<?= htmlspecialchars((string) $group['group_id']) ?>">
+                                    <div class="px-3 py-3">
+                                        <label class="inline-flex items-center gap-2 text-sm text-gray-700">
+                                            <input type="checkbox" name="is_active" value="1" class="rounded border-gray-300" <?= !empty($group['is_active']) ? 'checked' : '' ?>>
+                                            <span class="px-2 py-1 rounded-full text-[11px] font-medium <?= !empty($group['is_active']) ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700' ?>">
+                                                <?= !empty($group['is_active']) ? 'active' : 'inactive' ?>
+                                            </span>
+                                        </label>
+                                    </div>
+                                    <div class="px-3 py-3">
+                                        <label class="inline-flex items-center gap-2 text-sm text-gray-700">
+                                            <input type="checkbox" name="allow_texts" value="1" class="rounded border-gray-300" <?= !empty($group['allow_texts']) ? 'checked' : '' ?>>
+                                            <span>เปิด</span>
+                                        </label>
+                                    </div>
+                                    <div class="px-3 py-3">
+                                        <label class="inline-flex items-center gap-2 text-sm text-gray-700">
+                                            <input type="checkbox" name="allow_images" value="1" class="rounded border-gray-300" <?= !empty($group['allow_images']) ? 'checked' : '' ?>>
+                                            <span>เปิด</span>
+                                        </label>
+                                    </div>
+                                    <div class="px-3 py-3 font-medium text-gray-800"><?= htmlspecialchars($group['group_name'] ?: '(ยังไม่ทราบชื่อกลุ่ม)') ?></div>
+                                    <div class="px-3 py-3 text-xs text-gray-500 break-all"><?= htmlspecialchars((string) $group['group_id']) ?></div>
+                                    <div class="px-3 py-3 text-xs text-gray-500"><?= htmlspecialchars((string) $group['last_seen_at']) ?></div>
+                                    <div class="px-3 py-3">
+                                        <button type="submit" class="bg-[#2e7d32] text-white px-3 py-2 rounded-lg text-xs font-medium hover:bg-[#1b5e20] transition">
+                                            <i class="fas fa-save mr-1"></i>บันทึก
+                                        </button>
+                                    </div>
+                                </form>
                             </td>
-                            <td class="px-3 py-2 font-medium text-gray-800"><?= htmlspecialchars($group['group_name'] ?: '(ยังไม่ทราบชื่อกลุ่ม)') ?></td>
-                            <td class="px-3 py-2 text-xs text-gray-500"><?= htmlspecialchars($group['group_id']) ?></td>
-                            <td class="px-3 py-2 text-xs text-gray-500"><?= htmlspecialchars($group['last_seen_at']) ?></td>
                         </tr>
                         <?php endforeach; ?>
                         <?php if (empty($groups)): ?>
                         <tr>
-                            <td colspan="4" class="px-3 py-6 text-center text-sm text-gray-400">ยังไม่พบกลุ่ม LINE</td>
+                            <td colspan="7" class="px-3 py-6 text-center text-sm text-gray-400">ยังไม่พบกลุ่ม LINE</td>
                         </tr>
                         <?php endif; ?>
                     </tbody>
@@ -827,6 +878,14 @@ require_once 'includes/header.php';
                 <div class="rounded-lg border border-green-200 bg-green-50 p-3">
                     <div class="text-xs text-green-700">กลุ่มที่ active</div>
                     <div class="mt-1 text-2xl font-bold text-green-700"><?= number_format($activeGroupsCount) ?></div>
+                </div>
+                <div class="rounded-lg border border-blue-200 bg-blue-50 p-3">
+                    <div class="text-xs text-blue-700">กลุ่มที่รับข้อความ</div>
+                    <div class="mt-1 text-2xl font-bold text-blue-700"><?= number_format($activeTextGroupsCount) ?></div>
+                </div>
+                <div class="rounded-lg border border-purple-200 bg-purple-50 p-3">
+                    <div class="text-xs text-purple-700">กลุ่มที่รับรูป</div>
+                    <div class="mt-1 text-2xl font-bold text-purple-700"><?= number_format($activeImageGroupsCount) ?></div>
                 </div>
                 <div class="rounded-lg border border-blue-200 bg-blue-50 p-3">
                     <div class="text-xs text-blue-700">ประวัติการส่งล่าสุด</div>
@@ -1139,9 +1198,9 @@ document.addEventListener('DOMContentLoaded', function () {
         let statusLabel = 'ยังไม่ได้อัปโหลดรูป';
         if (savedCount > 0 && selectedCount > 0) {
             statusLabel = 'มีรูปที่บันทึกไว้ และเลือกรูปใหม่แล้ว';
-        } elseif (savedCount > 0) {
+        } else if (savedCount > 0) {
             statusLabel = 'พร้อมใช้งาน';
-        } elseif (selectedCount > 0) {
+        } else if (selectedCount > 0) {
             statusLabel = 'เลือกรูปใหม่แล้ว';
         }
 
@@ -1249,6 +1308,9 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     buttons.forEach((button) => {
+        if (button.tagName === 'A') {
+            return;
+        }
         button.addEventListener('click', function () {
             activateTab(button.dataset.lineTab);
         });
@@ -1528,11 +1590,99 @@ document.addEventListener('DOMContentLoaded', function () {
     applyTab(initialTab);
 
     buttons.forEach((button) => {
+        if (button.tagName === 'A') {
+            return;
+        }
         button.addEventListener('click', function (event) {
             event.preventDefault();
             applyTab(button.dataset.lineTab);
         });
     });
+})();
+</script>
+
+<script>
+(function () {
+    const addScheduledImageBtn = document.getElementById('addScheduledImageBtn');
+    const scheduledImagesList = document.getElementById('scheduledImagesList');
+    const scheduledImagesCount = document.getElementById('scheduledImagesCount');
+    if (!addScheduledImageBtn || !scheduledImagesList) {
+        return;
+    }
+
+    function updateCount() {
+        if (!scheduledImagesCount) {
+            return;
+        }
+        scheduledImagesCount.textContent = `ตอนนี้มี ${scheduledImagesList.querySelectorAll('.scheduled-image-item').length} รายการ`;
+    }
+
+    function nextImageIndex() {
+        let maxIndex = -1;
+        scheduledImagesList.querySelectorAll('.scheduled-image-item').forEach((item) => {
+            item.querySelectorAll('[name]').forEach((field) => {
+                const match = field.name.match(/scheduled_images\[(\d+)\]/);
+                if (match) {
+                    maxIndex = Math.max(maxIndex, Number(match[1]));
+                }
+            });
+        });
+
+        return maxIndex + 1;
+    }
+
+    function resetClonedScheduledImageItem(item) {
+        const generatedId = 'msg_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+        const idInput = item.querySelector('input[name*="[id]"]');
+        const imageInput = item.querySelector('input[name*="[images_json]"]');
+        const imageUrlsInput = item.querySelector('.scheduled-image-urls-json');
+        const fileInput = item.querySelector('.scheduled-image-file-input');
+        const timeInput = item.querySelector('input[type="time"]');
+        const enabledCheckbox = item.querySelector('input[type="checkbox"][name*="[enabled]"]');
+        const previewBox = item.querySelector('.scheduled-image-preview-box');
+        const statusText = item.querySelector('.space-y-3 > .text-xs.text-gray-500');
+
+        if (idInput) idInput.value = generatedId;
+        if (imageInput) imageInput.value = '[]';
+        if (imageUrlsInput) imageUrlsInput.value = '[]';
+        if (fileInput) fileInput.value = '';
+        if (timeInput) timeInput.value = '';
+        if (enabledCheckbox) enabledCheckbox.checked = true;
+        item.querySelectorAll('select').forEach((select) => {
+            select.value = '';
+        });
+
+        if (previewBox) {
+            previewBox.innerHTML = '<div class="h-40 rounded-lg border border-dashed border-gray-200 flex items-center justify-center text-xs text-gray-400">ยังไม่มีรูปอัปโหลด</div>';
+        }
+
+        if (statusText) {
+            statusText.textContent = 'สถานะตอนนี้: ยังไม่ได้อัปโหลดรูป / รูปที่บันทึกไว้ 0 รูป';
+        }
+    }
+
+    if (!addScheduledImageBtn.dataset.fallbackBound) {
+        addScheduledImageBtn.dataset.fallbackBound = '1';
+        addScheduledImageBtn.addEventListener('click', function () {
+            const template = scheduledImagesList.querySelector('.scheduled-image-item');
+            if (!template) {
+                return;
+            }
+
+            const newIndex = nextImageIndex();
+            const clone = template.cloneNode(true);
+            clone.querySelectorAll('[name]').forEach((field) => {
+                field.name = field.name
+                    .replace(/scheduled_images\[\d+\]/g, `scheduled_images[${newIndex}]`)
+                    .replace(/scheduled_image_files\[\d+\]/g, `scheduled_image_files[${newIndex}]`);
+            });
+
+            resetClonedScheduledImageItem(clone);
+            scheduledImagesList.appendChild(clone);
+            updateCount();
+            clone.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        });
+    }
 })();
 </script>
 

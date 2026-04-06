@@ -57,6 +57,18 @@ function ensureLineTables(PDO $pdo): void
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
 
+    try {
+        $pdo->exec("ALTER TABLE line_groups ADD COLUMN allow_texts TINYINT(1) NOT NULL DEFAULT 1 AFTER is_active");
+    } catch (Throwable $e) {
+        // Column already exists.
+    }
+
+    try {
+        $pdo->exec("ALTER TABLE line_groups ADD COLUMN allow_images TINYINT(1) NOT NULL DEFAULT 1 AFTER allow_texts");
+    } catch (Throwable $e) {
+        // Column already exists.
+    }
+
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS line_message_logs (
             id INT(11) NOT NULL AUTO_INCREMENT,
@@ -115,6 +127,23 @@ function ensureLineTables(PDO $pdo): void
             KEY idx_image_message_id (message_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
+}
+
+function lineFetchActiveGroupIds(PDO $pdo, string $deliveryType = 'any'): array
+{
+    ensureLineTables($pdo);
+
+    $sql = "SELECT group_id FROM line_groups WHERE is_active = 1";
+    if ($deliveryType === 'text') {
+        $sql .= " AND allow_texts = 1";
+    } elseif ($deliveryType === 'image') {
+        $sql .= " AND allow_images = 1";
+    }
+    $sql .= " ORDER BY id ASC";
+
+    $stmt = $pdo->query($sql);
+    $groupIds = $stmt ? $stmt->fetchAll(PDO::FETCH_COLUMN) : [];
+    return array_values(array_filter(array_map(static fn($groupId) => trim((string) $groupId), $groupIds)));
 }
 
 function lineGetSetting(PDO $pdo, string $key, string $default = ''): string
@@ -311,7 +340,7 @@ function lineDiagnoseScheduledTextMessages(PDO $pdo, ?DateTimeImmutable $now = n
     $currentMinutes = ((int) $now->format('H') * 60) + (int) $now->format('i');
     $graceMinutes = 15;
     $messages = lineGetScheduledTextMessages($pdo);
-    $groups = $pdo->query("SELECT group_id FROM line_groups WHERE is_active = 1 ORDER BY id ASC")->fetchAll();
+    $groups = lineFetchActiveGroupIds($pdo, 'text');
 
     $diagnostics = [
         'server_time' => $scheduledTime,
@@ -781,19 +810,14 @@ function linePushImageToActiveGroups(PDO $pdo, array $imageUrls, string $label =
         return ['sent' => 0, 'failed' => 0, 'skipped' => true, 'reason' => 'config_not_ready'];
     }
 
-    $groups = $pdo->query("SELECT group_id FROM line_groups WHERE is_active = 1 ORDER BY id ASC")->fetchAll();
+    $groups = lineFetchActiveGroupIds($pdo, 'image');
     if (empty($groups)) {
         return ['sent' => 0, 'failed' => 0, 'skipped' => true, 'reason' => 'no_groups'];
     }
 
     $sent = 0;
     $failed = 0;
-    foreach ($groups as $group) {
-        $groupId = (string) ($group['group_id'] ?? '');
-        if ($groupId === '') {
-            continue;
-        }
-
+    foreach ($groups as $groupId) {
         $result = linePushImageMessages($pdo, $groupId, $imageUrls);
         lineLogPushResult($pdo, $groupId, $label . ' ' . implode(', ', $imageUrls), $result);
         if (!empty($result['ok'])) {
@@ -817,7 +841,7 @@ function lineSendDueScheduledImages(PDO $pdo, ?DateTimeImmutable $now = null): a
         return ['sent_messages' => 0, 'sent_groups' => 0, 'due_messages' => 0, 'skipped' => true, 'reason' => 'no_messages'];
     }
 
-    $groups = $pdo->query("SELECT group_id FROM line_groups WHERE is_active = 1 ORDER BY id ASC")->fetchAll();
+    $groups = lineFetchActiveGroupIds($pdo, 'image');
     if (empty($groups)) {
         return ['sent_messages' => 0, 'sent_groups' => 0, 'due_messages' => 0, 'skipped' => true, 'reason' => 'no_groups'];
     }
@@ -861,12 +885,7 @@ function lineSendDueScheduledImages(PDO $pdo, ?DateTimeImmutable $now = null): a
         }
 
         $deliveredGroups = 0;
-        foreach ($groups as $group) {
-            $groupId = (string) ($group['group_id'] ?? '');
-            if ($groupId === '') {
-                continue;
-            }
-
+        foreach ($groups as $groupId) {
             $result = linePushImageMessages($pdo, $groupId, $imageUrls);
             lineLogPushResult($pdo, $groupId, '[scheduled image] ' . implode(', ', $imageUrls), $result);
             if (!empty($result['ok'])) {
@@ -903,7 +922,7 @@ function lineDiagnoseScheduledImages(PDO $pdo, ?DateTimeImmutable $now = null): 
     $currentMinutes = ((int) $now->format('H') * 60) + (int) $now->format('i');
     $graceMinutes = 15;
     $messages = lineGetScheduledImageMessages($pdo);
-    $groups = $pdo->query("SELECT group_id FROM line_groups WHERE is_active = 1 ORDER BY id ASC")->fetchAll();
+    $groups = lineFetchActiveGroupIds($pdo, 'image');
 
     $diagnostics = [
         'server_time' => $scheduledTime,
@@ -1108,7 +1127,7 @@ function lineSendDueScheduledMessages(PDO $pdo, ?DateTimeImmutable $now = null):
         return ['sent_messages' => 0, 'sent_groups' => 0, 'due_messages' => 0, 'skipped' => true, 'reason' => 'no_messages'];
     }
 
-    $groups = $pdo->query("SELECT group_id FROM line_groups WHERE is_active = 1 ORDER BY id ASC")->fetchAll();
+    $groups = lineFetchActiveGroupIds($pdo, 'text');
     if (empty($groups)) {
         return ['sent_messages' => 0, 'sent_groups' => 0, 'due_messages' => 0, 'skipped' => true, 'reason' => 'no_groups'];
     }
@@ -1156,12 +1175,7 @@ function lineSendDueScheduledMessages(PDO $pdo, ?DateTimeImmutable $now = null):
         }
 
         $deliveredGroups = 0;
-        foreach ($groups as $group) {
-            $groupId = (string) ($group['group_id'] ?? '');
-            if ($groupId === '') {
-                continue;
-            }
-
+        foreach ($groups as $groupId) {
             $result = linePushTextMessage($pdo, $groupId, $messageText);
             lineLogPushResult($pdo, $groupId, $messageText, $result);
             if (!empty($result['ok'])) {
@@ -1912,19 +1926,14 @@ function linePushTextToActiveGroups(PDO $pdo, string $message): array
         return ['sent' => 0, 'failed' => 0, 'skipped' => true, 'reason' => 'config_not_ready'];
     }
 
-    $groups = $pdo->query("SELECT group_id FROM line_groups WHERE is_active = 1 ORDER BY id ASC")->fetchAll();
+    $groups = lineFetchActiveGroupIds($pdo, 'text');
     if (empty($groups)) {
         return ['sent' => 0, 'failed' => 0, 'skipped' => true, 'reason' => 'no_groups'];
     }
 
     $sent = 0;
     $failed = 0;
-    foreach ($groups as $group) {
-        $groupId = (string) ($group['group_id'] ?? '');
-        if ($groupId === '') {
-            continue;
-        }
-
+    foreach ($groups as $groupId) {
         $result = linePushTextMessage($pdo, $groupId, $message);
         lineLogPushResult($pdo, $groupId, $message, $result);
         if (!empty($result['ok'])) {
@@ -2411,10 +2420,6 @@ function lineBuildResultFlexMessage(array $resultRow, array $image): array
                 'aspectRatio' => lineResultFlexAspectRatio((string) ($image['path'] ?? ''), '16:9'),
                 'aspectMode' => 'cover',
             ],
-            'action' => [
-                'type' => 'uri',
-                'uri' => $imageUrl,
-            ],
         ],
     ];
 }
@@ -2508,7 +2513,7 @@ function lineSendResultNotification(PDO $pdo, int $lotteryTypeId, string $drawDa
         return ['sent' => 0, 'skipped' => true];
     }
 
-    $groups = $pdo->query("SELECT group_id FROM line_groups WHERE is_active = 1 ORDER BY id ASC")->fetchAll();
+    $groups = lineFetchActiveGroupIds($pdo, 'image');
     if (empty($groups)) {
         return ['sent' => 0, 'skipped' => true];
     }
@@ -2527,12 +2532,7 @@ function lineSendResultNotification(PDO $pdo, int $lotteryTypeId, string $drawDa
     }
 
     $sent = 0;
-    foreach ($groups as $group) {
-        $groupId = $group['group_id'] ?? '';
-        if ($groupId === '') {
-            continue;
-        }
-
+    foreach ($groups as $groupId) {
         $result = lineSendPreparedResultToGroup($pdo, $groupId, $prepared);
         if (!empty($result['ok'])) {
             $sent++;
