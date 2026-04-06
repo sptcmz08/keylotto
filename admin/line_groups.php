@@ -46,6 +46,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         lineGroupsRedirectWithFlash('success', 'บันทึกการตั้งค่าปิดรับแทงสำเร็จ', 'bet-close');
     }
 
+    if ($action === 'save_bet_close_time') {
+        $lotteryTypeId = (int) ($_POST['lottery_type_id'] ?? 0);
+        $closeTime = lineNormalizeScheduledMessageTime((string) ($_POST['close_time'] ?? ''));
+
+        if ($lotteryTypeId <= 0) {
+            lineGroupsRedirectWithFlash('error', 'ไม่พบหวยที่ต้องการตั้งเวลาปิดรับ', 'bet-close');
+        }
+
+        $stmt = $pdo->prepare("SELECT id FROM lottery_types WHERE id = ? LIMIT 1");
+        $stmt->execute([$lotteryTypeId]);
+        if (!$stmt->fetch()) {
+            lineGroupsRedirectWithFlash('error', 'ไม่พบหวยที่ต้องการตั้งเวลาปิดรับ', 'bet-close');
+        }
+
+        $update = $pdo->prepare("UPDATE lottery_types SET close_time = ? WHERE id = ?");
+        $update->execute([$closeTime !== '' ? $closeTime : null, $lotteryTypeId]);
+
+        if ($closeTime === '') {
+            lineGroupsRedirectWithFlash('success', 'ล้างเวลาปิดรับสำเร็จ', 'bet-close');
+        }
+
+        lineGroupsRedirectWithFlash('success', 'บันทึกเวลาปิดรับสำเร็จ', 'bet-close');
+    }
+
     if ($action === 'save_group_delivery_settings') {
         $groupId = trim((string) ($_POST['group_id'] ?? ''));
         if ($groupId === '') {
@@ -896,6 +920,7 @@ require_once 'includes/header.php';
                         <th class="px-3 py-2 text-left text-xs text-gray-500">ปิดรับ</th>
                         <th class="px-3 py-2 text-left text-xs text-gray-500">ผลออก</th>
                         <th class="px-3 py-2 text-left text-xs text-gray-500">ตารางออก</th>
+                        <th class="px-3 py-2 text-left text-xs text-gray-500">ตั้งเวลาปิดรับ</th>
                         <th class="px-3 py-2 text-left text-xs text-gray-500">สถานะ</th>
                         <th class="px-3 py-2 text-left text-xs text-gray-500">ทดสอบ</th>
                     </tr>
@@ -908,6 +933,21 @@ require_once 'includes/header.php';
                         <td class="px-3 py-2 text-xs text-gray-700"><?= htmlspecialchars($item['close_time'] !== '' ? lineFormatResultTimeDisplay((string) $item['close_time']) : '-') ?></td>
                         <td class="px-3 py-2 text-xs text-gray-700"><?= htmlspecialchars($item['result_time'] !== '' ? $item['result_time'] : '-') ?></td>
                         <td class="px-3 py-2 text-xs text-gray-500"><?= htmlspecialchars((string) $item['draw_schedule']) ?></td>
+                        <td class="px-3 py-2">
+                            <form method="POST" class="flex items-center gap-2">
+                                <input type="hidden" name="form_action" value="save_bet_close_time">
+                                <input type="hidden" name="lottery_type_id" value="<?= (int) $item['lottery_type_id'] ?>">
+                                <input
+                                    type="time"
+                                    name="close_time"
+                                    value="<?= htmlspecialchars((string) $item['close_time']) ?>"
+                                    class="w-28 border rounded-lg px-2 py-2 text-xs outline-none bg-white"
+                                >
+                                <button type="submit" class="bg-green-50 text-green-700 border border-green-200 px-3 py-2 rounded-lg text-xs font-medium hover:bg-green-100 transition whitespace-nowrap">
+                                    <i class="fas fa-save mr-1"></i>บันทึก
+                                </button>
+                            </form>
+                        </td>
                         <td class="px-3 py-2">
                             <span class="px-2 py-1 rounded-full text-[11px] font-medium <?= $item['reason'] === 'due_now' ? 'bg-green-100 text-green-700' : ($item['reason'] === 'already_sent' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700') ?>">
                                 <?= htmlspecialchars($betCloseReasonLabels[$item['reason']] ?? $item['reason']) ?>
@@ -926,7 +966,7 @@ require_once 'includes/header.php';
                     <?php endforeach; ?>
                     <?php if (empty($betCloseDiagnostics['items'])): ?>
                     <tr>
-                        <td colspan="7" class="px-3 py-6 text-center text-sm text-gray-400">ยังไม่พบหวยที่ตั้งเวลาปิดรับไว้</td>
+                        <td colspan="8" class="px-3 py-6 text-center text-sm text-gray-400">ยังไม่พบหวยที่ตั้งเวลาปิดรับไว้</td>
                     </tr>
                     <?php endif; ?>
                 </tbody>
