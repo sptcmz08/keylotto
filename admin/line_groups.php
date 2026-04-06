@@ -875,6 +875,9 @@ require_once 'includes/header.php';
         <div class="px-4 py-3 text-xs text-gray-500 border-b bg-gray-50/60">
             ระบบจะอิงเวลาจาก <span class="font-semibold">เวลาปิดรับ</span> ในหน้าจัดการหวยโดยตรง และสร้างภาพปิดรับด้วย template เดียวกับรูปผลหวย
         </div>
+        <div class="px-4 py-3 text-xs text-blue-700 border-b bg-blue-50/60">
+            เวลาทั้งหมดในส่วนนี้ใช้เวลาไทย (Asia/Bangkok)
+        </div>
         <form method="POST" class="px-4 py-4 border-b bg-white flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <input type="hidden" name="form_action" value="save_bet_close_settings">
             <label class="inline-flex items-center gap-2 text-sm text-gray-700">
@@ -942,6 +945,8 @@ require_once 'includes/header.php';
                                     name="close_time"
                                     value="<?= htmlspecialchars((string) $item['close_time']) ?>"
                                     class="w-28 border rounded-lg px-2 py-2 text-xs outline-none bg-white"
+                                    step="60"
+                                    title="เวลาประเทศไทย (Asia/Bangkok)"
                                 >
                                 <button type="submit" class="bg-green-50 text-green-700 border border-green-200 px-3 py-2 rounded-lg text-xs font-medium hover:bg-green-100 transition whitespace-nowrap">
                                     <i class="fas fa-save mr-1"></i>บันทึก
