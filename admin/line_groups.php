@@ -553,7 +553,7 @@ require_once 'includes/header.php';
                                 <select name="group_id" class="w-full border rounded-lg px-3 py-2 text-sm outline-none" <?= empty($groups) ? 'disabled' : '' ?>>
                                     <?php foreach ($groups as $group): ?>
                                     <option value="<?= htmlspecialchars($group['group_id']) ?>">
-                                        <?= htmlspecialchars(($group['group_name'] ?: 'group') . ' - ' . $group['group_id']) ?>
+                                        <?= htmlspecialchars($group['group_name'] ?: 'กลุ่ม LINE') ?>
                                     </option>
                                     <?php endforeach; ?>
                                 </select>
