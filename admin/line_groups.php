@@ -11,7 +11,7 @@ $adminTitle = 'LINE Groups';
 function lineGroupsRedirectWithFlash(string $type, string $message, string $tab = 'settings'): void
 {
     $_SESSION['line_groups_flash'] = ['type' => $type, 'message' => $message];
-    $allowedTabs = ['settings', 'shared-templates', 'send-image', 'auto-text', 'auto-image', 'groups'];
+    $allowedTabs = ['settings', 'shared-templates', 'send-image', 'auto-text', 'auto-image', 'bet-close', 'groups'];
     if (!in_array($tab, $allowedTabs, true)) {
         $tab = 'settings';
     }
@@ -39,6 +39,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         lineSetSetting($pdo, 'auto_send_results', $autoSendResults);
         lineSetSetting($pdo, 'auto_send_texts', $autoSendTexts);
         lineGroupsRedirectWithFlash('success', 'บันทึก LINE settings สำเร็จ', 'settings');
+    }
+
+    if ($action === 'save_bet_close_settings') {
+        lineSetSetting($pdo, 'auto_send_bet_close', isset($_POST['auto_send_bet_close']) ? '1' : '0');
+        lineGroupsRedirectWithFlash('success', 'บันทึกการตั้งค่าปิดรับแทงสำเร็จ', 'bet-close');
     }
 
     if ($action === 'save_group_delivery_settings') {
@@ -197,6 +202,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         lineGroupsRedirectWithFlash('error', 'ส่งรูปผลหวยไม่สำเร็จ (HTTP ' . ($result['status'] ?: 0) . ')', 'send-image');
     }
 
+    if ($action === 'send_bet_close_now') {
+        $lotteryTypeId = (int) ($_POST['lottery_type_id'] ?? 0);
+        if ($lotteryTypeId <= 0) {
+            lineGroupsRedirectWithFlash('error', 'ไม่พบหวยที่ต้องการทดสอบส่งปิดรับแทง', 'bet-close');
+        }
+
+        $result = linePushBetCloseImageNow($pdo, $lotteryTypeId);
+        if (!empty($result['sent'])) {
+            lineGroupsRedirectWithFlash('success', 'ส่งภาพปิดรับแทงสำเร็จไป ' . (int) $result['sent'] . ' กลุ่ม', 'bet-close');
+        }
+        if (($result['reason'] ?? '') === 'config_not_ready') {
+            lineGroupsRedirectWithFlash('error', 'ยังไม่ได้ตั้งค่า LINE channel secret และ access token บน server', 'bet-close');
+        }
+        if (($result['reason'] ?? '') === 'no_groups') {
+            lineGroupsRedirectWithFlash('error', 'ยังไม่มีกลุ่ม LINE ที่เปิดรับรูปภาพ', 'bet-close');
+        }
+        if (($result['reason'] ?? '') === 'image_generation_failed') {
+            lineGroupsRedirectWithFlash('error', 'สร้างภาพปิดรับแทงไม่สำเร็จ: ' . (string) ($result['detail'] ?? 'unknown'), 'bet-close');
+        }
+        if (($result['reason'] ?? '') === 'lottery_not_found') {
+            lineGroupsRedirectWithFlash('error', 'ไม่พบข้อมูลหวยหรือหวยถูกปิดใช้งานอยู่', 'bet-close');
+        }
+        lineGroupsRedirectWithFlash('error', 'ส่งภาพปิดรับแทงไม่สำเร็จ', 'bet-close');
+    }
+
     if ($action === 'upload_shared_template') {
         $groupKey = trim((string) ($_POST['shared_group_key'] ?? ''));
         $upload = lineSaveSharedTemplateUpload($groupKey, $_FILES['template_image'] ?? []);
@@ -243,10 +273,13 @@ $savedChannelAccessToken = lineResolvedChannelAccessToken($pdo);
 $savedPublicBaseUrl = lineResolvedPublicBaseUrl($pdo);
 $autoSendResults = lineAutoSendEnabled($pdo);
 $autoSendTexts = lineAutoSendTextsEnabled($pdo);
+$autoSendBetClose = lineAutoSendBetCloseEnabled($pdo);
 $scheduledMessages = lineGetScheduledTextMessages($pdo);
 $scheduledImages = lineGetScheduledImageMessages($pdo);
 $scheduledDiagnostics = lineDiagnoseScheduledTextMessages($pdo);
 $scheduledImageDiagnostics = lineDiagnoseScheduledImages($pdo);
+$betCloseDiagnostics = lineDiagnoseBetCloseNotifications($pdo);
+$betCloseLotteries = lineFetchBetCloseLotteries($pdo);
 $scheduledReasonLabels = [
     'due_now' => 'ถึงเวลาส่งตอนนี้',
     'already_sent' => 'ส่งแล้วในรอบวันนี้',
@@ -268,6 +301,15 @@ $scheduledImageReasonLabels = [
     'time_empty' => 'ยังไม่ได้ตั้งเวลา',
     'image_missing' => 'ยังไม่ได้อัปโหลดรูป',
     'disabled' => 'ปิดใช้งานอยู่',
+    'ready' => 'พร้อมใช้งาน',
+];
+$betCloseReasonLabels = [
+    'due_now' => 'ถึงเวลาส่งตอนนี้',
+    'already_sent' => 'ส่งแล้วในรอบวันนี้',
+    'not_due_yet' => 'ยังไม่ถึงเวลา',
+    'outside_grace_window' => 'เลยช่วงเวลาส่งแล้ว',
+    'schedule_mismatch' => 'วันนี้ไม่ใช่รอบออก',
+    'time_empty' => 'ยังไม่ได้ตั้งเวลาปิดรับ',
     'ready' => 'พร้อมใช้งาน',
 ];
 if (empty($scheduledMessages)) {
@@ -304,7 +346,7 @@ $weekdayOptions = [
     '6' => 'เสาร์',
 ];
 
-$allowedTabs = ['settings', 'shared-templates', 'send-image', 'auto-text', 'auto-image', 'groups'];
+$allowedTabs = ['settings', 'shared-templates', 'send-image', 'auto-text', 'auto-image', 'bet-close', 'groups'];
 $activeTab = isset($_GET['tab']) && in_array((string) $_GET['tab'], $allowedTabs, true)
     ? (string) $_GET['tab']
     : 'settings';
@@ -330,6 +372,7 @@ require_once 'includes/header.php';
             <a href="line_groups.php?tab=send-image" data-line-tab="send-image" class="line-tab-btn relative z-20 px-4 py-2 rounded-full text-sm font-medium <?= $activeTab === 'send-image' ? 'bg-[#1b5e20] text-white' : 'bg-white text-gray-700 border border-gray-200' ?>">ส่งรูปภาพ</a>
             <a href="line_groups.php?tab=auto-text" data-line-tab="auto-text" class="line-tab-btn relative z-20 px-4 py-2 rounded-full text-sm font-medium <?= $activeTab === 'auto-text' ? 'bg-[#1b5e20] text-white' : 'bg-white text-gray-700 border border-gray-200' ?>">ส่งข้อความ Auto</a>
             <a href="line_groups.php?tab=auto-image" data-line-tab="auto-image" class="line-tab-btn relative z-20 px-4 py-2 rounded-full text-sm font-medium <?= $activeTab === 'auto-image' ? 'bg-[#1b5e20] text-white' : 'bg-white text-gray-700 border border-gray-200' ?>">ส่งรูป Auto</a>
+            <a href="line_groups.php?tab=bet-close" data-line-tab="bet-close" class="line-tab-btn relative z-20 px-4 py-2 rounded-full text-sm font-medium <?= $activeTab === 'bet-close' ? 'bg-[#1b5e20] text-white' : 'bg-white text-gray-700 border border-gray-200' ?>">ปิดรับแทง</a>
             <a href="line_groups.php?tab=groups" data-line-tab="groups" class="line-tab-btn relative z-20 px-4 py-2 rounded-full text-sm font-medium <?= $activeTab === 'groups' ? 'bg-[#1b5e20] text-white' : 'bg-white text-gray-700 border border-gray-200' ?>">กลุ่มและประวัติ</a>
         </div>
     </div>
@@ -802,6 +845,96 @@ require_once 'includes/header.php';
     </div>
 </section>
 
+<section data-line-panel="bet-close" class="line-panel <?= $activeTab === 'bet-close' ? '' : 'hidden' ?>">
+    <div class="bg-white rounded-xl shadow-sm border overflow-hidden">
+        <div class="px-4 py-3 border-b bg-gray-50 font-semibold text-gray-700">แจ้งภาพปิดรับแทงอัตโนมัติ</div>
+        <div class="px-4 py-3 text-xs text-gray-500 border-b bg-gray-50/60">
+            ระบบจะอิงเวลาจาก <span class="font-semibold">เวลาปิดรับ</span> ในหน้าจัดการหวยโดยตรง และสร้างภาพปิดรับด้วย template เดียวกับรูปผลหวย
+        </div>
+        <form method="POST" class="px-4 py-4 border-b bg-white flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <input type="hidden" name="form_action" value="save_bet_close_settings">
+            <label class="inline-flex items-center gap-2 text-sm text-gray-700">
+                <input type="checkbox" name="auto_send_bet_close" value="1" class="rounded border-gray-300" <?= $autoSendBetClose ? 'checked' : '' ?>>
+                <span>เปิดส่งภาพปิดรับแทงอัตโนมัติจากเวลาปิดรับของหวย</span>
+            </label>
+            <button type="submit" class="bg-[#2e7d32] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#1b5e20] transition">
+                <i class="fas fa-save mr-1"></i> บันทึกการตั้งค่า
+            </button>
+        </form>
+        <div class="px-4 py-4 border-b bg-white">
+            <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+                <div class="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+                    <div class="text-xs text-gray-500 mb-1">เวลา server</div>
+                    <div class="text-sm font-semibold text-gray-800"><?= htmlspecialchars($betCloseDiagnostics['server_date']) ?> <?= htmlspecialchars($betCloseDiagnostics['server_time']) ?></div>
+                    <div class="text-xs text-gray-500 mt-1"><?= htmlspecialchars($betCloseDiagnostics['server_weekday']) ?></div>
+                </div>
+                <div class="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+                    <div class="text-xs text-gray-500 mb-1">สถานะระบบ</div>
+                    <div class="text-sm font-semibold <?= !empty($betCloseDiagnostics['auto_send_enabled']) ? 'text-green-700' : 'text-red-600' ?>">
+                        <?= !empty($betCloseDiagnostics['auto_send_enabled']) ? 'เปิดใช้งานแล้ว' : 'ยังปิดอยู่' ?>
+                    </div>
+                    <div class="text-xs text-gray-500 mt-1">Config <?= !empty($betCloseDiagnostics['config_ready']) ? 'พร้อม' : 'ยังไม่พร้อม' ?> / กลุ่มรับรูป <?= (int) $betCloseDiagnostics['active_groups'] ?></div>
+                </div>
+                <div class="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+                    <div class="text-xs text-gray-500 mb-1">หวยพร้อมแจ้งตอนนี้</div>
+                    <div class="text-sm font-semibold text-gray-800"><?= (int) $betCloseDiagnostics['due_lotteries'] ?> รายการ</div>
+                    <div class="text-xs text-gray-500 mt-1">พร้อมใช้งาน <?= (int) $betCloseDiagnostics['ready_lotteries'] ?> / ทั้งหมด <?= (int) $betCloseDiagnostics['total_lotteries'] ?></div>
+                </div>
+                <div class="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+                    <div class="text-xs text-gray-500 mb-1">ช่วงเผื่อเวลา</div>
+                    <div class="text-sm font-semibold text-gray-800"><?= (int) $betCloseDiagnostics['grace_minutes'] ?> นาที</div>
+                    <div class="text-xs text-gray-500 mt-1">cron มาช้า ระบบยังตามส่งในช่วงนี้</div>
+                </div>
+            </div>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead class="bg-gray-50 border-b">
+                    <tr>
+                        <th class="px-3 py-2 text-left text-xs text-gray-500">หวย</th>
+                        <th class="px-3 py-2 text-left text-xs text-gray-500">หมวด</th>
+                        <th class="px-3 py-2 text-left text-xs text-gray-500">ปิดรับ</th>
+                        <th class="px-3 py-2 text-left text-xs text-gray-500">ผลออก</th>
+                        <th class="px-3 py-2 text-left text-xs text-gray-500">ตารางออก</th>
+                        <th class="px-3 py-2 text-left text-xs text-gray-500">สถานะ</th>
+                        <th class="px-3 py-2 text-left text-xs text-gray-500">ทดสอบ</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($betCloseDiagnostics['items'] as $item): ?>
+                    <tr class="border-b hover:bg-gray-50">
+                        <td class="px-3 py-2 font-medium text-gray-800"><?= htmlspecialchars($item['lottery_name']) ?></td>
+                        <td class="px-3 py-2 text-xs text-gray-500"><?= htmlspecialchars($item['category_name']) ?></td>
+                        <td class="px-3 py-2 text-xs text-gray-700"><?= htmlspecialchars($item['close_time'] !== '' ? $item['close_time'] : '-') ?></td>
+                        <td class="px-3 py-2 text-xs text-gray-700"><?= htmlspecialchars($item['result_time'] !== '' ? $item['result_time'] : '-') ?></td>
+                        <td class="px-3 py-2 text-xs text-gray-500"><?= htmlspecialchars((string) $item['draw_schedule']) ?></td>
+                        <td class="px-3 py-2">
+                            <span class="px-2 py-1 rounded-full text-[11px] font-medium <?= $item['reason'] === 'due_now' ? 'bg-green-100 text-green-700' : ($item['reason'] === 'already_sent' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700') ?>">
+                                <?= htmlspecialchars($betCloseReasonLabels[$item['reason']] ?? $item['reason']) ?>
+                            </span>
+                        </td>
+                        <td class="px-3 py-2">
+                            <form method="POST">
+                                <input type="hidden" name="form_action" value="send_bet_close_now">
+                                <input type="hidden" name="lottery_type_id" value="<?= (int) $item['lottery_type_id'] ?>">
+                                <button type="submit" class="bg-blue-50 text-blue-700 border border-blue-200 px-3 py-2 rounded-lg text-xs font-medium hover:bg-blue-100 transition">
+                                    <i class="fas fa-paper-plane mr-1"></i> ส่งทันที
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    <?php endforeach; ?>
+                    <?php if (empty($betCloseDiagnostics['items'])): ?>
+                    <tr>
+                        <td colspan="7" class="px-3 py-6 text-center text-sm text-gray-400">ยังไม่พบหวยที่ตั้งเวลาปิดรับไว้</td>
+                    </tr>
+                    <?php endif; ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+
 <section data-line-panel="groups" class="line-panel <?= $activeTab === 'groups' ? '' : 'hidden' ?>">
     <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
         <div class="xl:col-span-2 bg-white rounded-xl shadow-sm border overflow-hidden">
@@ -945,7 +1078,7 @@ require_once 'includes/header.php';
 document.addEventListener('DOMContentLoaded', function () {
     const buttons = Array.from(document.querySelectorAll('[data-line-tab]'));
     const panels = Array.from(document.querySelectorAll('[data-line-panel]'));
-    const allowedTabs = new Set(['settings', 'shared-templates', 'send-image', 'auto-text', 'auto-image', 'groups']);
+    const allowedTabs = new Set(['settings', 'shared-templates', 'send-image', 'auto-text', 'auto-image', 'bet-close', 'groups']);
     const scheduledMessagesList = document.getElementById('scheduledMessagesList');
     const addScheduledMessageBtn = document.getElementById('addScheduledMessageBtn');
     const scheduledMessagesCount = document.getElementById('scheduledMessagesCount');
@@ -1543,7 +1676,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
 <script>
 (function () {
-    const allowedTabs = new Set(['settings', 'shared-templates', 'send-image', 'auto-text', 'auto-image', 'groups']);
+    const allowedTabs = new Set(['settings', 'shared-templates', 'send-image', 'auto-text', 'auto-image', 'bet-close', 'groups']);
     const buttons = Array.from(document.querySelectorAll('[data-line-tab]'));
     const panels = Array.from(document.querySelectorAll('[data-line-panel]'));
     if (buttons.length === 0 || panels.length === 0) {

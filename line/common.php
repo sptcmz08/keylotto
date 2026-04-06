@@ -127,6 +127,22 @@ function ensureLineTables(PDO $pdo): void
             KEY idx_image_message_id (message_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS line_bet_close_logs (
+            id INT(11) NOT NULL AUTO_INCREMENT,
+            lottery_type_id INT(11) NOT NULL,
+            scheduled_date DATE NOT NULL,
+            close_time VARCHAR(5) NOT NULL,
+            image_name VARCHAR(255) DEFAULT NULL,
+            sent_groups INT(11) NOT NULL DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            UNIQUE KEY uniq_lottery_close_schedule (lottery_type_id, scheduled_date, close_time),
+            KEY idx_close_scheduled_date (scheduled_date),
+            KEY idx_close_lottery_type_id (lottery_type_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
 }
 
 function lineFetchActiveGroupIds(PDO $pdo, string $deliveryType = 'any'): array
@@ -144,6 +160,11 @@ function lineFetchActiveGroupIds(PDO $pdo, string $deliveryType = 'any'): array
     $stmt = $pdo->query($sql);
     $groupIds = $stmt ? $stmt->fetchAll(PDO::FETCH_COLUMN) : [];
     return array_values(array_filter(array_map(static fn($groupId) => trim((string) $groupId), $groupIds)));
+}
+
+function lineAutoSendBetCloseEnabled(PDO $pdo): bool
+{
+    return lineGetSetting($pdo, 'auto_send_bet_close', '0') === '1';
 }
 
 function lineGetSetting(PDO $pdo, string $key, string $default = ''): string
@@ -329,6 +350,135 @@ function lineDescribeWeekdayRange(string $startDay, string $endDay): string
     }
 
     return lineWeekdayLabel($startDay) . ' - ' . lineWeekdayLabel($endDay);
+}
+
+function lineLotteryScheduleMatchesDate(string $drawSchedule, DateTimeImmutable $date): bool
+{
+    $raw = trim(mb_strtolower($drawSchedule, 'UTF-8'));
+    if ($raw === '' || in_array($raw, ['daily', 'everyday', 'ทุกวัน'], true)) {
+        return true;
+    }
+
+    $weekday = (int) $date->format('w');
+    $dayOfMonth = (int) $date->format('j');
+
+    $namedSchedules = [
+        'weekday' => [1, 2, 3, 4, 5],
+        'จ-ศ' => [1, 2, 3, 4, 5],
+        'sun_thu' => [0, 1, 2, 3, 4],
+        'อา-พฤ' => [0, 1, 2, 3, 4],
+        'mon_wed_fri' => [1, 3, 5],
+        'จ/พ/ศ' => [1, 3, 5],
+        'wed_sat_sun' => [3, 6, 0],
+        'พ/ส/อา' => [3, 6, 0],
+    ];
+    if (isset($namedSchedules[$raw])) {
+        return in_array($weekday, $namedSchedules[$raw], true);
+    }
+
+    if (in_array($raw, ['1st_16th', '1,16'], true)) {
+        return in_array($dayOfMonth, [1, 16], true);
+    }
+    if (in_array($raw, ['16th', '16'], true)) {
+        return $dayOfMonth === 16;
+    }
+
+    $normalized = str_replace([' ', ',', '_'], ['/', '/', '/'], $raw);
+    $normalized = preg_replace('/\/+/', '/', $normalized) ?? $normalized;
+
+    $weekdayMap = [
+        'sun' => 0,
+        'sunday' => 0,
+        'อา' => 0,
+        'จ' => 1,
+        'mon' => 1,
+        'monday' => 1,
+        'อ' => 2,
+        'tue' => 2,
+        'tues' => 2,
+        'tuesday' => 2,
+        'พ' => 3,
+        'wed' => 3,
+        'wednesday' => 3,
+        'พฤ' => 4,
+        'thu' => 4,
+        'thur' => 4,
+        'thurs' => 4,
+        'thursday' => 4,
+        'ศ' => 5,
+        'fri' => 5,
+        'friday' => 5,
+        'ส' => 6,
+        'sat' => 6,
+        'saturday' => 6,
+    ];
+
+    $resolveWeekday = static function (string $token) use ($weekdayMap): ?int {
+        $token = trim($token);
+        if ($token === '') {
+            return null;
+        }
+        if (isset($weekdayMap[$token])) {
+            return $weekdayMap[$token];
+        }
+        foreach ($weekdayMap as $name => $value) {
+            if ($token === $name) {
+                return $value;
+            }
+        }
+        return null;
+    };
+
+    if (strpos($normalized, '-') !== false && strpos($normalized, '/') === false) {
+        [$startToken, $endToken] = array_map('trim', explode('-', $normalized, 2));
+        $startDay = $resolveWeekday($startToken);
+        $endDay = $resolveWeekday($endToken);
+        if ($startDay !== null && $endDay !== null) {
+            return lineWeekdayInRange($weekday, (string) $startDay, (string) $endDay);
+        }
+    }
+
+    if (strpos($normalized, '/') !== false) {
+        $tokens = array_filter(array_map('trim', explode('/', $normalized)));
+        $days = [];
+        foreach ($tokens as $token) {
+            $resolvedDay = $resolveWeekday($token);
+            if ($resolvedDay !== null) {
+                $days[] = $resolvedDay;
+            }
+        }
+        if (!empty($days)) {
+            return in_array($weekday, array_values(array_unique($days)), true);
+        }
+    }
+
+    return true;
+}
+
+function lineFetchBetCloseLotteries(PDO $pdo): array
+{
+    ensureLineTables($pdo);
+
+    $stmt = $pdo->query("
+        SELECT
+            lt.id,
+            lt.name AS lottery_name,
+            lt.flag_emoji,
+            lt.close_time,
+            lt.result_time,
+            lt.draw_schedule,
+            lt.bet_closed,
+            lt.is_active,
+            lc.name AS category_name
+        FROM lottery_types lt
+        JOIN lottery_categories lc ON lt.category_id = lc.id
+        WHERE lt.is_active = 1
+          AND lt.close_time IS NOT NULL
+          AND TRIM(lt.close_time) <> ''
+        ORDER BY lt.close_time ASC, lc.sort_order ASC, lt.sort_order ASC, lt.id ASC
+    ");
+
+    return $stmt ? $stmt->fetchAll() : [];
 }
 
 function lineDiagnoseScheduledTextMessages(PDO $pdo, ?DateTimeImmutable $now = null): array
@@ -747,6 +897,187 @@ function lineMarkScheduledImageSent(
             sent_groups = VALUES(sent_groups)
     ");
     $stmt->execute([$messageId, $scheduledDate, $scheduledTime, $imageName, $sentGroups]);
+}
+
+function lineBetCloseAlreadySent(PDO $pdo, int $lotteryTypeId, string $scheduledDate, string $closeTime): bool
+{
+    ensureLineTables($pdo);
+
+    $stmt = $pdo->prepare("
+        SELECT 1
+        FROM line_bet_close_logs
+        WHERE lottery_type_id = ?
+          AND scheduled_date = ?
+          AND close_time = ?
+        LIMIT 1
+    ");
+    $stmt->execute([$lotteryTypeId, $scheduledDate, $closeTime]);
+    return (bool) $stmt->fetchColumn();
+}
+
+function lineMarkBetCloseSent(
+    PDO $pdo,
+    int $lotteryTypeId,
+    string $scheduledDate,
+    string $closeTime,
+    string $imageName,
+    int $sentGroups
+): void {
+    ensureLineTables($pdo);
+
+    $stmt = $pdo->prepare("
+        INSERT INTO line_bet_close_logs (lottery_type_id, scheduled_date, close_time, image_name, sent_groups)
+        VALUES (?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+            image_name = VALUES(image_name),
+            sent_groups = VALUES(sent_groups)
+    ");
+    $stmt->execute([$lotteryTypeId, $scheduledDate, $closeTime, $imageName, $sentGroups]);
+}
+
+function lineDiagnoseBetCloseNotifications(PDO $pdo, ?DateTimeImmutable $now = null): array
+{
+    $now = $now ?: new DateTimeImmutable('now', new DateTimeZone('Asia/Bangkok'));
+    $scheduledDate = $now->format('Y-m-d');
+    $scheduledTime = $now->format('H:i');
+    $currentMinutes = ((int) $now->format('H') * 60) + (int) $now->format('i');
+    $graceMinutes = 15;
+    $lotteries = lineFetchBetCloseLotteries($pdo);
+    $groups = lineFetchActiveGroupIds($pdo, 'image');
+
+    $diagnostics = [
+        'server_time' => $scheduledTime,
+        'server_date' => $scheduledDate,
+        'server_weekday' => lineWeekdayLabel((string) $now->format('w')),
+        'grace_minutes' => $graceMinutes,
+        'config_ready' => lineConfigReady($pdo),
+        'auto_send_enabled' => lineAutoSendBetCloseEnabled($pdo),
+        'active_groups' => count($groups),
+        'due_lotteries' => 0,
+        'ready_lotteries' => 0,
+        'total_lotteries' => count($lotteries),
+        'reason_counts' => [],
+        'items' => [],
+    ];
+
+    foreach ($lotteries as $lotteryRow) {
+        $lotteryId = (int) ($lotteryRow['id'] ?? 0);
+        $closeTime = lineNormalizeScheduledMessageTime((string) ($lotteryRow['close_time'] ?? ''));
+        $closeMinutes = lineTimeToMinutes($closeTime);
+        $schedule = trim((string) ($lotteryRow['draw_schedule'] ?? 'daily'));
+
+        $reason = 'ready';
+        if ($closeMinutes === null) {
+            $reason = 'time_empty';
+        } elseif (!lineLotteryScheduleMatchesDate($schedule, $now)) {
+            $reason = 'schedule_mismatch';
+        } elseif ($closeMinutes > $currentMinutes) {
+            $reason = 'not_due_yet';
+        } elseif (($currentMinutes - $closeMinutes) > $graceMinutes) {
+            $reason = 'outside_grace_window';
+        } elseif (lineBetCloseAlreadySent($pdo, $lotteryId, $scheduledDate, $closeTime)) {
+            $reason = 'already_sent';
+        } else {
+            $reason = 'due_now';
+            $diagnostics['due_lotteries']++;
+        }
+
+        if ($reason === 'ready' || $reason === 'due_now' || $reason === 'not_due_yet' || $reason === 'already_sent' || $reason === 'outside_grace_window' || $reason === 'schedule_mismatch') {
+            $diagnostics['ready_lotteries']++;
+        }
+
+        if (!isset($diagnostics['reason_counts'][$reason])) {
+            $diagnostics['reason_counts'][$reason] = 0;
+        }
+        $diagnostics['reason_counts'][$reason]++;
+
+        $diagnostics['items'][] = [
+            'lottery_type_id' => $lotteryId,
+            'lottery_name' => (string) ($lotteryRow['lottery_name'] ?? ''),
+            'category_name' => (string) ($lotteryRow['category_name'] ?? ''),
+            'close_time' => $closeTime,
+            'result_time' => lineFormatResultTimeDisplay((string) ($lotteryRow['result_time'] ?? '')),
+            'draw_schedule' => $schedule,
+            'reason' => $reason,
+        ];
+    }
+
+    return $diagnostics;
+}
+
+function lineSendDueBetCloseNotifications(PDO $pdo, ?DateTimeImmutable $now = null): array
+{
+    if (!lineConfigReady($pdo)) {
+        return ['sent_lotteries' => 0, 'sent_groups' => 0, 'due_lotteries' => 0, 'skipped' => true, 'reason' => 'config_not_ready'];
+    }
+
+    if (!lineAutoSendBetCloseEnabled($pdo)) {
+        return ['sent_lotteries' => 0, 'sent_groups' => 0, 'due_lotteries' => 0, 'skipped' => true, 'reason' => 'auto_send_bet_close_disabled'];
+    }
+
+    $lotteries = lineFetchBetCloseLotteries($pdo);
+    if (empty($lotteries)) {
+        return ['sent_lotteries' => 0, 'sent_groups' => 0, 'due_lotteries' => 0, 'skipped' => true, 'reason' => 'no_lotteries'];
+    }
+
+    $groups = lineFetchActiveGroupIds($pdo, 'image');
+    if (empty($groups)) {
+        return ['sent_lotteries' => 0, 'sent_groups' => 0, 'due_lotteries' => 0, 'skipped' => true, 'reason' => 'no_groups'];
+    }
+
+    $now = $now ?: new DateTimeImmutable('now', new DateTimeZone('Asia/Bangkok'));
+    $scheduledDate = $now->format('Y-m-d');
+    $scheduledTime = $now->format('H:i');
+    $currentMinutes = ((int) $now->format('H') * 60) + (int) $now->format('i');
+    $graceMinutes = 15;
+
+    $sentLotteries = 0;
+    $sentGroups = 0;
+    $dueLotteries = 0;
+
+    foreach ($lotteries as $lotteryRow) {
+        $lotteryId = (int) ($lotteryRow['id'] ?? 0);
+        $closeTime = lineNormalizeScheduledMessageTime((string) ($lotteryRow['close_time'] ?? ''));
+        $closeMinutes = lineTimeToMinutes($closeTime);
+        $schedule = trim((string) ($lotteryRow['draw_schedule'] ?? 'daily'));
+
+        if ($lotteryId <= 0 || $closeMinutes === null || !lineLotteryScheduleMatchesDate($schedule, $now)) {
+            continue;
+        }
+        if ($closeMinutes > $currentMinutes || ($currentMinutes - $closeMinutes) > $graceMinutes) {
+            continue;
+        }
+
+        $dueLotteries++;
+        if (lineBetCloseAlreadySent($pdo, $lotteryId, $scheduledDate, $closeTime)) {
+            continue;
+        }
+
+        $image = lineGenerateBetCloseImage($pdo, $lotteryRow);
+        if (!$image || empty($image['url'])) {
+            lineLog('Bet-close image generation failed for lottery_type_id=' . $lotteryId . ' detail=' . lineCompactErrorDetail((string) ($image['error'] ?? 'unknown')));
+            continue;
+        }
+
+        $result = linePushImageToActiveGroups($pdo, [$image['url']], '[bet-close] ' . (($lotteryRow['lottery_name'] ?? '') ?: $lotteryId));
+        if (empty($result['sent'])) {
+            lineLog('Bet-close LINE image not delivered for lottery_type_id=' . $lotteryId . ' at ' . $scheduledDate . ' ' . $closeTime);
+            continue;
+        }
+
+        lineMarkBetCloseSent($pdo, $lotteryId, $scheduledDate, $closeTime, basename((string) ($image['path'] ?? '')), (int) ($result['sent'] ?? 0));
+        $sentLotteries++;
+        $sentGroups += (int) ($result['sent'] ?? 0);
+    }
+
+    return [
+        'sent_lotteries' => $sentLotteries,
+        'sent_groups' => $sentGroups,
+        'due_lotteries' => $dueLotteries,
+        'skipped' => false,
+        'time' => $scheduledTime,
+        'grace_minutes' => $graceMinutes,
+    ];
 }
 
 function linePushImageMessage(PDO $pdo, string $groupId, string $imageUrl): array
@@ -2363,6 +2694,121 @@ function lineGenerateResultImage(PDO $pdo, array $resultRow): ?array
     ];
 }
 
+function lineBetCloseSummaryText(array $lotteryRow): string
+{
+    $lotteryName = trim((string) ($lotteryRow['lottery_name'] ?? $lotteryRow['name'] ?? ''));
+    $resultTime = lineFormatResultTimeDisplay((string) ($lotteryRow['result_time'] ?? ''));
+    $parts = [];
+    if ($lotteryName !== '') {
+        $parts[] = 'ปิดรับ ' . $lotteryName;
+    }
+    if ($resultTime !== '') {
+        $parts[] = 'ผลออก ' . $resultTime . ' น.';
+    }
+    return trim(implode(' | ', $parts));
+}
+
+function lineGenerateBetCloseImage(PDO $pdo, array $lotteryRow): ?array
+{
+    $baseUrl = lineResolvedPublicBaseUrl($pdo);
+    if ($baseUrl === '') {
+        return ['error' => 'Public base URL is not configured'];
+    }
+
+    $rootDir = dirname(__DIR__);
+    $generatedDir = $rootDir . '/line/generated';
+    if (!is_dir($generatedDir) && !mkdir($generatedDir, 0775, true) && !is_dir($generatedDir)) {
+        lineLog('Unable to create line/generated directory for bet-close image');
+        return ['error' => 'line/generated directory is not writable'];
+    }
+
+    $safeDate = date('Y-m-d');
+    $safeLotteryId = (int) ($lotteryRow['id'] ?? 0);
+    $uniqueSuffix = date('YmdHis') . '-' . substr(md5(uniqid((string) $safeLotteryId, true)), 0, 8);
+    $outputFilename = 'bet-close-' . $safeLotteryId . '-' . $safeDate . '-' . $uniqueSuffix . '.png';
+    $outputPath = $generatedDir . '/' . $outputFilename;
+    $templateInfo = lineResolveTemplateImageInfo($pdo, $lotteryRow);
+
+    $payload = [
+        'mode' => 'bet_close',
+        'site_name' => SITE_NAME,
+        'lottery_name' => $lotteryRow['lottery_name'] ?? $lotteryRow['name'] ?? '',
+        'category_name' => $lotteryRow['category_name'] ?? '',
+        'draw_date' => $safeDate,
+        'draw_date_display' => formatDateDisplay($safeDate),
+        'result_time_display' => lineFormatResultTimeDisplay((string) ($lotteryRow['result_time'] ?? '')),
+        'close_title' => 'ปิดรับ',
+        'close_subtitle' => 'รอลุ้นผลเฮง ๆ ปัง ๆ ไปด้วยกัน',
+        'summary_text' => lineBetCloseSummaryText($lotteryRow),
+        'generated_at' => date('d-m-Y H:i:s'),
+        'background_image_path' => $templateInfo['path'] ?? '',
+    ];
+
+    $tempJson = tempnam(sys_get_temp_dir(), 'line_close_');
+    if ($tempJson === false) {
+        return ['error' => 'Unable to create temporary JSON file for bet-close renderer'];
+    }
+
+    $cleanupPattern = $generatedDir . '/bet-close-' . $safeLotteryId . '-' . $safeDate . '*.png';
+    foreach (glob($cleanupPattern) ?: [] as $oldFile) {
+        if (is_file($oldFile) && $oldFile !== $outputPath) {
+            @unlink($oldFile);
+        }
+    }
+
+    file_put_contents($tempJson, json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
+
+    $scriptPath = $rootDir . '/scripts/render_line_result_image.js';
+    $nodeBinary = lineResolvedNodeBinary();
+    $output = ['Node renderer skipped'];
+    $exitCode = 1;
+
+    if (is_file($scriptPath)) {
+        $puppeteerCacheDir = lineResolvedPuppeteerCacheDir();
+        if (!is_dir($puppeteerCacheDir) && !mkdir($puppeteerCacheDir, 0775, true) && !is_dir($puppeteerCacheDir)) {
+            lineLog('Unable to create puppeteer cache directory for bet-close image');
+        }
+
+        $commandPrefix = '';
+        if (PHP_OS_FAMILY !== 'Windows') {
+            $commandPrefix =
+                'PUPPETEER_CACHE_DIR=' . escapeshellarg($puppeteerCacheDir) . ' ' .
+                'HOME=' . escapeshellarg($rootDir) . ' ';
+        }
+
+        $command = $commandPrefix . escapeshellarg($nodeBinary) . ' ' . escapeshellarg($scriptPath) . ' ' . escapeshellarg($tempJson) . ' ' . escapeshellarg($outputPath) . ' 2>&1';
+        $output = [];
+        $exitCode = 0;
+        exec($command, $output, $exitCode);
+    }
+
+    @unlink($tempJson);
+
+    if ($exitCode !== 0 || !file_exists($outputPath)) {
+        $detailParts = [];
+        $nodeOutput = lineCompactErrorDetail(implode(' | ', array_filter($output, static function ($line) {
+            return trim((string) $line) !== '';
+        })));
+        if ($nodeOutput !== '') {
+            $detailParts[] = $nodeOutput;
+        }
+        if (!is_writable($generatedDir)) {
+            $detailParts[] = 'line/generated is not writable';
+        }
+        $detailParts[] = 'node=' . $nodeBinary;
+        $detailParts[] = 'exit=' . $exitCode;
+        $detail = implode(' | ', array_unique(array_filter($detailParts)));
+        lineLog('Bet-close image render failed: ' . $detail);
+        return ['error' => $detail];
+    }
+
+    return [
+        'path' => $outputPath,
+        'url' => $baseUrl . '/line/generated/' . rawurlencode($outputFilename),
+        'renderer' => 'node',
+    ];
+}
+
 function lineFetchResultRow(PDO $pdo, int $lotteryTypeId, string $drawDate): ?array
 {
     $stmt = $pdo->prepare("
@@ -2379,6 +2825,29 @@ function lineFetchResultRow(PDO $pdo, int $lotteryTypeId, string $drawDate): ?ar
 
     $resultRow = $stmt->fetch();
     return $resultRow ?: null;
+}
+
+function lineFetchLotteryTypeRow(PDO $pdo, int $lotteryTypeId): ?array
+{
+    $stmt = $pdo->prepare("
+        SELECT
+            lt.id,
+            lt.name AS lottery_name,
+            lt.flag_emoji,
+            lt.close_time,
+            lt.result_time,
+            lt.draw_schedule,
+            lt.bet_closed,
+            lt.is_active,
+            lc.name AS category_name
+        FROM lottery_types lt
+        JOIN lottery_categories lc ON lt.category_id = lc.id
+        WHERE lt.id = ?
+        LIMIT 1
+    ");
+    $stmt->execute([$lotteryTypeId]);
+    $row = $stmt->fetch();
+    return $row ?: null;
 }
 
 function lineResultFlexAspectRatio(?string $imagePath, string $default = '16:9'): string
@@ -2500,6 +2969,36 @@ function linePushResultImageToGroup(PDO $pdo, string $groupId, int $lotteryTypeI
     }
 
     return lineSendPreparedResultToGroup($pdo, $groupId, $prepared);
+}
+
+function linePushBetCloseImageNow(PDO $pdo, int $lotteryTypeId): array
+{
+    if (!lineConfigReady($pdo)) {
+        return ['sent' => 0, 'failed' => 0, 'skipped' => true, 'reason' => 'config_not_ready'];
+    }
+
+    $lotteryRow = lineFetchLotteryTypeRow($pdo, $lotteryTypeId);
+    if (!$lotteryRow || empty($lotteryRow['is_active'])) {
+        return ['sent' => 0, 'failed' => 0, 'skipped' => true, 'reason' => 'lottery_not_found'];
+    }
+
+    $image = lineGenerateBetCloseImage($pdo, $lotteryRow);
+    if (!$image || empty($image['url'])) {
+        return [
+            'sent' => 0,
+            'failed' => 0,
+            'skipped' => true,
+            'reason' => 'image_generation_failed',
+            'detail' => lineCompactErrorDetail((string) ($image['error'] ?? 'unknown')),
+        ];
+    }
+
+    $result = linePushImageToActiveGroups($pdo, [$image['url']], '[bet-close manual] ' . (string) ($lotteryRow['lottery_name'] ?? ''));
+    if (!empty($result['sent'])) {
+        return $result + ['image_url' => $image['url']];
+    }
+
+    return $result;
 }
 
 function lineSendResultNotification(PDO $pdo, int $lotteryTypeId, string $drawDate): array

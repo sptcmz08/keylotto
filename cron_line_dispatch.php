@@ -51,4 +51,22 @@ try {
     lineLog('Scheduled LINE image failed (cron_line_dispatch): ' . $scheduledImageError->getMessage());
 }
 
+echo "\n";
+
+try {
+    $betCloseStats = lineSendDueBetCloseNotifications($pdo, $now);
+    if (!empty($betCloseStats['sent_lotteries'])) {
+        echo "Bet-close LINE image: {$betCloseStats['sent_lotteries']} items / {$betCloseStats['sent_groups']} groups ({$betCloseStats['time']})\n";
+    } elseif (!empty($betCloseStats['due_lotteries'])) {
+        echo "Bet-close LINE image due: {$betCloseStats['due_lotteries']} items but not delivered ({$betCloseStats['time']}, grace {$betCloseStats['grace_minutes']}m)\n";
+    } elseif (!empty($betCloseStats['skipped'])) {
+        echo "Bet-close LINE image skipped: " . (string) ($betCloseStats['reason'] ?? 'unknown') . "\n";
+    } else {
+        echo "Bet-close LINE image: nothing due\n";
+    }
+} catch (Throwable $betCloseError) {
+    echo "Bet-close LINE image failed: " . $betCloseError->getMessage() . "\n";
+    lineLog('Bet-close LINE image failed (cron_line_dispatch): ' . $betCloseError->getMessage());
+}
+
 echo "\nDone.\n";

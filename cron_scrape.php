@@ -1194,6 +1194,20 @@ try {
     lineLog('Scheduled LINE image failed: ' . $scheduledImageError->getMessage());
 }
 
+try {
+    $betCloseStats = lineSendDueBetCloseNotifications($pdo);
+    if (!empty($betCloseStats['sent_lotteries'])) {
+        echo "🔒 Bet-close LINE image: {$betCloseStats['sent_lotteries']} รายการ / {$betCloseStats['sent_groups']} กลุ่ม ({$betCloseStats['time']})\n\n";
+    } elseif (!empty($betCloseStats['due_lotteries'])) {
+        echo "ℹ️  Bet-close LINE image due: {$betCloseStats['due_lotteries']} รายการ แต่ยังไม่ส่งสำเร็จ ({$betCloseStats['time']}, grace {$betCloseStats['grace_minutes']}m)\n\n";
+    } elseif (!empty($betCloseStats['skipped'])) {
+        echo "Bet-close LINE image skipped: " . (string) ($betCloseStats['reason'] ?? 'unknown') . "\n\n";
+    }
+} catch (Exception $betCloseError) {
+    echo "Bet-close LINE image failed: " . $betCloseError->getMessage() . "\n\n";
+    lineLog('Bet-close LINE image failed: ' . $betCloseError->getMessage());
+}
+
 switch ($scraper) {
     case 'smart':
         scrapeSmart($pdo);
@@ -1280,6 +1294,20 @@ try {
 } catch (Exception $scheduledImageError) {
     echo "Scheduled LINE image failed (after-scrape): " . $scheduledImageError->getMessage() . "\n\n";
     lineLog('Scheduled LINE image failed (after-scrape): ' . $scheduledImageError->getMessage());
+}
+
+try {
+    $betCloseStats = lineSendDueBetCloseNotifications($pdo);
+    if (!empty($betCloseStats['sent_lotteries'])) {
+        echo "Bet-close LINE image (after-scrape): {$betCloseStats['sent_lotteries']} รายการ / {$betCloseStats['sent_groups']} กลุ่ม ({$betCloseStats['time']})\n\n";
+    } elseif (!empty($betCloseStats['due_lotteries'])) {
+        echo "Bet-close LINE image due (after-scrape): {$betCloseStats['due_lotteries']} รายการ แต่ยังไม่ส่งสำเร็จ ({$betCloseStats['time']}, grace {$betCloseStats['grace_minutes']}m)\n\n";
+    } elseif (!empty($betCloseStats['skipped'])) {
+        echo "Bet-close LINE image skipped (after-scrape): " . (string) ($betCloseStats['reason'] ?? 'unknown') . "\n\n";
+    }
+} catch (Exception $betCloseError) {
+    echo "Bet-close LINE image failed (after-scrape): " . $betCloseError->getMessage() . "\n\n";
+    lineLog('Bet-close LINE image failed (after-scrape): ' . $betCloseError->getMessage());
 }
 
 $elapsed = round(microtime(true) - $startTime, 2);

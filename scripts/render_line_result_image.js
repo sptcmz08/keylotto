@@ -19,6 +19,8 @@ const TEXT = {
   top3: '3 \u0e15\u0e31\u0e27\u0e1a\u0e19',
   top2: '2 \u0e15\u0e31\u0e27\u0e1a\u0e19',
   bot2: '2 \u0e15\u0e31\u0e27\u0e25\u0e48\u0e32\u0e07',
+  closeTitle: '\u0e1b\u0e34\u0e14\u0e23\u0e31\u0e1a',
+  resultOut: '\u0e1c\u0e25\u0e2d\u0e2d\u0e01',
 };
 
 const escapeHtml = (value) =>
@@ -247,14 +249,40 @@ const main = async () => {
   const { userDataDir } = await ensureWritableBrowserDirs();
   const embeddedFontFace = buildEmbeddedFontFace();
   const posterBackground = buildPosterBackground(data.background_image_path);
+  const mode = String(data.mode || 'result').trim().toLowerCase();
+  const isBetClose = mode === 'bet_close';
   const resultTimeMarkup = String(data.result_time_display || '').trim() !== ''
     ? `
         <div class="time-pill">
-          <span class="time-pill__label">ผลออก</span>
+          <span class="time-pill__label">${TEXT.resultOut}</span>
           <span class="time-pill__value">${escapeHtml(data.result_time_display)}</span>
           <span class="time-pill__suffix">น.</span>
         </div>`
     : '';
+  const closeTitleMarkup = `
+    <div class="close-hero">
+      <div class="close-hero__title">${escapeHtml(data.close_title || TEXT.closeTitle)}</div>
+      <div class="close-hero__lottery">${escapeHtml(data.lottery_name || '-')}</div>
+      <div class="close-hero__divider"></div>
+      ${resultTimeMarkup}
+      <div class="close-hero__subtitle">${escapeHtml(data.close_subtitle || 'รอลุ้นผลเฮง ๆ ปัง ๆ ไปด้วยกัน')}</div>
+    </div>`;
+  const mainContentMarkup = isBetClose
+    ? `
+          <section class="hero hero--close">
+            ${closeTitleMarkup}
+          </section>`
+    : `
+          <section class="hero">
+            <div class="lottery-name">${escapeHtml(data.lottery_name || '-')}</div>
+            ${resultTimeMarkup}
+          </section>
+
+          <section class="results">
+            ${renderResultChip(TEXT.top3, data.three_top, 'gold')}
+            ${renderResultChip(TEXT.top2, data.two_top, 'green')}
+            ${renderResultChip(TEXT.bot2, data.two_bot, 'orange')}
+          </section>`;
 
   const html = `
   <!doctype html>
@@ -377,6 +405,10 @@ const main = async () => {
         gap: 22px;
         padding: 10px 64px 20px;
       }
+      .hero--close {
+        padding-top: 36px;
+        padding-bottom: 46px;
+      }
       .lottery-name {
         max-width: 1720px;
         font-size: clamp(180px, 11.8vw, 226px);
@@ -431,6 +463,56 @@ const main = async () => {
       .title-meta {
         display: flex;
         justify-content: center;
+      }
+      .close-hero {
+        width: min(1560px, 100%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 18px;
+      }
+      .close-hero__title {
+        font-size: clamp(170px, 10.8vw, 220px);
+        line-height: 0.88;
+        font-weight: 900;
+        color: #ffe169;
+        text-align: center;
+        -webkit-text-stroke: 18px #1f0700;
+        paint-order: stroke fill;
+        text-shadow:
+          0 16px 0 #1f0700,
+          0 28px 34px rgba(0,0,0,0.32),
+          0 0 28px rgba(255, 226, 150, 0.22);
+      }
+      .close-hero__lottery {
+        font-size: clamp(118px, 8vw, 164px);
+        line-height: 0.92;
+        font-weight: 900;
+        color: #ffd45e;
+        text-align: center;
+        -webkit-text-stroke: 14px #1f0700;
+        paint-order: stroke fill;
+        text-shadow:
+          0 12px 0 #1f0700,
+          0 24px 28px rgba(0,0,0,0.28);
+      }
+      .close-hero__divider {
+        width: min(640px, 70%);
+        height: 8px;
+        border-radius: 999px;
+        background: linear-gradient(90deg, rgba(255, 212, 96, 0.0), rgba(255, 212, 96, 0.9), rgba(255, 212, 96, 0.0));
+        box-shadow: 0 0 16px rgba(255, 212, 96, 0.24);
+      }
+      .close-hero__subtitle {
+        font-size: 42px;
+        line-height: 1.18;
+        font-weight: 900;
+        color: #fff4cf;
+        text-align: center;
+        -webkit-text-stroke: 1.8px rgba(38, 10, 0, 0.54);
+        paint-order: stroke fill;
+        text-shadow: 0 4px 0 rgba(0,0,0,0.3);
       }
       .results {
         display: grid;
@@ -496,16 +578,7 @@ const main = async () => {
             </div>
           </header>
 
-          <section class="hero">
-            <div class="lottery-name">${escapeHtml(data.lottery_name || '-')}</div>
-            ${resultTimeMarkup}
-          </section>
-
-          <section class="results">
-            ${renderResultChip(TEXT.top3, data.three_top, 'gold')}
-            ${renderResultChip(TEXT.top2, data.two_top, 'green')}
-            ${renderResultChip(TEXT.bot2, data.two_bot, 'orange')}
-          </section>
+          ${mainContentMarkup}
         </div>
       </main>
     </div>
