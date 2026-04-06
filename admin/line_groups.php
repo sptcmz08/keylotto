@@ -90,6 +90,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         lineGroupsRedirectWithFlash('success', 'บันทึกการตั้งค่าการส่งของกลุ่มสำเร็จ', 'groups');
     }
 
+    if ($action === 'refresh_group_names') {
+        if (!lineConfigReady($pdo)) {
+            lineGroupsRedirectWithFlash('error', 'ยังไม่ได้ตั้งค่า LINE channel secret และ access token บน server', 'groups');
+        }
+
+        $result = lineRefreshAllGroupNames($pdo);
+        if (($result['total'] ?? 0) <= 0) {
+            lineGroupsRedirectWithFlash('error', 'ยังไม่มีกลุ่ม LINE ให้รีเฟรชชื่อ', 'groups');
+        }
+
+        lineGroupsRedirectWithFlash(
+            'success',
+            'รีเฟรชชื่อกลุ่มสำเร็จ ' . (int) ($result['updated'] ?? 0) . ' กลุ่ม' . ((int) ($result['failed'] ?? 0) > 0 ? ' / ดึงชื่อไม่ได้ ' . (int) ($result['failed'] ?? 0) . ' กลุ่ม' : ''),
+            'groups'
+        );
+    }
+
     if ($action === 'save_scheduled_messages') {
         $messages = $_POST['scheduled_messages'] ?? [];
         lineSetScheduledTextMessages($pdo, is_array($messages) ? $messages : []);
@@ -983,7 +1000,15 @@ require_once 'includes/header.php';
 <section data-line-panel="groups" class="line-panel <?= $activeTab === 'groups' ? '' : 'hidden' ?>">
     <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
         <div class="xl:col-span-2 bg-white rounded-xl shadow-sm border overflow-hidden">
-            <div class="px-4 py-3 border-b bg-gray-50 font-semibold text-gray-700">รายชื่อกลุ่ม LINE</div>
+            <div class="px-4 py-3 border-b bg-gray-50 flex items-center justify-between gap-3">
+                <div class="font-semibold text-gray-700">รายชื่อกลุ่ม LINE</div>
+                <form method="POST">
+                    <input type="hidden" name="form_action" value="refresh_group_names">
+                    <button type="submit" class="bg-blue-50 text-blue-700 border border-blue-200 px-3 py-2 rounded-lg text-xs font-medium hover:bg-blue-100 transition whitespace-nowrap">
+                        <i class="fas fa-sync-alt mr-1"></i>รีเฟรชชื่อกลุ่ม
+                    </button>
+                </form>
+            </div>
             <div class="overflow-x-auto">
                 <table class="w-full text-sm">
                     <thead class="bg-gray-50 border-b">

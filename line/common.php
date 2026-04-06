@@ -2180,6 +2180,56 @@ function lineFetchGroupSummary(PDO $pdo, string $groupId): ?array
     return is_array($decoded) ? $decoded : null;
 }
 
+function lineRefreshGroupName(PDO $pdo, string $groupId): array
+{
+    $groupId = trim($groupId);
+    if ($groupId === '') {
+        return ['ok' => false, 'reason' => 'missing_group_id'];
+    }
+
+    ensureLineTables($pdo);
+
+    $summary = lineFetchGroupSummary($pdo, $groupId);
+    $groupName = trim((string) ($summary['groupName'] ?? ''));
+    if ($groupName === '') {
+        return ['ok' => false, 'reason' => 'summary_unavailable'];
+    }
+
+    $stmt = $pdo->prepare("
+        UPDATE line_groups
+        SET group_name = ?, last_seen_at = NOW()
+        WHERE group_id = ?
+    ");
+    $stmt->execute([$groupName, $groupId]);
+
+    return ['ok' => true, 'group_name' => $groupName];
+}
+
+function lineRefreshAllGroupNames(PDO $pdo): array
+{
+    ensureLineTables($pdo);
+
+    $groupIds = $pdo->query("SELECT group_id FROM line_groups ORDER BY id ASC")->fetchAll(PDO::FETCH_COLUMN);
+    $updated = 0;
+    $failed = 0;
+
+    foreach ($groupIds as $groupId) {
+        $result = lineRefreshGroupName($pdo, (string) $groupId);
+        if (!empty($result['ok'])) {
+            $updated++;
+        } else {
+            $failed++;
+        }
+    }
+
+    return [
+        'ok' => true,
+        'updated' => $updated,
+        'failed' => $failed,
+        'total' => count($groupIds),
+    ];
+}
+
 function lineUpsertGroup(PDO $pdo, array $source, ?string $eventType = null): void
 {
     $sourceType = $source['type'] ?? '';
