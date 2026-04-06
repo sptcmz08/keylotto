@@ -406,8 +406,8 @@ const main = async () => {
         padding: 10px 64px 20px;
       }
       .hero--close {
-        padding-top: 36px;
-        padding-bottom: 46px;
+        padding-top: 56px;
+        padding-bottom: 84px;
       }
       .lottery-name {
         max-width: 1720px;
@@ -465,16 +465,16 @@ const main = async () => {
         justify-content: center;
       }
       .close-hero {
-        width: min(1560px, 100%);
+        width: min(1700px, 100%);
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        gap: 18px;
+        gap: 30px;
       }
       .close-hero__title {
-        font-size: clamp(170px, 10.8vw, 220px);
-        line-height: 0.88;
+        font-size: clamp(182px, 11.2vw, 228px);
+        line-height: 0.9;
         font-weight: 900;
         color: #ffe169;
         text-align: center;
@@ -486,8 +486,8 @@ const main = async () => {
           0 0 28px rgba(255, 226, 150, 0.22);
       }
       .close-hero__lottery {
-        font-size: clamp(118px, 8vw, 164px);
-        line-height: 0.92;
+        font-size: clamp(128px, 8.4vw, 176px);
+        line-height: 0.98;
         font-weight: 900;
         color: #ffd45e;
         text-align: center;
@@ -498,15 +498,21 @@ const main = async () => {
           0 24px 28px rgba(0,0,0,0.28);
       }
       .close-hero__divider {
-        width: min(640px, 70%);
+        width: min(760px, 74%);
         height: 8px;
         border-radius: 999px;
         background: linear-gradient(90deg, rgba(255, 212, 96, 0.0), rgba(255, 212, 96, 0.9), rgba(255, 212, 96, 0.0));
         box-shadow: 0 0 16px rgba(255, 212, 96, 0.24);
       }
+      .close-hero .time-pill {
+        margin-top: 6px;
+        margin-bottom: 8px;
+        transform: scale(1.08);
+        transform-origin: center;
+      }
       .close-hero__subtitle {
-        font-size: 42px;
-        line-height: 1.18;
+        font-size: 46px;
+        line-height: 1.32;
         font-weight: 900;
         color: #fff4cf;
         text-align: center;

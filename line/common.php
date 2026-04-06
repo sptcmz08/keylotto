@@ -245,7 +245,7 @@ function lineGenerateScheduledMessageId(): string
 function lineNormalizeScheduledMessageTime(string $value): string
 {
     $value = trim($value);
-    if (!preg_match('/^(2[0-3]|[01]\d):([0-5]\d)$/', $value, $matches)) {
+    if (!preg_match('/^([01]?\d|2[0-3])[:.]([0-5]\d)$/', $value, $matches)) {
         return '';
     }
 
@@ -1053,19 +1053,19 @@ function lineSendDueBetCloseNotifications(PDO $pdo, ?DateTimeImmutable $now = nu
             continue;
         }
 
-        $image = lineGenerateBetCloseImage($pdo, $lotteryRow);
-        if (!$image || empty($image['url'])) {
-            lineLog('Bet-close image generation failed for lottery_type_id=' . $lotteryId . ' detail=' . lineCompactErrorDetail((string) ($image['error'] ?? 'unknown')));
+        $prepared = linePrepareBetCloseImageMessage($pdo, $lotteryRow);
+        if (empty($prepared['ok'])) {
+            lineLog('Bet-close image generation failed for lottery_type_id=' . $lotteryId . ' detail=' . lineCompactErrorDetail((string) ($prepared['detail'] ?? 'unknown')));
             continue;
         }
 
-        $result = linePushImageToActiveGroups($pdo, [$image['url']], '[bet-close] ' . (($lotteryRow['lottery_name'] ?? '') ?: $lotteryId));
+        $result = linePushPreparedBetCloseToActiveGroups($pdo, $prepared);
         if (empty($result['sent'])) {
             lineLog('Bet-close LINE image not delivered for lottery_type_id=' . $lotteryId . ' at ' . $scheduledDate . ' ' . $closeTime);
             continue;
         }
 
-        lineMarkBetCloseSent($pdo, $lotteryId, $scheduledDate, $closeTime, basename((string) ($image['path'] ?? '')), (int) ($result['sent'] ?? 0));
+        lineMarkBetCloseSent($pdo, $lotteryId, $scheduledDate, $closeTime, basename((string) ($prepared['image_path'] ?? '')), (int) ($result['sent'] ?? 0));
         $sentLotteries++;
         $sentGroups += (int) ($result['sent'] ?? 0);
     }
@@ -2893,6 +2893,32 @@ function lineBuildResultFlexMessage(array $resultRow, array $image): array
     ];
 }
 
+function lineBuildBetCloseFlexMessage(array $lotteryRow, array $image): array
+{
+    $summaryText = trim(lineBetCloseSummaryText($lotteryRow));
+    if ($summaryText === '') {
+        $summaryText = 'ปิดรับแทง';
+    }
+
+    $imageUrl = (string) ($image['url'] ?? '');
+
+    return [
+        'type' => 'flex',
+        'altText' => $summaryText,
+        'contents' => [
+            'type' => 'bubble',
+            'size' => 'giga',
+            'hero' => [
+                'type' => 'image',
+                'url' => $imageUrl,
+                'size' => 'full',
+                'aspectRatio' => lineResultFlexAspectRatio((string) ($image['path'] ?? ''), '16:9'),
+                'aspectMode' => 'cover',
+            ],
+        ],
+    ];
+}
+
 function linePrepareResultImageMessage(PDO $pdo, array $resultRow): array
 {
     $image = lineGenerateResultImage($pdo, $resultRow);
@@ -2910,6 +2936,27 @@ function linePrepareResultImageMessage(PDO $pdo, array $resultRow): array
         'messages' => [lineBuildResultFlexMessage($resultRow, $image)],
         'image_url' => $image['url'],
         'renderer' => $image['renderer'] ?? '',
+    ];
+}
+
+function linePrepareBetCloseImageMessage(PDO $pdo, array $lotteryRow): array
+{
+    $image = lineGenerateBetCloseImage($pdo, $lotteryRow);
+    if (!$image || empty($image['url'])) {
+        return [
+            'ok' => false,
+            'reason' => 'image_generation_failed',
+            'detail' => lineCompactErrorDetail((string) ($image['error'] ?? 'Image generation failed')),
+        ];
+    }
+
+    return [
+        'ok' => true,
+        'summary_text' => lineBetCloseSummaryText($lotteryRow),
+        'messages' => [lineBuildBetCloseFlexMessage($lotteryRow, $image)],
+        'image_url' => $image['url'],
+        'renderer' => $image['renderer'] ?? '',
+        'image_path' => $image['path'] ?? '',
     ];
 }
 
@@ -2932,6 +2979,54 @@ function lineSendPreparedResultToGroup(PDO $pdo, string $groupId, array $prepare
         'image_url' => $prepared['image_url'] ?? '',
         'renderer' => $prepared['renderer'] ?? '',
     ]);
+}
+
+function lineSendPreparedBetCloseToGroup(PDO $pdo, string $groupId, array $prepared): array
+{
+    if ($groupId === '') {
+        return [
+            'ok' => false,
+            'status' => 0,
+            'body' => 'Group ID is required',
+            'reason' => 'missing_group_id',
+        ];
+    }
+
+    $result = linePushMessages($pdo, $groupId, $prepared['messages']);
+    lineLogPushResult($pdo, $groupId, $prepared['summary_text'], $result);
+
+    return array_merge($result, [
+        'summary_text' => $prepared['summary_text'],
+        'image_url' => $prepared['image_url'] ?? '',
+        'renderer' => $prepared['renderer'] ?? '',
+    ]);
+}
+
+function linePushPreparedBetCloseToActiveGroups(PDO $pdo, array $prepared): array
+{
+    $groups = lineFetchActiveGroupIds($pdo, 'image');
+    if (empty($groups)) {
+        return ['sent' => 0, 'failed' => 0, 'skipped' => true, 'reason' => 'no_groups'];
+    }
+
+    $sent = 0;
+    $failed = 0;
+    foreach ($groups as $groupId) {
+        $result = lineSendPreparedBetCloseToGroup($pdo, $groupId, $prepared);
+        if (!empty($result['ok'])) {
+            $sent++;
+        } else {
+            $failed++;
+        }
+    }
+
+    return [
+        'sent' => $sent,
+        'failed' => $failed,
+        'skipped' => false,
+        'image_url' => $prepared['image_url'] ?? '',
+        'renderer' => $prepared['renderer'] ?? '',
+    ];
 }
 
 function linePushResultImageToGroup(PDO $pdo, string $groupId, int $lotteryTypeId, string $drawDate): array
@@ -2982,20 +3077,20 @@ function linePushBetCloseImageNow(PDO $pdo, int $lotteryTypeId): array
         return ['sent' => 0, 'failed' => 0, 'skipped' => true, 'reason' => 'lottery_not_found'];
     }
 
-    $image = lineGenerateBetCloseImage($pdo, $lotteryRow);
-    if (!$image || empty($image['url'])) {
+    $prepared = linePrepareBetCloseImageMessage($pdo, $lotteryRow);
+    if (empty($prepared['ok'])) {
         return [
             'sent' => 0,
             'failed' => 0,
             'skipped' => true,
             'reason' => 'image_generation_failed',
-            'detail' => lineCompactErrorDetail((string) ($image['error'] ?? 'unknown')),
+            'detail' => lineCompactErrorDetail((string) ($prepared['detail'] ?? 'unknown')),
         ];
     }
 
-    $result = linePushImageToActiveGroups($pdo, [$image['url']], '[bet-close manual] ' . (string) ($lotteryRow['lottery_name'] ?? ''));
+    $result = linePushPreparedBetCloseToActiveGroups($pdo, $prepared);
     if (!empty($result['sent'])) {
-        return $result + ['image_url' => $image['url']];
+        return $result + ['image_url' => ($prepared['image_url'] ?? '')];
     }
 
     return $result;

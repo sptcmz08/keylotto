@@ -905,7 +905,7 @@ require_once 'includes/header.php';
                     <tr class="border-b hover:bg-gray-50">
                         <td class="px-3 py-2 font-medium text-gray-800"><?= htmlspecialchars($item['lottery_name']) ?></td>
                         <td class="px-3 py-2 text-xs text-gray-500"><?= htmlspecialchars($item['category_name']) ?></td>
-                        <td class="px-3 py-2 text-xs text-gray-700"><?= htmlspecialchars($item['close_time'] !== '' ? $item['close_time'] : '-') ?></td>
+                        <td class="px-3 py-2 text-xs text-gray-700"><?= htmlspecialchars($item['close_time'] !== '' ? lineFormatResultTimeDisplay((string) $item['close_time']) : '-') ?></td>
                         <td class="px-3 py-2 text-xs text-gray-700"><?= htmlspecialchars($item['result_time'] !== '' ? $item['result_time'] : '-') ?></td>
                         <td class="px-3 py-2 text-xs text-gray-500"><?= htmlspecialchars((string) $item['draw_schedule']) ?></td>
                         <td class="px-3 py-2">
