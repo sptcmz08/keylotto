@@ -1859,6 +1859,12 @@ function lineSharedTemplateGroups(): array
     ];
 }
 
+function lineSharedTemplateVariantKey(string $variant = 'result'): string
+{
+    $variant = strtolower(trim($variant));
+    return $variant === 'bet_close' ? 'bet_close' : 'result';
+}
+
 function lineSharedTemplateKey(string $groupKey): string
 {
     $groupKey = strtolower(trim($groupKey));
@@ -1866,16 +1872,24 @@ function lineSharedTemplateKey(string $groupKey): string
     return isset($groups[$groupKey]) ? $groupKey : '';
 }
 
-function lineSharedTemplateImagePath(string $groupKey): ?string
+function lineSharedTemplateFilenamePrefix(string $variant = 'result'): string
+{
+    return lineSharedTemplateVariantKey($variant) === 'bet_close'
+        ? 'shared-bet-close-group-'
+        : 'shared-group-';
+}
+
+function lineSharedTemplateImagePathByVariant(string $groupKey, string $variant = 'result'): ?string
 {
     $groupKey = lineSharedTemplateKey($groupKey);
     if ($groupKey === '') {
         return null;
     }
 
+    $prefix = lineSharedTemplateFilenamePrefix($variant);
     $extensions = ['png', 'jpg', 'webp'];
     foreach ($extensions as $extension) {
-        $filePath = lineTemplatesDir() . '/shared-group-' . $groupKey . '.' . $extension;
+        $filePath = lineTemplatesDir() . '/' . $prefix . $groupKey . '.' . $extension;
         if (is_file($filePath)) {
             return $filePath;
         }
@@ -1884,9 +1898,19 @@ function lineSharedTemplateImagePath(string $groupKey): ?string
     return null;
 }
 
-function lineSharedTemplateImageUrl(PDO $pdo, string $groupKey): ?string
+function lineSharedTemplateImagePath(string $groupKey): ?string
 {
-    $filePath = lineSharedTemplateImagePath($groupKey);
+    return lineSharedTemplateImagePathByVariant($groupKey, 'result');
+}
+
+function lineBetCloseSharedTemplateImagePath(string $groupKey): ?string
+{
+    return lineSharedTemplateImagePathByVariant($groupKey, 'bet_close');
+}
+
+function lineSharedTemplateImageUrlByVariant(PDO $pdo, string $groupKey, string $variant = 'result'): ?string
+{
+    $filePath = lineSharedTemplateImagePathByVariant($groupKey, $variant);
     if ($filePath === null) {
         return null;
     }
@@ -1900,7 +1924,17 @@ function lineSharedTemplateImageUrl(PDO $pdo, string $groupKey): ?string
     return $baseUrl . '/line/templates/' . rawurlencode(basename($filePath)) . '?v=' . $version;
 }
 
-function lineDeleteSharedTemplateImage(string $groupKey): bool
+function lineSharedTemplateImageUrl(PDO $pdo, string $groupKey): ?string
+{
+    return lineSharedTemplateImageUrlByVariant($pdo, $groupKey, 'result');
+}
+
+function lineBetCloseSharedTemplateImageUrl(PDO $pdo, string $groupKey): ?string
+{
+    return lineSharedTemplateImageUrlByVariant($pdo, $groupKey, 'bet_close');
+}
+
+function lineDeleteSharedTemplateImageByVariant(string $groupKey, string $variant = 'result'): bool
 {
     $groupKey = lineSharedTemplateKey($groupKey);
     if ($groupKey === '') {
@@ -1908,9 +1942,10 @@ function lineDeleteSharedTemplateImage(string $groupKey): bool
     }
 
     $deleted = false;
+    $prefix = lineSharedTemplateFilenamePrefix($variant);
     $extensions = ['png', 'jpg', 'webp'];
     foreach ($extensions as $extension) {
-        $filePath = lineTemplatesDir() . '/shared-group-' . $groupKey . '.' . $extension;
+        $filePath = lineTemplatesDir() . '/' . $prefix . $groupKey . '.' . $extension;
         if (is_file($filePath) && @unlink($filePath)) {
             $deleted = true;
         }
@@ -1919,7 +1954,17 @@ function lineDeleteSharedTemplateImage(string $groupKey): bool
     return $deleted;
 }
 
-function lineSaveSharedTemplateUpload(string $groupKey, array $upload): array
+function lineDeleteSharedTemplateImage(string $groupKey): bool
+{
+    return lineDeleteSharedTemplateImageByVariant($groupKey, 'result');
+}
+
+function lineDeleteBetCloseSharedTemplateImage(string $groupKey): bool
+{
+    return lineDeleteSharedTemplateImageByVariant($groupKey, 'bet_close');
+}
+
+function lineSaveSharedTemplateUploadByVariant(string $groupKey, array $upload, string $variant = 'result'): array
 {
     $groupKey = lineSharedTemplateKey($groupKey);
     if ($groupKey === '') {
@@ -1969,8 +2014,9 @@ function lineSaveSharedTemplateUpload(string $groupKey, array $upload): array
     }
 
     $dir = lineTemplatesDir();
-    $targetPath = $dir . '/shared-group-' . $groupKey . '.' . $extension;
-    $stagingPath = $dir . '/.upload-shared-group-' . $groupKey . '-' . bin2hex(random_bytes(4)) . '.' . $extension;
+    $prefix = lineSharedTemplateFilenamePrefix($variant);
+    $targetPath = $dir . '/' . $prefix . $groupKey . '.' . $extension;
+    $stagingPath = $dir . '/.upload-' . $prefix . $groupKey . '-' . bin2hex(random_bytes(4)) . '.' . $extension;
 
     if (is_dir($dir) && !is_writable($dir)) {
         @chmod($dir, 0775);
@@ -1996,7 +2042,7 @@ function lineSaveSharedTemplateUpload(string $groupKey, array $upload): array
     }
 
     @chmod($stagingPath, 0664);
-    lineDeleteSharedTemplateImage($groupKey);
+    lineDeleteSharedTemplateImageByVariant($groupKey, $variant);
 
     if ($stagingPath !== $targetPath && !@rename($stagingPath, $targetPath)) {
         if (!@copy($stagingPath, $targetPath)) {
@@ -2024,6 +2070,16 @@ function lineSaveSharedTemplateUpload(string $groupKey, array $upload): array
         'path' => $targetPath,
         'method' => $saveResult['method'] ?? 'unknown',
     ];
+}
+
+function lineSaveSharedTemplateUpload(string $groupKey, array $upload): array
+{
+    return lineSaveSharedTemplateUploadByVariant($groupKey, $upload, 'result');
+}
+
+function lineSaveBetCloseSharedTemplateUpload(string $groupKey, array $upload): array
+{
+    return lineSaveSharedTemplateUploadByVariant($groupKey, $upload, 'bet_close');
 }
 
 function lineDetectTemplateGroupKey(array $lotteryRow): string
@@ -2125,6 +2181,25 @@ function lineResolveTemplateImageInfo(PDO $pdo, array $lotteryRow): ?array
     }
 
     return null;
+}
+
+function lineResolveBetCloseTemplateImageInfo(PDO $pdo, array $lotteryRow): ?array
+{
+    $groupKey = lineDetectTemplateGroupKey($lotteryRow);
+    $sharedPath = $groupKey !== '' ? lineBetCloseSharedTemplateImagePath($groupKey) : null;
+    if ($sharedPath !== null) {
+        $version = @filemtime($sharedPath) ?: time();
+        $groups = lineSharedTemplateGroups();
+        return [
+            'path' => $sharedPath,
+            'url' => lineResolvedPublicBaseUrl($pdo) . '/line/templates/' . rawurlencode(basename($sharedPath)) . '?v=' . $version,
+            'source_type' => 'shared_bet_close',
+            'source_key' => $groupKey,
+            'source_label' => 'กลุ่มปิดรับ: ' . ($groups[$groupKey] ?? $groupKey),
+        ];
+    }
+
+    return lineResolveTemplateImageInfo($pdo, $lotteryRow);
 }
 
 function lineConfigReady(PDO $pdo): bool
@@ -2903,7 +2978,7 @@ function lineGenerateBetCloseImage(PDO $pdo, array $lotteryRow): ?array
     $uniqueSuffix = date('YmdHis') . '-' . substr(md5(uniqid((string) $safeLotteryId, true)), 0, 8);
     $outputFilename = 'bet-close-' . $safeLotteryId . '-' . $safeDate . '-' . $uniqueSuffix . '.png';
     $outputPath = $generatedDir . '/' . $outputFilename;
-    $templateInfo = lineResolveTemplateImageInfo($pdo, $lotteryRow);
+    $templateInfo = lineResolveBetCloseTemplateImageInfo($pdo, $lotteryRow);
 
     $payload = [
         'mode' => 'bet_close',

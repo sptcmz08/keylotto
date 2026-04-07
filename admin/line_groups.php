@@ -11,7 +11,7 @@ $adminTitle = 'LINE Groups';
 function lineGroupsRedirectWithFlash(string $type, string $message, string $tab = 'settings'): void
 {
     $_SESSION['line_groups_flash'] = ['type' => $type, 'message' => $message];
-    $allowedTabs = ['settings', 'shared-templates', 'send-image', 'auto-text', 'auto-image', 'bet-close', 'groups'];
+    $allowedTabs = ['settings', 'shared-templates', 'bet-close-templates', 'send-image', 'auto-text', 'auto-image', 'bet-close', 'groups'];
     if (!in_array($tab, $allowedTabs, true)) {
         $tab = 'settings';
     }
@@ -284,6 +284,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         lineGroupsRedirectWithFlash('error', 'Shared template image was not found', 'shared-templates');
     }
+
+    if ($action === 'upload_bet_close_shared_template') {
+        $groupKey = trim((string) ($_POST['shared_group_key'] ?? ''));
+        $upload = lineSaveBetCloseSharedTemplateUpload($groupKey, $_FILES['template_image'] ?? []);
+        lineGroupsRedirectWithFlash($upload['ok'] ? 'success' : 'error', $upload['message'], 'bet-close-templates');
+    }
+
+    if ($action === 'delete_bet_close_shared_template') {
+        $groupKey = trim((string) ($_POST['shared_group_key'] ?? ''));
+        if ($groupKey === '') {
+            lineGroupsRedirectWithFlash('error', 'Template group is invalid', 'bet-close-templates');
+        }
+        if (lineDeleteBetCloseSharedTemplateImage($groupKey)) {
+            lineGroupsRedirectWithFlash('success', 'Bet-close shared template image removed', 'bet-close-templates');
+        }
+        lineGroupsRedirectWithFlash('error', 'Bet-close shared template image was not found', 'bet-close-templates');
+    }
 }
 
 $flash = $_SESSION['line_groups_flash'] ?? null;
@@ -305,8 +322,10 @@ $recentResults = $pdo->query("
 
 $sharedTemplateGroups = lineSharedTemplateGroups();
 $sharedTemplateUrls = [];
+$betCloseSharedTemplateUrls = [];
 foreach ($sharedTemplateGroups as $groupKey => $groupLabel) {
     $sharedTemplateUrls[$groupKey] = lineSharedTemplateImageUrl($pdo, $groupKey);
+    $betCloseSharedTemplateUrls[$groupKey] = lineBetCloseSharedTemplateImageUrl($pdo, $groupKey);
 }
 
 $savedChannelSecret = lineResolvedChannelSecret($pdo);
@@ -387,7 +406,7 @@ $weekdayOptions = [
     '6' => 'เสาร์',
 ];
 
-$allowedTabs = ['settings', 'shared-templates', 'send-image', 'auto-text', 'auto-image', 'bet-close', 'groups'];
+$allowedTabs = ['settings', 'shared-templates', 'bet-close-templates', 'send-image', 'auto-text', 'auto-image', 'bet-close', 'groups'];
 $activeTab = isset($_GET['tab']) && in_array((string) $_GET['tab'], $allowedTabs, true)
     ? (string) $_GET['tab']
     : 'settings';
@@ -410,6 +429,7 @@ require_once 'includes/header.php';
         <div class="flex flex-wrap gap-2 pt-1 relative z-20">
             <a href="line_groups.php?tab=settings" data-line-tab="settings" class="line-tab-btn relative z-20 px-4 py-2 rounded-full text-sm font-medium <?= $activeTab === 'settings' ? 'bg-[#1b5e20] text-white' : 'bg-white text-gray-700 border border-gray-200' ?>">ตั้งค่า</a>
             <a href="line_groups.php?tab=shared-templates" data-line-tab="shared-templates" class="line-tab-btn relative z-20 px-4 py-2 rounded-full text-sm font-medium <?= $activeTab === 'shared-templates' ? 'bg-[#1b5e20] text-white' : 'bg-white text-gray-700 border border-gray-200' ?>">Shared Templates</a>
+            <a href="line_groups.php?tab=bet-close-templates" data-line-tab="bet-close-templates" class="line-tab-btn relative z-20 px-4 py-2 rounded-full text-sm font-medium <?= $activeTab === 'bet-close-templates' ? 'bg-[#1b5e20] text-white' : 'bg-white text-gray-700 border border-gray-200' ?>">Template ปิดรับ</a>
             <a href="line_groups.php?tab=send-image" data-line-tab="send-image" class="line-tab-btn relative z-20 px-4 py-2 rounded-full text-sm font-medium <?= $activeTab === 'send-image' ? 'bg-[#1b5e20] text-white' : 'bg-white text-gray-700 border border-gray-200' ?>">ส่งรูปภาพ</a>
             <a href="line_groups.php?tab=auto-text" data-line-tab="auto-text" class="line-tab-btn relative z-20 px-4 py-2 rounded-full text-sm font-medium <?= $activeTab === 'auto-text' ? 'bg-[#1b5e20] text-white' : 'bg-white text-gray-700 border border-gray-200' ?>">ส่งข้อความ Auto</a>
             <a href="line_groups.php?tab=auto-image" data-line-tab="auto-image" class="line-tab-btn relative z-20 px-4 py-2 rounded-full text-sm font-medium <?= $activeTab === 'auto-image' ? 'bg-[#1b5e20] text-white' : 'bg-white text-gray-700 border border-gray-200' ?>">ส่งรูป Auto</a>
@@ -508,6 +528,62 @@ require_once 'includes/header.php';
                                 <input type="hidden" name="shared_group_key" value="<?= htmlspecialchars($groupKey) ?>">
                                 <button type="submit" class="bg-red-50 text-red-700 border border-red-200 px-3 py-2 rounded-lg text-sm font-medium hover:bg-red-100 transition">
                                     <i class="fas fa-trash-alt mr-1"></i> Remove shared template
+                                </button>
+                            </form>
+                            <?php endif; ?>
+                        </td>
+                    </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+
+<section data-line-panel="bet-close-templates" class="line-panel <?= $activeTab === 'bet-close-templates' ? '' : 'hidden' ?>">
+    <div class="bg-white rounded-xl shadow-sm border overflow-hidden">
+        <div class="px-4 py-3 border-b bg-gray-50 font-semibold text-gray-700">Shared Template Groups For Bet Close</div>
+        <div class="px-4 py-3 text-xs text-gray-500 border-b bg-gray-50/60">
+            ใช้ template ปิดรับแยกจากรูปผลหวยได้เลย ระบบปิดรับจะใช้รูปชุดนี้ก่อน และถ้าไม่มีค่อย fallback ไปใช้ shared template ของผลหวย
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead class="bg-gray-50 border-b">
+                    <tr>
+                        <th class="px-3 py-2 text-left text-xs text-gray-500">กลุ่ม</th>
+                        <th class="px-3 py-2 text-left text-xs text-gray-500">Current template</th>
+                        <th class="px-3 py-2 text-left text-xs text-gray-500">Upload / Remove</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($sharedTemplateGroups as $groupKey => $groupLabel): ?>
+                    <?php $sharedTemplateUrl = $betCloseSharedTemplateUrls[$groupKey] ?? null; ?>
+                    <tr class="border-b hover:bg-gray-50 align-top">
+                        <td class="px-3 py-3 font-medium text-gray-800"><?= htmlspecialchars($groupLabel) ?></td>
+                        <td class="px-3 py-3">
+                            <?php if ($sharedTemplateUrl): ?>
+                            <a href="<?= htmlspecialchars($sharedTemplateUrl) ?>" target="_blank" class="inline-block">
+                                <img src="<?= htmlspecialchars($sharedTemplateUrl) ?>" alt="Bet-close shared template preview" class="w-44 h-28 object-cover rounded-lg border border-gray-200 shadow-sm">
+                            </a>
+                            <?php else: ?>
+                            <span class="text-xs text-gray-400">ยังไม่มี template ปิดรับ</span>
+                            <?php endif; ?>
+                        </td>
+                        <td class="px-3 py-3 min-w-[340px]">
+                            <form method="POST" enctype="multipart/form-data" class="space-y-2">
+                                <input type="hidden" name="form_action" value="upload_bet_close_shared_template">
+                                <input type="hidden" name="shared_group_key" value="<?= htmlspecialchars($groupKey) ?>">
+                                <input type="file" name="template_image" accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp" class="block w-full text-xs text-gray-500 border rounded-lg px-3 py-2 bg-white">
+                                <button type="submit" class="bg-[#7b1fa2] text-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-[#6a1b9a] transition">
+                                    <i class="fas fa-layer-group mr-1"></i> Upload bet-close template
+                                </button>
+                            </form>
+                            <?php if ($sharedTemplateUrl): ?>
+                            <form method="POST" class="mt-2">
+                                <input type="hidden" name="form_action" value="delete_bet_close_shared_template">
+                                <input type="hidden" name="shared_group_key" value="<?= htmlspecialchars($groupKey) ?>">
+                                <button type="submit" class="bg-red-50 text-red-700 border border-red-200 px-3 py-2 rounded-lg text-sm font-medium hover:bg-red-100 transition">
+                                    <i class="fas fa-trash-alt mr-1"></i> Remove bet-close template
                                 </button>
                             </form>
                             <?php endif; ?>
@@ -1148,7 +1224,7 @@ require_once 'includes/header.php';
 document.addEventListener('DOMContentLoaded', function () {
     const buttons = Array.from(document.querySelectorAll('[data-line-tab]'));
     const panels = Array.from(document.querySelectorAll('[data-line-panel]'));
-    const allowedTabs = new Set(['settings', 'shared-templates', 'send-image', 'auto-text', 'auto-image', 'bet-close', 'groups']);
+    const allowedTabs = new Set(['settings', 'shared-templates', 'bet-close-templates', 'send-image', 'auto-text', 'auto-image', 'bet-close', 'groups']);
     const scheduledMessagesList = document.getElementById('scheduledMessagesList');
     const addScheduledMessageBtn = document.getElementById('addScheduledMessageBtn');
     const scheduledMessagesCount = document.getElementById('scheduledMessagesCount');
@@ -1746,7 +1822,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
 <script>
 (function () {
-    const allowedTabs = new Set(['settings', 'shared-templates', 'send-image', 'auto-text', 'auto-image', 'bet-close', 'groups']);
+    const allowedTabs = new Set(['settings', 'shared-templates', 'bet-close-templates', 'send-image', 'auto-text', 'auto-image', 'bet-close', 'groups']);
     const buttons = Array.from(document.querySelectorAll('[data-line-tab]'));
     const panels = Array.from(document.querySelectorAll('[data-line-panel]'));
     if (buttons.length === 0 || panels.length === 0) {
