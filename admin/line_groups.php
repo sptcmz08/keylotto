@@ -243,6 +243,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         lineGroupsRedirectWithFlash('error', 'ส่งรูปผลหวยไม่สำเร็จ (HTTP ' . ($result['status'] ?: 0) . ')', 'send-image');
     }
 
+    if ($action === 'send_result_image_all_groups') {
+        $lotteryTypeId = (int) ($_POST['lottery_type_id'] ?? 0);
+        $drawDate = trim((string) ($_POST['draw_date'] ?? ''));
+        if ($lotteryTypeId <= 0 || $drawDate === '') {
+            lineGroupsRedirectWithFlash('error', 'à¸‚à¹‰à¸­à¸¡à¸¹à¸¥à¸ªà¸³à¸«à¸£à¸±à¸šà¸ªà¹ˆà¸‡à¸£à¸¹à¸›à¸œà¸¥à¸«à¸§à¸¢à¹„à¸¡à¹ˆà¸„à¸£à¸š', 'send-image');
+        }
+
+        $result = linePushResultImageToActiveGroups($pdo, $lotteryTypeId, $drawDate);
+        if (!empty($result['sent'])) {
+            lineGroupsRedirectWithFlash('success', 'à¸ªà¹ˆà¸‡à¸£à¸¹à¸›à¸œà¸¥à¸«à¸§à¸¢à¹„à¸›à¸—à¸¸à¸à¸à¸¥à¸¸à¹ˆà¸¡à¸ªà¸³à¹€à¸£à¹‡à¸ˆà¹„à¸› ' . (int) $result['sent'] . ' à¸à¸¥à¸¸à¹ˆà¸¡', 'send-image');
+        }
+
+        if (($result['reason'] ?? '') === 'config_not_ready') {
+            lineGroupsRedirectWithFlash('error', 'à¸¢à¸±à¸‡à¹„à¸¡à¹ˆà¹„à¸”à¹‰à¸•à¸±à¹‰à¸‡à¸„à¹ˆà¸² LINE channel secret à¹à¸¥à¸° access token à¸šà¸™ server', 'send-image');
+        }
+        if (($result['reason'] ?? '') === 'no_groups') {
+            lineGroupsRedirectWithFlash('error', 'à¸¢à¸±à¸‡à¹„à¸¡à¹ˆà¸¡à¸µà¸à¸¥à¸¸à¹ˆà¸¡ LINE à¸—à¸µà¹ˆ active à¹à¸¥à¸°à¹€à¸›à¸´à¸”à¸£à¸±à¸šà¸£à¸¹à¸›à¸ à¸²à¸ž', 'send-image');
+        }
+        if (($result['reason'] ?? '') === 'result_not_found') {
+            lineGroupsRedirectWithFlash('error', 'à¹„à¸¡à¹ˆà¸žà¸šà¸œà¸¥à¸«à¸§à¸¢à¸£à¸²à¸¢à¸à¸²à¸£à¸™à¸µà¹‰à¹ƒà¸™à¸à¸²à¸™à¸‚à¹‰à¸­à¸¡à¸¹à¸¥', 'send-image');
+        }
+        if (($result['reason'] ?? '') === 'image_generation_failed') {
+            lineGroupsRedirectWithFlash('error', 'à¸ªà¸£à¹‰à¸²à¸‡à¸£à¸¹à¸›à¸œà¸¥à¸«à¸§à¸¢à¹„à¸¡à¹ˆà¸ªà¸³à¹€à¸£à¹‡à¸ˆ: ' . (string) ($result['detail'] ?? 'unknown'), 'send-image');
+        }
+
+        $status = (int) ($result['last_error_status'] ?? 0);
+        lineGroupsRedirectWithFlash('error', 'à¸ªà¹ˆà¸‡à¸£à¸¹à¸›à¸œà¸¥à¸«à¸§à¸¢à¹„à¸›à¸—à¸¸à¸à¸à¸¥à¸¸à¹ˆà¸¡à¹„à¸¡à¹ˆà¸ªà¸³à¹€à¸£à¹‡à¸ˆ' . ($status > 0 ? ' (HTTP ' . $status . ')' : ''), 'send-image');
+    }
+
     if ($action === 'send_bet_close_now') {
         $lotteryTypeId = (int) ($_POST['lottery_type_id'] ?? 0);
         if ($lotteryTypeId <= 0) {
@@ -635,6 +664,14 @@ require_once 'includes/header.php';
                                 </select>
                                 <button type="submit" class="w-full bg-[#1565c0] text-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-[#0d47a1] transition disabled:opacity-50" <?= empty($groups) ? 'disabled' : '' ?>>
                                     <i class="fas fa-image mr-1"></i> ส่งรูปผลหวยนี้
+                                </button>
+                            </form>
+                            <form method="POST" class="mt-2">
+                                <input type="hidden" name="form_action" value="send_result_image_all_groups">
+                                <input type="hidden" name="lottery_type_id" value="<?= (int) $resultRow['lottery_type_id'] ?>">
+                                <input type="hidden" name="draw_date" value="<?= htmlspecialchars($resultRow['draw_date']) ?>">
+                                <button type="submit" class="w-full bg-[#2e7d32] text-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-[#1b5e20] transition disabled:opacity-50" <?= $activeImageGroupsCount <= 0 ? 'disabled' : '' ?>>
+                                    <i class="fas fa-paper-plane mr-1"></i> ส่งผลหวยนี้ทุกกลุ่ม
                                 </button>
                             </form>
                             <a href="line_preview.php?lottery_type_id=<?= (int) $resultRow['lottery_type_id'] ?>&draw_date=<?= urlencode((string) $resultRow['draw_date']) ?>" target="_blank" class="mt-2 inline-flex items-center justify-center w-full bg-white text-[#6a1b9a] border border-[#d1b3e5] px-3 py-2 rounded-lg text-sm font-medium hover:bg-[#faf5ff] transition">

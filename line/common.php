@@ -3232,6 +3232,39 @@ function lineSendPreparedResultToGroup(PDO $pdo, string $groupId, array $prepare
     ]);
 }
 
+function linePushPreparedResultToActiveGroups(PDO $pdo, array $prepared): array
+{
+    $groups = lineFetchActiveGroupIds($pdo, 'image');
+    if (empty($groups)) {
+        return ['sent' => 0, 'failed' => 0, 'skipped' => true, 'reason' => 'no_groups'];
+    }
+
+    $sent = 0;
+    $failed = 0;
+    $lastErrorStatus = 0;
+    $lastErrorBody = '';
+    foreach ($groups as $groupId) {
+        $result = lineSendPreparedResultToGroup($pdo, $groupId, $prepared);
+        if (!empty($result['ok'])) {
+            $sent++;
+        } else {
+            $failed++;
+            $lastErrorStatus = (int) ($result['status'] ?? 0);
+            $lastErrorBody = (string) ($result['body'] ?? '');
+        }
+    }
+
+    return [
+        'sent' => $sent,
+        'failed' => $failed,
+        'skipped' => false,
+        'image_url' => $prepared['image_url'] ?? '',
+        'renderer' => $prepared['renderer'] ?? '',
+        'last_error_status' => $lastErrorStatus,
+        'last_error_body' => $lastErrorBody,
+    ];
+}
+
 function lineSendPreparedBetCloseToGroup(PDO $pdo, string $groupId, array $prepared): array
 {
     if ($groupId === '') {
@@ -3321,6 +3354,33 @@ function linePushResultImageToGroup(PDO $pdo, string $groupId, int $lotteryTypeI
     }
 
     return lineSendPreparedResultToGroup($pdo, $groupId, $prepared);
+}
+
+function linePushResultImageToActiveGroups(PDO $pdo, int $lotteryTypeId, string $drawDate): array
+{
+    if (!lineConfigReady($pdo)) {
+        return ['sent' => 0, 'failed' => 0, 'skipped' => true, 'reason' => 'config_not_ready'];
+    }
+
+    $resultRow = lineFetchResultRow($pdo, $lotteryTypeId, $drawDate);
+    if (!$resultRow) {
+        return ['sent' => 0, 'failed' => 0, 'skipped' => true, 'reason' => 'result_not_found'];
+    }
+
+    $prepared = linePrepareResultImageMessage($pdo, $resultRow);
+    if (empty($prepared['ok'])) {
+        $detail = lineCompactErrorDetail((string) ($prepared['detail'] ?? ''));
+        lineLog('Manual result image all-groups send skipped: image generation failed for lottery_type_id=' . $lotteryTypeId . ' draw_date=' . $drawDate . ($detail !== '' ? ' detail=' . $detail : ''));
+        return [
+            'sent' => 0,
+            'failed' => 0,
+            'skipped' => true,
+            'reason' => $prepared['reason'] ?? 'image_generation_failed',
+            'detail' => $detail,
+        ];
+    }
+
+    return linePushPreparedResultToActiveGroups($pdo, $prepared);
 }
 
 function linePushBetCloseImageNow(PDO $pdo, int $lotteryTypeId): array
