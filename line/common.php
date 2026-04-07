@@ -242,6 +242,40 @@ function lineGenerateScheduledMessageId(): string
     }
 }
 
+function lineSanitizeTextPayload(string $value): string
+{
+    $value = str_replace(["\r\n", "\r"], "\n", $value);
+    $value = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u', '', $value) ?? $value;
+
+    if (function_exists('mb_check_encoding') && !mb_check_encoding($value, 'UTF-8')) {
+        if (function_exists('iconv')) {
+            $converted = @iconv('UTF-8', 'UTF-8//IGNORE', $value);
+            if (is_string($converted) && $converted !== '') {
+                $value = $converted;
+            }
+        }
+    }
+
+    return trim($value);
+}
+
+function lineNormalizePayloadStrings($value)
+{
+    if (is_array($value)) {
+        $normalized = [];
+        foreach ($value as $key => $item) {
+            $normalized[$key] = lineNormalizePayloadStrings($item);
+        }
+        return $normalized;
+    }
+
+    if (is_string($value)) {
+        return lineSanitizeTextPayload($value);
+    }
+
+    return $value;
+}
+
 function lineNormalizeScheduledMessageTime(string $value): string
 {
     $value = trim($value);
@@ -1345,7 +1379,7 @@ function lineGetScheduledTextMessages(PDO $pdo): array
         $dayStart = lineNormalizeScheduledWeekday((string) ($row['day_start'] ?? ''));
         $dayEnd = lineNormalizeScheduledWeekday((string) ($row['day_end'] ?? ''));
         $time = lineNormalizeScheduledMessageTime((string) ($row['time'] ?? ''));
-        $message = trim((string) ($row['message'] ?? ''));
+        $message = lineSanitizeTextPayload((string) ($row['message'] ?? ''));
         $enabled = (string) ($row['enabled'] ?? '1') !== '0';
 
         $messages[] = [
@@ -1379,7 +1413,7 @@ function lineSetScheduledTextMessages(PDO $pdo, array $messages): void
         $dayStart = lineNormalizeScheduledWeekday((string) ($row['day_start'] ?? ''));
         $dayEnd = lineNormalizeScheduledWeekday((string) ($row['day_end'] ?? ''));
         $time = lineNormalizeScheduledMessageTime((string) ($row['time'] ?? ''));
-        $message = trim((string) ($row['message'] ?? ''));
+        $message = lineSanitizeTextPayload((string) ($row['message'] ?? ''));
         $enabled = (string) ($row['enabled'] ?? '0') === '1';
 
         if ($dayStart === '' && $dayEnd !== '') {
@@ -2097,6 +2131,23 @@ function linePushMessages(PDO $pdo, string $to, array $messages): array
         'to' => $to,
         'messages' => array_values($messages),
     ];
+    $payload = lineNormalizePayloadStrings($payload);
+
+    $jsonFlags = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES;
+    if (defined('JSON_INVALID_UTF8_SUBSTITUTE')) {
+        $jsonFlags |= JSON_INVALID_UTF8_SUBSTITUTE;
+    }
+
+    $jsonPayload = json_encode($payload, $jsonFlags);
+    if ($jsonPayload === false) {
+        $error = function_exists('json_last_error_msg') ? json_last_error_msg() : 'json_encode failed';
+        lineLog('LINE push payload encode failed for ' . $to . ': ' . $error);
+        return [
+            'ok' => false,
+            'status' => 0,
+            'body' => 'JSON encode failed: ' . $error,
+        ];
+    }
 
     $ch = curl_init('https://api.line.me/v2/bot/message/push');
     curl_setopt_array($ch, [
@@ -2106,7 +2157,7 @@ function linePushMessages(PDO $pdo, string $to, array $messages): array
             'Authorization: Bearer ' . $accessToken,
             'Content-Type: application/json',
         ],
-        CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_UNICODE),
+        CURLOPT_POSTFIELDS => $jsonPayload,
         CURLOPT_TIMEOUT => 20,
     ]);
 
@@ -2116,6 +2167,10 @@ function linePushMessages(PDO $pdo, string $to, array $messages): array
         $response = curl_error($ch);
     }
     curl_close($ch);
+
+    if (!($status >= 200 && $status < 300)) {
+        lineLog('LINE push failed to ' . $to . ' status=' . $status . ' body=' . lineCompactErrorDetail((string) $response));
+    }
 
     return [
         'ok' => $status >= 200 && $status < 300,
