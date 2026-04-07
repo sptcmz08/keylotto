@@ -1095,7 +1095,13 @@ function lineSendDueBetCloseNotifications(PDO $pdo, ?DateTimeImmutable $now = nu
 
         $result = linePushPreparedBetCloseToActiveGroups($pdo, $prepared);
         if (empty($result['sent'])) {
-            lineLog('Bet-close LINE image not delivered for lottery_type_id=' . $lotteryId . ' at ' . $scheduledDate . ' ' . $closeTime);
+            $detail = lineCompactErrorDetail((string) ($result['last_error_body'] ?? ''));
+            lineLog(
+                'Bet-close LINE image not delivered for lottery_type_id=' . $lotteryId .
+                ' at ' . $scheduledDate . ' ' . $closeTime .
+                ' status=' . (int) ($result['last_error_status'] ?? 0) .
+                ($detail !== '' ? ' body=' . $detail : '')
+            );
             continue;
         }
 
@@ -1540,16 +1546,27 @@ function lineSendDueScheduledMessages(PDO $pdo, ?DateTimeImmutable $now = null):
         }
 
         $deliveredGroups = 0;
+        $lastFailureStatus = 0;
+        $lastFailureBody = '';
         foreach ($groups as $groupId) {
             $result = linePushTextMessage($pdo, $groupId, $messageText);
             lineLogPushResult($pdo, $groupId, $messageText, $result);
             if (!empty($result['ok'])) {
                 $deliveredGroups++;
+            } else {
+                $lastFailureStatus = (int) ($result['status'] ?? 0);
+                $lastFailureBody = (string) ($result['body'] ?? '');
             }
         }
 
         if ($deliveredGroups <= 0) {
-            lineLog('Scheduled LINE text not delivered for message ' . $messageId . ' at ' . $scheduledDate . ' ' . $messageTime);
+            $detail = lineCompactErrorDetail($lastFailureBody);
+            lineLog(
+                'Scheduled LINE text not delivered for message ' . $messageId .
+                ' at ' . $scheduledDate . ' ' . $messageTime .
+                ' status=' . $lastFailureStatus .
+                ($detail !== '' ? ' body=' . $detail : '')
+            );
             continue;
         }
 
@@ -3116,12 +3133,16 @@ function linePushPreparedBetCloseToActiveGroups(PDO $pdo, array $prepared): arra
 
     $sent = 0;
     $failed = 0;
+    $lastErrorStatus = 0;
+    $lastErrorBody = '';
     foreach ($groups as $groupId) {
         $result = lineSendPreparedBetCloseToGroup($pdo, $groupId, $prepared);
         if (!empty($result['ok'])) {
             $sent++;
         } else {
             $failed++;
+            $lastErrorStatus = (int) ($result['status'] ?? 0);
+            $lastErrorBody = (string) ($result['body'] ?? '');
         }
     }
 
@@ -3131,6 +3152,8 @@ function linePushPreparedBetCloseToActiveGroups(PDO $pdo, array $prepared): arra
         'skipped' => false,
         'image_url' => $prepared['image_url'] ?? '',
         'renderer' => $prepared['renderer'] ?? '',
+        'last_error_status' => $lastErrorStatus,
+        'last_error_body' => $lastErrorBody,
     ];
 }
 
