@@ -1096,12 +1096,16 @@ function lineSendDueBetCloseNotifications(PDO $pdo, ?DateTimeImmutable $now = nu
         $result = linePushPreparedBetCloseToActiveGroups($pdo, $prepared);
         if (empty($result['sent'])) {
             $detail = lineCompactErrorDetail((string) ($result['last_error_body'] ?? ''));
+            $lastFailureStatus = (int) ($result['last_error_status'] ?? 0);
             lineLog(
                 'Bet-close LINE image not delivered for lottery_type_id=' . $lotteryId .
                 ' at ' . $scheduledDate . ' ' . $closeTime .
-                ' status=' . (int) ($result['last_error_status'] ?? 0) .
+                ' status=' . $lastFailureStatus .
                 ($detail !== '' ? ' body=' . $detail : '')
             );
+            if (lineIsMonthlyLimitError($lastFailureStatus, (string) ($result['last_error_body'] ?? ''))) {
+                lineMarkBetCloseSent($pdo, $lotteryId, $scheduledDate, $closeTime, basename((string) ($prepared['image_path'] ?? '')), 0);
+            }
             continue;
         }
 
@@ -1256,16 +1260,35 @@ function lineSendDueScheduledImages(PDO $pdo, ?DateTimeImmutable $now = null): a
         }
 
         $deliveredGroups = 0;
+        $lastFailureStatus = 0;
+        $lastFailureBody = '';
+        $monthlyLimitHit = false;
         foreach ($groups as $groupId) {
             $result = linePushImageMessages($pdo, $groupId, $imageUrls);
             lineLogPushResult($pdo, $groupId, '[scheduled image] ' . implode(', ', $imageUrls), $result);
             if (!empty($result['ok'])) {
                 $deliveredGroups++;
+            } else {
+                $lastFailureStatus = (int) ($result['status'] ?? 0);
+                $lastFailureBody = (string) ($result['body'] ?? '');
+                if (lineIsMonthlyLimitError($lastFailureStatus, $lastFailureBody)) {
+                    $monthlyLimitHit = true;
+                    break;
+                }
             }
         }
 
         if ($deliveredGroups <= 0) {
-            lineLog('Scheduled LINE image not delivered for message ' . $messageId . ' at ' . $scheduledDate . ' ' . $messageTime);
+            $detail = lineCompactErrorDetail($lastFailureBody);
+            lineLog(
+                'Scheduled LINE image not delivered for message ' . $messageId .
+                ' at ' . $scheduledDate . ' ' . $messageTime .
+                ' status=' . $lastFailureStatus .
+                ($detail !== '' ? ' body=' . $detail : '')
+            );
+            if ($monthlyLimitHit) {
+                lineMarkScheduledImageSent($pdo, $messageId, $scheduledDate, $messageTime, implode(', ', $imageNames), 0);
+            }
             continue;
         }
 
@@ -1483,6 +1506,16 @@ function lineMarkScheduledTextSent(
     $stmt->execute([$messageId, $scheduledDate, $scheduledTime, $messageText, $sentGroups]);
 }
 
+function lineIsMonthlyLimitError(int $status, string $body): bool
+{
+    if ($status !== 429) {
+        return false;
+    }
+
+    $body = strtolower(trim($body));
+    return $body !== '' && str_contains($body, 'monthly limit');
+}
+
 function lineSendDueScheduledMessages(PDO $pdo, ?DateTimeImmutable $now = null): array
 {
     if (!lineConfigReady($pdo)) {
@@ -1548,6 +1581,7 @@ function lineSendDueScheduledMessages(PDO $pdo, ?DateTimeImmutable $now = null):
         $deliveredGroups = 0;
         $lastFailureStatus = 0;
         $lastFailureBody = '';
+        $monthlyLimitHit = false;
         foreach ($groups as $groupId) {
             $result = linePushTextMessage($pdo, $groupId, $messageText);
             lineLogPushResult($pdo, $groupId, $messageText, $result);
@@ -1556,6 +1590,10 @@ function lineSendDueScheduledMessages(PDO $pdo, ?DateTimeImmutable $now = null):
             } else {
                 $lastFailureStatus = (int) ($result['status'] ?? 0);
                 $lastFailureBody = (string) ($result['body'] ?? '');
+                if (lineIsMonthlyLimitError($lastFailureStatus, $lastFailureBody)) {
+                    $monthlyLimitHit = true;
+                    break;
+                }
             }
         }
 
@@ -1567,6 +1605,9 @@ function lineSendDueScheduledMessages(PDO $pdo, ?DateTimeImmutable $now = null):
                 ' status=' . $lastFailureStatus .
                 ($detail !== '' ? ' body=' . $detail : '')
             );
+            if ($monthlyLimitHit) {
+                lineMarkScheduledTextSent($pdo, $messageId, $scheduledDate, $messageTime, $messageText, 0);
+            }
             continue;
         }
 
