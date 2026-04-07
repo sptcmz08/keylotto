@@ -1165,7 +1165,7 @@ echo "🎰 Lottery Scraper — " . date('Y-m-d H:i:s') . "\n";
 echo "═══════════════════════════════════════\n\n";
 
 try {
-    $scheduledTextStats = lineSendDueScheduledMessages($pdo);
+    $scheduledTextStats = ['skipped' => true, 'reason' => 'handled_by_line_dispatch'];
     if (!empty($scheduledTextStats['sent_messages'])) {
         echo "ðŸ’¬ Scheduled LINE text: {$scheduledTextStats['sent_messages']} à¸£à¸²à¸¢à¸à¸²à¸£ / {$scheduledTextStats['sent_groups']} à¸à¸¥à¸¸à¹ˆà¸¡ ({$scheduledTextStats['time']})\n\n";
     } elseif (!empty($scheduledTextStats['due_messages'])) {
@@ -1180,7 +1180,7 @@ try {
 }
 
 try {
-    $scheduledImageStats = lineSendDueScheduledImages($pdo);
+    $scheduledImageStats = ['skipped' => true, 'reason' => 'handled_by_line_dispatch'];
     if (!empty($scheduledImageStats['sent_messages'])) {
         echo "ðŸ–¼ï¸ Scheduled LINE image: {$scheduledImageStats['sent_messages']} à¸£à¸²à¸¢à¸à¸²à¸£ / {$scheduledImageStats['sent_groups']} à¸à¸¥à¸¸à¹ˆà¸¡ ({$scheduledImageStats['time']})\n\n";
     } elseif (!empty($scheduledImageStats['due_messages'])) {
@@ -1195,7 +1195,7 @@ try {
 }
 
 try {
-    $betCloseStats = lineSendDueBetCloseNotifications($pdo);
+    $betCloseStats = ['skipped' => true, 'reason' => 'handled_by_line_dispatch'];
     if (!empty($betCloseStats['sent_lotteries'])) {
         echo "🔒 Bet-close LINE image: {$betCloseStats['sent_lotteries']} รายการ / {$betCloseStats['sent_groups']} กลุ่ม ({$betCloseStats['time']})\n\n";
     } elseif (!empty($betCloseStats['due_lotteries'])) {
@@ -1267,7 +1267,7 @@ switch ($scraper) {
 echo "\nScheduled LINE dispatch phase: after-scrape\n";
 
 try {
-    $scheduledTextStats = lineSendDueScheduledMessages($pdo);
+    $scheduledTextStats = ['skipped' => true, 'reason' => 'handled_by_line_dispatch'];
     if (!empty($scheduledTextStats['sent_messages'])) {
         echo "Scheduled LINE text (after-scrape): {$scheduledTextStats['sent_messages']} รายการ / {$scheduledTextStats['sent_groups']} กลุ่ม ({$scheduledTextStats['time']})\n\n";
     } elseif (!empty($scheduledTextStats['due_messages'])) {
@@ -1282,7 +1282,7 @@ try {
 }
 
 try {
-    $scheduledImageStats = lineSendDueScheduledImages($pdo);
+    $scheduledImageStats = ['skipped' => true, 'reason' => 'handled_by_line_dispatch'];
     if (!empty($scheduledImageStats['sent_messages'])) {
         echo "Scheduled LINE image (after-scrape): {$scheduledImageStats['sent_messages']} รายการ / {$scheduledImageStats['sent_groups']} กลุ่ม ({$scheduledImageStats['time']})\n\n";
     } elseif (!empty($scheduledImageStats['due_messages'])) {
@@ -1297,7 +1297,7 @@ try {
 }
 
 try {
-    $betCloseStats = lineSendDueBetCloseNotifications($pdo);
+    $betCloseStats = ['skipped' => true, 'reason' => 'handled_by_line_dispatch'];
     if (!empty($betCloseStats['sent_lotteries'])) {
         echo "Bet-close LINE image (after-scrape): {$betCloseStats['sent_lotteries']} รายการ / {$betCloseStats['sent_groups']} กลุ่ม ({$betCloseStats['time']})\n\n";
     } elseif (!empty($betCloseStats['due_lotteries'])) {

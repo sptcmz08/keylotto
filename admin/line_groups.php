@@ -110,6 +110,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'save_scheduled_messages') {
         $messages = $_POST['scheduled_messages'] ?? [];
         lineSetScheduledTextMessages($pdo, is_array($messages) ? $messages : []);
+        lineGroupsRedirectWithFlash('success', 'à¸šà¸±à¸™à¸—à¸¶à¸à¸‚à¹‰à¸­à¸„à¸§à¸²à¸¡à¸­à¸±à¸•à¹‚à¸™à¸¡à¸±à¸•à¸´à¸•à¸²à¸¡à¸Šà¹ˆà¸§à¸‡à¸§à¸±à¸™à¹à¸¥à¸°à¹€à¸§à¸¥à¸²à¸ªà¸³à¹€à¸£à¹‡à¸ˆ', 'auto-text');
         $savedScheduledMessages = lineGetScheduledTextMessages($pdo);
         $hasEnabledScheduledMessage = false;
         foreach ($savedScheduledMessages as $scheduledMessage) {
