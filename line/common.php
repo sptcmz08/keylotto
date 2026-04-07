@@ -2154,6 +2154,20 @@ function lineDetectTemplateGroupKey(array $lotteryRow): string
 function lineResolveTemplateImageInfo(PDO $pdo, array $lotteryRow): ?array
 {
     $lotteryTypeId = (int) ($lotteryRow['lottery_type_id'] ?? $lotteryRow['id'] ?? 0);
+    $groupKey = lineDetectTemplateGroupKey($lotteryRow);
+    $sharedPath = $groupKey !== '' ? lineSharedTemplateImagePath($groupKey) : null;
+    if ($sharedPath !== null) {
+        $version = @filemtime($sharedPath) ?: time();
+        $groups = lineSharedTemplateGroups();
+        return [
+            'path' => $sharedPath,
+            'url' => lineResolvedPublicBaseUrl($pdo) . '/line/templates/' . rawurlencode(basename($sharedPath)) . '?v=' . $version,
+            'source_type' => 'shared',
+            'source_key' => $groupKey,
+            'source_label' => 'Shared group: ' . ($groups[$groupKey] ?? $groupKey),
+        ];
+    }
+
     $exactPath = $lotteryTypeId > 0 ? lineTemplateImagePath($lotteryTypeId) : null;
     if ($exactPath !== null) {
         $version = @filemtime($exactPath) ?: time();
