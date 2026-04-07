@@ -2132,6 +2132,25 @@ function lineConfigReady(PDO $pdo): bool
     return lineResolvedChannelSecret($pdo) !== '' && lineResolvedChannelAccessToken($pdo) !== '';
 }
 
+function lineResolveCaBundlePath(): ?string
+{
+    $candidates = [
+        '/etc/ssl/certs/ca-certificates.crt',
+        '/etc/pki/tls/certs/ca-bundle.crt',
+        '/etc/ssl/ca-bundle.pem',
+        '/etc/pki/tls/cacert.pem',
+        '/etc/ssl/cert.pem',
+    ];
+
+    foreach ($candidates as $candidate) {
+        if (is_file($candidate) && is_readable($candidate)) {
+            return $candidate;
+        }
+    }
+
+    return null;
+}
+
 function linePushMessages(PDO $pdo, string $to, array $messages): array
 {
     $accessToken = lineResolvedChannelAccessToken($pdo);
@@ -2166,8 +2185,7 @@ function linePushMessages(PDO $pdo, string $to, array $messages): array
         ];
     }
 
-    $ch = curl_init('https://api.line.me/v2/bot/message/push');
-    curl_setopt_array($ch, [
+    $curlOptions = [
         CURLOPT_POST => true,
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_HTTPHEADER => [
@@ -2176,23 +2194,42 @@ function linePushMessages(PDO $pdo, string $to, array $messages): array
         ],
         CURLOPT_POSTFIELDS => $jsonPayload,
         CURLOPT_TIMEOUT => 20,
-    ]);
+        CURLOPT_SSL_VERIFYPEER => true,
+        CURLOPT_SSL_VERIFYHOST => 2,
+    ];
+
+    $caBundle = lineResolveCaBundlePath();
+    if ($caBundle !== null) {
+        $curlOptions[CURLOPT_CAINFO] = $caBundle;
+    }
+
+    $ch = curl_init('https://api.line.me/v2/bot/message/push');
+    curl_setopt_array($ch, $curlOptions);
 
     $response = curl_exec($ch);
     $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlErrno = curl_errno($ch);
+    $curlError = curl_error($ch);
     if ($response === false) {
-        $response = curl_error($ch);
+        $response = $curlError;
     }
     curl_close($ch);
 
     if (!($status >= 200 && $status < 300)) {
-        lineLog('LINE push failed to ' . $to . ' status=' . $status . ' body=' . lineCompactErrorDetail((string) $response));
+        lineLog(
+            'LINE push failed to ' . $to .
+            ' status=' . $status .
+            ' errno=' . $curlErrno .
+            ' body=' . lineCompactErrorDetail((string) $response)
+        );
     }
 
     return [
         'ok' => $status >= 200 && $status < 300,
         'status' => $status,
         'body' => (string) $response,
+        'curl_errno' => $curlErrno,
+        'curl_error' => $curlError,
     ];
 }
 
@@ -2232,19 +2269,36 @@ function lineFetchGroupSummary(PDO $pdo, string $groupId): ?array
     }
 
     $ch = curl_init('https://api.line.me/v2/bot/group/' . rawurlencode($groupId) . '/summary');
-    curl_setopt_array($ch, [
+    $curlOptions = [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_HTTPHEADER => [
             'Authorization: Bearer ' . $accessToken,
         ],
         CURLOPT_TIMEOUT => 15,
-    ]);
+        CURLOPT_SSL_VERIFYPEER => true,
+        CURLOPT_SSL_VERIFYHOST => 2,
+    ];
+
+    $caBundle = lineResolveCaBundlePath();
+    if ($caBundle !== null) {
+        $curlOptions[CURLOPT_CAINFO] = $caBundle;
+    }
+
+    curl_setopt_array($ch, $curlOptions);
 
     $response = curl_exec($ch);
     $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlErrno = curl_errno($ch);
+    $curlError = curl_error($ch);
     curl_close($ch);
 
     if ($response === false || $status < 200 || $status >= 300) {
+        lineLog(
+            'LINE group summary failed for ' . $groupId .
+            ' status=' . $status .
+            ' errno=' . $curlErrno .
+            ' body=' . lineCompactErrorDetail((string) ($response === false ? $curlError : $response))
+        );
         return null;
     }
 
