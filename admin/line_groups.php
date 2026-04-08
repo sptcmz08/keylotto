@@ -340,6 +340,7 @@ $msgType = is_array($flash) ? (string) ($flash['type'] ?? 'success') : 'success'
 
 $groups = $pdo->query("SELECT * FROM line_groups ORDER BY is_active DESC, last_seen_at DESC, id DESC")->fetchAll();
 $recentLogs = $pdo->query("SELECT * FROM line_message_logs ORDER BY id DESC LIMIT 20")->fetchAll();
+$messageLogSummary = lineMessageLogSummary($pdo);
 $recentResults = $pdo->query("
     SELECT r.id, r.lottery_type_id, r.draw_date, r.three_top, r.two_top, r.two_bot, r.updated_at,
            lt.name AS lottery_name, lc.name AS category_name
@@ -1042,6 +1043,31 @@ require_once 'includes/header.php';
                     <div class="text-xs text-gray-500 mb-1">ช่วงเผื่อเวลา</div>
                     <div class="text-sm font-semibold text-gray-800"><?= (int) $betCloseDiagnostics['grace_minutes'] ?> นาที</div>
                     <div class="text-xs text-gray-500 mt-1">cron มาช้า ระบบยังตามส่งในช่วงนี้</div>
+                </div>
+                <div class="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+                    <div class="text-xs text-emerald-700">à¸ªà¹ˆà¸‡à¸ªà¸³à¹€à¸£à¹‡à¸ˆà¸—à¸±à¹‰à¸‡à¸«à¸¡à¸”</div>
+                    <div class="mt-1 text-2xl font-bold text-emerald-700"><?= number_format($messageLogSummary['total_success']) ?></div>
+                    <div class="mt-1 text-xs text-emerald-700">à¸à¸¥à¸¸à¹ˆà¸¡à¸—à¸µà¹ˆà¹€à¸„à¸¢à¸£à¸±à¸šà¸ªà¸³à¹€à¸£à¹‡à¸ˆ <?= number_format($messageLogSummary['success_groups']) ?></div>
+                </div>
+                <div class="rounded-lg border border-red-200 bg-red-50 p-3">
+                    <div class="text-xs text-red-700">failed à¸—à¸±à¹‰à¸‡à¸«à¸¡à¸”</div>
+                    <div class="mt-1 text-2xl font-bold text-red-700"><?= number_format($messageLogSummary['total_failed']) ?></div>
+                    <div class="mt-1 text-xs text-red-700">log à¸—à¸±à¹‰à¸‡à¸«à¸¡à¸” <?= number_format($messageLogSummary['total_logs']) ?></div>
+                </div>
+                <div class="rounded-lg border border-cyan-200 bg-cyan-50 p-3">
+                    <div class="text-xs text-cyan-700">à¸ªà¹ˆà¸‡à¸ªà¸³à¹€à¸£à¹‡à¸ˆà¸§à¸±à¸™à¸™à¸µà¹‰</div>
+                    <div class="mt-1 text-2xl font-bold text-cyan-700"><?= number_format($messageLogSummary['success_today']) ?></div>
+                    <div class="mt-1 text-xs text-cyan-700"><?= htmlspecialchars($messageLogSummary['today_label']) ?></div>
+                </div>
+                <div class="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                    <div class="text-xs text-amber-700">à¸ªà¹ˆà¸‡à¸ªà¸³à¹€à¸£à¹‡à¸ˆà¹€à¸”à¸·à¸­à¸™à¸™à¸µà¹‰</div>
+                    <div class="mt-1 text-2xl font-bold text-amber-700"><?= number_format($messageLogSummary['success_month']) ?></div>
+                    <div class="mt-1 text-xs text-amber-700"><?= htmlspecialchars($messageLogSummary['month_label']) ?></div>
+                </div>
+                <div class="rounded-lg border border-rose-200 bg-rose-50 p-3">
+                    <div class="text-xs text-rose-700">failed à¸§à¸±à¸™à¸™à¸µà¹‰ / à¹€à¸”à¸·à¸­à¸™à¸™à¸µà¹‰</div>
+                    <div class="mt-1 text-lg font-bold text-rose-700"><?= number_format($messageLogSummary['failed_today']) ?> / <?= number_format($messageLogSummary['failed_month']) ?></div>
+                    <div class="mt-1 text-xs text-rose-700">today / month</div>
                 </div>
             </div>
         </div>

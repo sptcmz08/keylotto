@@ -193,6 +193,55 @@ function lineSetSetting(PDO $pdo, string $key, string $value): void
     $stmt->execute([$key, $value]);
 }
 
+function lineMessageLogSummary(PDO $pdo, ?DateTimeImmutable $now = null): array
+{
+    ensureLineTables($pdo);
+
+    $now = $now ?: new DateTimeImmutable('now', new DateTimeZone('Asia/Bangkok'));
+    $todayStart = $now->setTime(0, 0, 0);
+    $tomorrowStart = $todayStart->modify('+1 day');
+    $monthStart = $todayStart->modify('first day of this month');
+    $nextMonthStart = $monthStart->modify('+1 month');
+
+    $stmt = $pdo->prepare("
+        SELECT
+            COUNT(*) AS total_logs,
+            SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS total_success,
+            SUM(CASE WHEN status <> 'success' THEN 1 ELSE 0 END) AS total_failed,
+            SUM(CASE WHEN status = 'success' AND created_at >= ? AND created_at < ? THEN 1 ELSE 0 END) AS success_today,
+            SUM(CASE WHEN status <> 'success' AND created_at >= ? AND created_at < ? THEN 1 ELSE 0 END) AS failed_today,
+            SUM(CASE WHEN status = 'success' AND created_at >= ? AND created_at < ? THEN 1 ELSE 0 END) AS success_month,
+            SUM(CASE WHEN status <> 'success' AND created_at >= ? AND created_at < ? THEN 1 ELSE 0 END) AS failed_month,
+            COUNT(DISTINCT CASE WHEN status = 'success' THEN group_id END) AS success_groups
+        FROM line_message_logs
+    ");
+    $stmt->execute([
+        $todayStart->format('Y-m-d H:i:s'),
+        $tomorrowStart->format('Y-m-d H:i:s'),
+        $todayStart->format('Y-m-d H:i:s'),
+        $tomorrowStart->format('Y-m-d H:i:s'),
+        $monthStart->format('Y-m-d H:i:s'),
+        $nextMonthStart->format('Y-m-d H:i:s'),
+        $monthStart->format('Y-m-d H:i:s'),
+        $nextMonthStart->format('Y-m-d H:i:s'),
+    ]);
+
+    $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+
+    return [
+        'total_logs' => (int) ($row['total_logs'] ?? 0),
+        'total_success' => (int) ($row['total_success'] ?? 0),
+        'total_failed' => (int) ($row['total_failed'] ?? 0),
+        'success_today' => (int) ($row['success_today'] ?? 0),
+        'failed_today' => (int) ($row['failed_today'] ?? 0),
+        'success_month' => (int) ($row['success_month'] ?? 0),
+        'failed_month' => (int) ($row['failed_month'] ?? 0),
+        'success_groups' => (int) ($row['success_groups'] ?? 0),
+        'today_label' => $todayStart->format('Y-m-d'),
+        'month_label' => $monthStart->format('Y-m'),
+    ];
+}
+
 function lineResolvedChannelSecret(PDO $pdo): string
 {
     $dbValue = lineGetSetting($pdo, 'channel_secret', '');
