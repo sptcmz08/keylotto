@@ -2408,6 +2408,18 @@ function linePushViaPython(PDO $pdo, string $to, array $messages): array
 {
     $apiUrl = lineResolvedPersonalApiUrl($pdo);
     $messages = array_values(lineNormalizePayloadStrings($messages));
+    $groupName = '';
+
+    try {
+        $stmt = $pdo->prepare("SELECT group_name FROM line_groups WHERE group_id = ? LIMIT 1");
+        $stmt->execute([$to]);
+        $dbGroupName = $stmt->fetchColumn();
+        if (is_string($dbGroupName)) {
+            $groupName = trim($dbGroupName);
+        }
+    } catch (Throwable $e) {
+        // Best-effort only; automation mode can still work when the name is supplied elsewhere.
+    }
     
     // ดึงข้อความ text จาก messages array
     if (empty($messages)) {
@@ -2420,6 +2432,7 @@ function linePushViaPython(PDO $pdo, string $to, array $messages): array
     
     $payload = json_encode([
         'group_id' => $to,
+        'group_name' => $groupName,
         'messages' => $messages,
     ], JSON_UNESCAPED_UNICODE);
     

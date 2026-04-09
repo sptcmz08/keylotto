@@ -43,12 +43,14 @@ app.add_middleware(
 
 class SendMessageRequest(BaseModel):
     group_id: str
+    group_name: Optional[str] = None
     message: Optional[str] = None
     messages: Optional[List[Dict[str, Any]]] = None
 
 
 class SendLottoRequest(BaseModel):
     group_id: str
+    group_name: Optional[str] = None
     lottery_type: str
     result: str
     time: str
@@ -129,7 +131,7 @@ def send_message(request: SendMessageRequest) -> Dict[str, Any]:
             raise HTTPException(status_code=400, detail="message or messages is required")
         payload_messages = [{"type": "text", "text": text}]
 
-    result = line_client.send_messages(request.group_id, payload_messages)
+    result = line_client.send_messages(request.group_id, payload_messages, group_name=request.group_name)
     if not result["success"]:
         raise HTTPException(status_code=400, detail=result.get("error", "Unknown error"))
     return result
@@ -142,7 +144,11 @@ def send_lotto(request: SendLottoRequest) -> Dict[str, Any]:
     flag = "VN" if any(x in request.lottery_type for x in ["ฮานอย", "ฮานอย", "VIP"]) else "LA" if "ลาว" in request.lottery_type else "TH"
     message = f"{flag} {request.lottery_type} {flag}\nเวลา {request.time} น.\n\n{request.result}"
 
-    result = line_client.send_messages(request.group_id, [{"type": "text", "text": message}])
+    result = line_client.send_messages(
+        request.group_id,
+        [{"type": "text", "text": message}],
+        group_name=request.group_name,
+    )
     if not result["success"]:
         raise HTTPException(status_code=400, detail=result.get("error", "Unknown error"))
 
@@ -238,6 +244,13 @@ def login_session(request: SessionLoginRequest) -> Dict[str, Any]:
 
 @app.post("/login/qr")
 def login_qr() -> Dict[str, Any]:
+    if Config.LINE_SEND_MODE == "automation":
+        return {
+            "success": False,
+            "message": "Automation mode does not use QR login. Run the Windows worker and configure AUTOMATION_WORKER_URL instead.",
+            "send_mode": Config.LINE_SEND_MODE,
+            "session_file": str(Config.SESSION_FILE),
+        }
     return {
         "success": False,
         "message": "Run `python chrline_qr_login.py` on the host to log in with QR and save the auth token. `python linepy_qr_login.py` still works and chooses CHRLINE unless LINE_SEND_MODE=linepy.",

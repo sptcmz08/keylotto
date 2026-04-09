@@ -3,6 +3,7 @@ node_modules/
 
 # Environment
 .venv/
+line-personal-bot/venv*/
 .env
 line/credentials.php
 line/generated/*.png

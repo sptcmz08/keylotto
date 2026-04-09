@@ -40,6 +40,7 @@ chown -R www-data:www-data /var/log/line-bot
 - สามารถบันทึก session token ชั่วคราวผ่าน endpoint `POST /login/session`
 - ถ้าต้องการส่งจริงผ่าน LINE Personal แนะนำให้ใช้ `CHRLINE`, ตั้ง `LINE_SEND_MODE=chrline`, แล้ว login ด้วย `python chrline_qr_login.py`
 - ไฟล์ `python linepy_qr_login.py` ยังใช้ได้อยู่ แต่จะเลือก CHRLINE ให้อัตโนมัติถ้าไม่ได้ตั้ง `LINE_SEND_MODE=linepy`
+- ถ้า QR/token login ถูก LINE ปฏิเสธแล้ว ให้ใช้โหมด `LINE_SEND_MODE=automation` และดูขั้นตอนใน `AUTOMATION_WORKER.md`
 
 ### รันโดยตรง (สำหรับทดสอบ)
 ```bash

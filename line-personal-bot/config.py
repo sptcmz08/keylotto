@@ -36,12 +36,35 @@ class Config:
     CHRLINE_OS_VERSION = os.getenv("CHRLINE_OS_VERSION", "").strip() or None
     CHRLINE_QR_MODE = os.getenv("CHRLINE_QR_MODE", "auto").strip().lower() or "auto"
     CHRLINE_DEBUG = os.getenv("CHRLINE_DEBUG", "false").lower() == "true"
+    AUTOMATION_WORKER_URL = os.getenv("AUTOMATION_WORKER_URL", "").strip().rstrip("/")
+    AUTOMATION_WORKER_TOKEN = os.getenv("AUTOMATION_WORKER_TOKEN", "").strip()
+    AUTOMATION_WORKER_TIMEOUT = int(os.getenv("AUTOMATION_WORKER_TIMEOUT", "60"))
+    AUTOMATION_VERIFY_SSL = os.getenv("AUTOMATION_VERIFY_SSL", "false").lower() == "true"
 
     # Filesystem
     SESSION_FILE = Path(os.getenv("SESSION_FILE", str(DATA_DIR / "line_session.pkl"))).expanduser()
     SETTINGS_FILE = Path(os.getenv("SETTINGS_FILE", str(BASE_DIR / "settings.json"))).expanduser()
     LOG_FILE = Path(os.getenv("LOG_FILE", str(DATA_DIR / "logs" / "app.log"))).expanduser()
     CHRLINE_SAVE_PATH = Path(os.getenv("CHRLINE_SAVE_PATH", str(DATA_DIR / "chrline"))).expanduser()
+    AUTOMATION_TEMP_DIR = Path(os.getenv("AUTOMATION_TEMP_DIR", str(DATA_DIR / "automation"))).expanduser()
+
+    # Windows worker settings
+    WORKER_HOST = os.getenv("WORKER_HOST", "127.0.0.1")
+    WORKER_PORT = int(os.getenv("WORKER_PORT", "5001"))
+    WORKER_API_TOKEN = os.getenv("WORKER_API_TOKEN", "").strip()
+    WORKER_LINE_WINDOW_TITLE_REGEX = os.getenv("WORKER_LINE_WINDOW_TITLE_REGEX", ".*LINE.*").strip()
+    WORKER_SEARCH_BOX_X = int(os.getenv("WORKER_SEARCH_BOX_X", "0"))
+    WORKER_SEARCH_BOX_Y = int(os.getenv("WORKER_SEARCH_BOX_Y", "0"))
+    WORKER_MESSAGE_BOX_X = int(os.getenv("WORKER_MESSAGE_BOX_X", "0"))
+    WORKER_MESSAGE_BOX_Y = int(os.getenv("WORKER_MESSAGE_BOX_Y", "0"))
+    WORKER_ATTACH_BUTTON_X = int(os.getenv("WORKER_ATTACH_BUTTON_X", "0"))
+    WORKER_ATTACH_BUTTON_Y = int(os.getenv("WORKER_ATTACH_BUTTON_Y", "0"))
+    WORKER_AFTER_FOCUS_DELAY = float(os.getenv("WORKER_AFTER_FOCUS_DELAY", "0.6"))
+    WORKER_AFTER_SEARCH_DELAY = float(os.getenv("WORKER_AFTER_SEARCH_DELAY", "1.0"))
+    WORKER_AFTER_OPEN_CHAT_DELAY = float(os.getenv("WORKER_AFTER_OPEN_CHAT_DELAY", "0.8"))
+    WORKER_AFTER_TEXT_DELAY = float(os.getenv("WORKER_AFTER_TEXT_DELAY", "0.3"))
+    WORKER_AFTER_ATTACH_DELAY = float(os.getenv("WORKER_AFTER_ATTACH_DELAY", "1.2"))
+    WORKER_AFTER_IMAGE_SEND_DELAY = float(os.getenv("WORKER_AFTER_IMAGE_SEND_DELAY", "1.2"))
 
     # Logging
     LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -59,6 +82,7 @@ class Config:
             cls.SETTINGS_FILE.parent,
             cls.LOG_FILE.parent,
             cls.CHRLINE_SAVE_PATH,
+            cls.AUTOMATION_TEMP_DIR,
         ):
             path.mkdir(parents=True, exist_ok=True)
 
