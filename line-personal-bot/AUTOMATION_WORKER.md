@@ -71,7 +71,33 @@ Invoke-RestMethod http://127.0.0.1:5001/status -Headers @{ "X-Worker-Token" = "c
 
 ถ้า `ready=true` แปลว่า worker พร้อมรับงานแล้ว
 
-## 5. ทดสอบจาก VPS
+## 5. ให้ VPS เรียก Windows ได้จริง
+
+ถ้า VPS อยู่นอกบ้านหรือคนละเครือข่ายกับ Windows เครื่องนี้ ค่า `192.168.x.x` จะใช้จาก VPS ไม่ได้
+
+แนะนำให้ใช้ reverse SSH tunnel จาก Windows กลับไปหา VPS:
+
+```powershell
+cd D:\key_lotto\line-personal-bot
+.\start_worker_tunnel.ps1 -ServerHost YOUR_VPS_IP -ServerUser root
+```
+
+เมื่อ tunnel ติดแล้ว ให้ฝั่ง VPS ตั้งค่า `.env` แบบนี้:
+
+```env
+LINE_SEND_MODE=automation
+AUTOMATION_WORKER_URL=http://127.0.0.1:5001
+AUTOMATION_WORKER_TOKEN=change-me
+AUTOMATION_WORKER_TIMEOUT=60
+AUTOMATION_VERIFY_SSL=false
+```
+
+แนวคิดคือ:
+- Windows worker ยังรันอยู่ที่ `127.0.0.1:5001` บนเครื่องคุณ
+- คำสั่ง `ssh -R` จะเปิดพอร์ต `127.0.0.1:5001` บน VPS แล้วส่งต่อกลับมา Windows
+- ดังนั้น Python API บน VPS จะเรียก worker ผ่าน `localhost` ได้เลย
+
+## 6. ทดสอบจาก VPS
 
 ```bash
 curl http://127.0.0.1:5000/status
