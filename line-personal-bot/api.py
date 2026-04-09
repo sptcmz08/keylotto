@@ -240,7 +240,7 @@ def login_session(request: SessionLoginRequest) -> Dict[str, Any]:
 def login_qr() -> Dict[str, Any]:
     return {
         "success": False,
-        "message": "Run `python linepy_qr_login.py` on the host to log in with QR and save the auth token.",
+        "message": "Run `python chrline_qr_login.py` on the host to log in with QR and save the auth token. `python linepy_qr_login.py` still works and chooses CHRLINE unless LINE_SEND_MODE=linepy.",
         "send_mode": Config.LINE_SEND_MODE,
         "session_file": str(Config.SESSION_FILE),
     }

@@ -1,11 +1,14 @@
 """Runtime LINE personal client used by the API layer."""
 
 import logging
+import mimetypes
 import pickle
+import tempfile
 import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlparse
 
 from config import Config
 
@@ -24,6 +27,8 @@ class LinePersonalClient:
         self.send_mode = Config.LINE_SEND_MODE
         self._linepy_client = None
         self._linepy_auth_token: Optional[str] = None
+        self._chrline_client = None
+        self._chrline_auth_token: Optional[str] = None
 
         self._load_session()
 
@@ -77,6 +82,8 @@ class LinePersonalClient:
             "last_error": self.last_error,
             "has_auth_token": bool(self.auth_token),
             "transport_ready": self._transport_ready(),
+            "chrline_device": Config.CHRLINE_DEVICE,
+            "chrline_save_path": str(Config.CHRLINE_SAVE_PATH),
         }
 
     def set_session(self, auth_token: str, save: bool = True) -> Dict[str, Any]:
@@ -88,8 +95,7 @@ class LinePersonalClient:
         self.is_logged_in = True
         self.last_login_at = datetime.now().isoformat()
         self.last_error = None
-        self._linepy_client = None
-        self._linepy_auth_token = None
+        self._reset_clients()
 
         if save and not self._save_session():
             return {"success": False, "error": self.last_error or "Failed to save session"}
@@ -161,7 +167,7 @@ class LinePersonalClient:
             text = str(message.get("text", "")).strip()
             if text == "":
                 return {"success": False, "error": "text message is empty", "mode": self.send_mode}
-            return self._send_via_internal_api(group_id, text)
+            return self._send_text_via_transport(group_id, text)
 
         if message_type == "image":
             image_url = str(message.get("originalContentUrl") or message.get("previewImageUrl") or "").strip()
@@ -171,7 +177,7 @@ class LinePersonalClient:
 
         return {"success": False, "error": f"Unsupported message type: {message_type}", "mode": self.send_mode}
 
-    def _send_via_internal_api(self, group_id: str, message: str) -> Dict[str, Any]:
+    def _send_text_via_transport(self, group_id: str, message: str) -> Dict[str, Any]:
         if self.send_mode == "mock":
             logger.info("[MOCK] Would send to group %s: %s", group_id, message[:120])
             return {
@@ -182,12 +188,15 @@ class LinePersonalClient:
                 "timestamp": datetime.now().isoformat(),
             }
 
+        if self.send_mode == "chrline":
+            return self._send_text_via_chrline(group_id, message)
+
         if self.send_mode == "linepy":
             return self._send_text_via_linepy(group_id, message)
 
         return {
             "success": False,
-            "error": "LINE personal transport is not implemented. Use LINE_SEND_MODE=mock for testing or LINE_SEND_MODE=linepy for real sending.",
+            "error": "LINE personal transport is not implemented. Use LINE_SEND_MODE=mock for testing, CHRLINE for current QR login, or linepy only for legacy compatibility.",
             "mode": self.send_mode,
         }
 
@@ -203,6 +212,9 @@ class LinePersonalClient:
                 "timestamp": datetime.now().isoformat(),
             }
 
+        if self.send_mode == "chrline":
+            return self._send_image_via_chrline(group_id, image_url)
+
         if self.send_mode == "linepy":
             return self._send_image_via_linepy(group_id, image_url)
 
@@ -215,9 +227,15 @@ class LinePersonalClient:
     def _transport_ready(self) -> bool:
         if self.send_mode == "mock":
             return True
-        if self.send_mode == "linepy":
+        if self.send_mode in {"chrline", "linepy"}:
             return bool(self.auth_token)
         return False
+
+    def _reset_clients(self) -> None:
+        self._linepy_client = None
+        self._linepy_auth_token = None
+        self._chrline_client = None
+        self._chrline_auth_token = None
 
     def _get_linepy_client(self):
         if self._linepy_client is not None and self._linepy_auth_token == self.auth_token:
@@ -240,6 +258,38 @@ class LinePersonalClient:
         client = LINE(**kwargs)
         self._linepy_client = client
         self._linepy_auth_token = self.auth_token
+        return client
+
+    def _get_chrline_client(self):
+        if self._chrline_client is not None and self._chrline_auth_token == self.auth_token:
+            return self._chrline_client
+
+        if not self.auth_token:
+            raise RuntimeError("Missing auth token for CHRLINE transport")
+
+        try:
+            from CHRLINE import CHRLINE
+        except ImportError as exc:
+            raise RuntimeError(
+                "CHRLINE is not installed. Run `pip install -r requirements.txt` in line-personal-bot first."
+            ) from exc
+
+        kwargs: Dict[str, Any] = {
+            "authTokenOrEmail": self.auth_token,
+            "device": Config.CHRLINE_DEVICE,
+            "savePath": str(Config.CHRLINE_SAVE_PATH),
+            "debug": Config.CHRLINE_DEBUG,
+        }
+        if Config.CHRLINE_VERSION:
+            kwargs["version"] = Config.CHRLINE_VERSION
+        if Config.CHRLINE_OS_NAME:
+            kwargs["os_name"] = Config.CHRLINE_OS_NAME
+        if Config.CHRLINE_OS_VERSION:
+            kwargs["os_version"] = Config.CHRLINE_OS_VERSION
+
+        client = CHRLINE(**kwargs)
+        self._chrline_client = client
+        self._chrline_auth_token = self.auth_token
         return client
 
     def _send_text_via_linepy(self, group_id: str, message: str) -> Dict[str, Any]:
@@ -288,9 +338,91 @@ class LinePersonalClient:
                 "image_url": image_url,
             }
 
+    def _send_text_via_chrline(self, group_id: str, message: str) -> Dict[str, Any]:
+        try:
+            client = self._get_chrline_client()
+            response = client.sendMessage(group_id, message)
+            message_id = self._extract_chrline_message_id(response)
+            return {
+                "success": True,
+                "message_id": message_id,
+                "to": group_id,
+                "mode": "chrline",
+                "type": "text",
+                "timestamp": datetime.now().isoformat(),
+            }
+        except Exception as exc:
+            self._chrline_client = None
+            self._chrline_auth_token = None
+            return {
+                "success": False,
+                "error": f"CHRLINE send failed: {exc}",
+                "mode": "chrline",
+                "type": "text",
+            }
+
+    def _send_image_via_chrline(self, group_id: str, image_url: str) -> Dict[str, Any]:
+        temp_path: Optional[Path] = None
+        try:
+            client = self._get_chrline_client()
+            temp_path = self._download_image_for_chrline(image_url)
+            response = client.sendImage(group_id, str(temp_path))
+            return {
+                "success": True,
+                "message_id": self._extract_chrline_message_id(response),
+                "mode": "chrline",
+                "type": "image",
+                "image_url": image_url,
+                "timestamp": datetime.now().isoformat(),
+            }
+        except Exception as exc:
+            self._chrline_client = None
+            self._chrline_auth_token = None
+            return {
+                "success": False,
+                "error": f"CHRLINE image send failed: {exc}",
+                "mode": "chrline",
+                "type": "image",
+                "image_url": image_url,
+            }
+        finally:
+            if temp_path and temp_path.exists():
+                try:
+                    temp_path.unlink()
+                except OSError:
+                    logger.debug("Could not remove temp image %s", temp_path)
+
+    def _download_image_for_chrline(self, image_url: str) -> Path:
+        import requests
+
+        Config.ensure_directories()
+        response = requests.get(image_url, timeout=30)
+        response.raise_for_status()
+
+        content_type = response.headers.get("Content-Type", "").split(";")[0].strip().lower()
+        suffix = mimetypes.guess_extension(content_type) or Path(urlparse(image_url).path).suffix or ".jpg"
+        if len(suffix) > 10:
+            suffix = ".jpg"
+
+        temp_file = tempfile.NamedTemporaryFile(
+            prefix="line-personal-",
+            suffix=suffix,
+            dir=Config.CHRLINE_SAVE_PATH,
+            delete=False,
+        )
+        temp_path = Path(temp_file.name)
+        try:
+            temp_file.write(response.content)
+        finally:
+            temp_file.close()
+        return temp_path
+
     def get_group_summary(self, group_id: str) -> Optional[Dict[str, Any]]:
         if not self.check_login_status():
             return None
+
+        if self.send_mode == "chrline":
+            return self._get_group_summary_chrline(group_id)
 
         try:
             client = self._get_linepy_client()
@@ -300,7 +432,30 @@ class LinePersonalClient:
             return {
                 "id": group_id,
                 "name": name,
+                "groupName": name,
                 "picture_status": picture_status,
+            }
+        except Exception as exc:
+            self.last_error = f"group summary failed: {exc}"
+            logger.warning(self.last_error)
+            return None
+
+    def _get_group_summary_chrline(self, group_id: str) -> Optional[Dict[str, Any]]:
+        try:
+            client = self._get_chrline_client()
+            response = client.getChats([group_id], withMembers=False, withInvitees=False)
+            chat = self._extract_first_chat(response)
+            if chat is None:
+                return None
+
+            name = self._pick_value(chat, "chatName", "name") or ""
+            picture_status = self._pick_value(chat, "pictureStatus", "pictureStatusValue", "picturePath") or ""
+            mid = self._pick_value(chat, "chatMid", "mid") or group_id
+            return {
+                "id": str(mid),
+                "name": str(name),
+                "groupName": str(name),
+                "picture_status": str(picture_status),
             }
         except Exception as exc:
             self.last_error = f"group summary failed: {exc}"
@@ -310,6 +465,9 @@ class LinePersonalClient:
     def get_joined_groups(self) -> List[Dict[str, Any]]:
         if not self.check_login_status():
             return []
+
+        if self.send_mode == "chrline":
+            return self._get_joined_groups_chrline()
 
         try:
             client = self._get_linepy_client()
@@ -322,8 +480,47 @@ class LinePersonalClient:
         groups: List[Dict[str, Any]] = []
         for group_id in group_ids:
             summary = self.get_group_summary(str(group_id))
-            groups.append(summary or {"id": str(group_id), "name": "", "picture_status": ""})
+            groups.append(summary or {"id": str(group_id), "name": "", "groupName": "", "picture_status": ""})
         return groups
+
+    def _get_joined_groups_chrline(self) -> List[Dict[str, Any]]:
+        try:
+            client = self._get_chrline_client()
+            mids_response = client.getAllChatMids()
+            group_ids = self._extract_chat_mids(mids_response)
+            if not group_ids:
+                return []
+
+            chats_response = client.getChats(group_ids, withMembers=False, withInvitees=False)
+            chats = self._extract_chat_list(chats_response)
+            if not chats:
+                return [{"id": group_id, "name": "", "groupName": "", "picture_status": ""} for group_id in group_ids]
+
+            groups: List[Dict[str, Any]] = []
+            for chat in chats:
+                mid = self._pick_value(chat, "chatMid", "mid")
+                name = self._pick_value(chat, "chatName", "name") or ""
+                picture_status = self._pick_value(chat, "pictureStatus", "pictureStatusValue", "picturePath") or ""
+                if not mid:
+                    continue
+                groups.append(
+                    {
+                        "id": str(mid),
+                        "name": str(name),
+                        "groupName": str(name),
+                        "picture_status": str(picture_status),
+                    }
+                )
+
+            seen_ids = {group["id"] for group in groups}
+            for group_id in group_ids:
+                if group_id not in seen_ids:
+                    groups.append({"id": group_id, "name": "", "groupName": "", "picture_status": ""})
+            return groups
+        except Exception as exc:
+            self.last_error = f"list joined groups failed: {exc}"
+            logger.warning(self.last_error)
+            return []
 
     def send_to_multiple_groups(self, group_ids: List[str], message: str) -> Dict[str, Any]:
         results = {"success": True, "sent_count": 0, "failed_count": 0, "details": []}
@@ -354,8 +551,7 @@ class LinePersonalClient:
             self.auth_token = None
             self.last_login_at = None
             self.last_error = None
-            self._linepy_client = None
-            self._linepy_auth_token = None
+            self._reset_clients()
 
             if self.session_file.exists():
                 self.session_file.unlink()
@@ -366,6 +562,63 @@ class LinePersonalClient:
             self.last_error = f"Error during logout: {exc}"
             logger.error(self.last_error)
             return False
+
+    def _extract_chrline_message_id(self, response: Any) -> Optional[str]:
+        return self._pick_value(response, "id", "_id", "messageId")
+
+    def _extract_chat_mids(self, response: Any) -> List[str]:
+        for key in ("memberChatMids", "chatMids", "mids"):
+            value = self._pick_value(response, key)
+            if isinstance(value, list):
+                return [str(item) for item in value if item]
+        if isinstance(response, list):
+            return [str(item) for item in response if isinstance(item, str)]
+        return []
+
+    def _extract_first_chat(self, response: Any) -> Optional[Any]:
+        chats = self._extract_chat_list(response)
+        return chats[0] if chats else None
+
+    def _extract_chat_list(self, response: Any) -> List[Any]:
+        for key in ("chats", "memberChats", "chatList"):
+            value = self._pick_value(response, key)
+            if isinstance(value, list):
+                return value
+        if isinstance(response, list):
+            return response
+        return []
+
+    def _pick_value(self, value: Any, *keys: str) -> Any:
+        candidates: List[Any] = [value]
+        visited: set[int] = set()
+
+        while candidates:
+            current = candidates.pop(0)
+            marker = id(current)
+            if marker in visited:
+                continue
+            visited.add(marker)
+
+            if isinstance(current, dict):
+                for key in keys:
+                    if key in current and current[key] not in (None, ""):
+                        return current[key]
+                candidates.extend(v for v in current.values() if isinstance(v, (dict, list, tuple)))
+                continue
+
+            for key in keys:
+                attr = getattr(current, key, None)
+                if attr not in (None, ""):
+                    return attr
+
+            if isinstance(current, (list, tuple)):
+                candidates.extend(item for item in current if isinstance(item, (dict, list, tuple)) or hasattr(item, "__dict__"))
+                continue
+
+            if hasattr(current, "__dict__"):
+                candidates.append(vars(current))
+
+        return None
 
 
 line_client = LinePersonalClient()

@@ -38,7 +38,8 @@ chown -R www-data:www-data /var/log/line-bot
 - ค่าปริยายของ `LINE_SEND_MODE` คือ `disabled` เพื่อไม่ให้ระบบตอบว่าส่งสำเร็จทั้งที่ยังไม่มี transport จริง
 - ถ้าต้องการทดสอบ integration กับ PHP โดยยังไม่ส่งจริง ให้ตั้ง `LINE_SEND_MODE=mock`
 - สามารถบันทึก session token ชั่วคราวผ่าน endpoint `POST /login/session`
-- ถ้าต้องการส่งจริงผ่าน LINE Personal ให้ติดตั้ง `linepy`, ตั้ง `LINE_SEND_MODE=linepy`, แล้ว login ด้วย `python linepy_qr_login.py`
+- ถ้าต้องการส่งจริงผ่าน LINE Personal แนะนำให้ใช้ `CHRLINE`, ตั้ง `LINE_SEND_MODE=chrline`, แล้ว login ด้วย `python chrline_qr_login.py`
+- ไฟล์ `python linepy_qr_login.py` ยังใช้ได้อยู่ แต่จะเลือก CHRLINE ให้อัตโนมัติถ้าไม่ได้ตั้ง `LINE_SEND_MODE=linepy`
 
 ### รันโดยตรง (สำหรับทดสอบ)
 ```bash
@@ -95,7 +96,7 @@ sudo supervisorctl status line-personal-bot
 | `/logout` | POST | ออกจากระบบ |
 | `/health` | GET | Health check |
 
-## การส่งจริงด้วย linepy
+## การส่งจริงด้วย CHRLINE
 
 1. ติดตั้ง dependencies
 ```bash
@@ -105,12 +106,14 @@ pip install -r requirements.txt
 2. ตั้งค่า `.env`
 ```env
 LINE_PERSONAL_ENABLED=true
-LINE_SEND_MODE=linepy
+LINE_SEND_MODE=chrline
+CHRLINE_DEVICE=DESKTOPWIN
+CHRLINE_QR_MODE=auto
 ```
 
 3. Login ด้วย QR แล้วบันทึก auth token/session
 ```bash
-python linepy_qr_login.py
+python chrline_qr_login.py
 ```
 
 4. ตรวจสอบสถานะ
@@ -118,7 +121,7 @@ python linepy_qr_login.py
 curl http://localhost:5000/status
 ```
 
-ถ้า `logged_in=true` และ `send_mode=linepy` ระบบจะพร้อมส่งข้อความจริงผ่าน LINE Personal
+ถ้า `logged_in=true` และ `send_mode=chrline` ระบบจะพร้อมส่งข้อความจริงผ่าน LINE Personal
 
 ## การเชื่อมต่อกับ PHP
 
@@ -158,7 +161,9 @@ API_PORT=5000
 
 # LINE Personal
 LINE_PERSONAL_ENABLED=true
-LINE_SEND_MODE=linepy
+LINE_SEND_MODE=chrline
+CHRLINE_DEVICE=DESKTOPWIN
+CHRLINE_QR_MODE=auto
 
 # CORS - ใส่ domain ของคุณ
 ALLOWED_ORIGINS=https://imzshop97.com,http://imzshop97.com

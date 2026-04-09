@@ -30,11 +30,18 @@ class Config:
     LINE_SEND_MODE = os.getenv("LINE_SEND_MODE", "disabled").strip().lower()
     LINEPY_APP_NAME = os.getenv("LINEPY_APP_NAME", "").strip() or None
     LINEPY_SYSTEM_NAME = os.getenv("LINEPY_SYSTEM_NAME", "KEYLOTTO").strip()
+    CHRLINE_DEVICE = os.getenv("CHRLINE_DEVICE", "DESKTOPWIN").strip() or "DESKTOPWIN"
+    CHRLINE_VERSION = os.getenv("CHRLINE_VERSION", "").strip() or None
+    CHRLINE_OS_NAME = os.getenv("CHRLINE_OS_NAME", "").strip() or None
+    CHRLINE_OS_VERSION = os.getenv("CHRLINE_OS_VERSION", "").strip() or None
+    CHRLINE_QR_MODE = os.getenv("CHRLINE_QR_MODE", "auto").strip().lower() or "auto"
+    CHRLINE_DEBUG = os.getenv("CHRLINE_DEBUG", "false").lower() == "true"
 
     # Filesystem
     SESSION_FILE = Path(os.getenv("SESSION_FILE", str(DATA_DIR / "line_session.pkl"))).expanduser()
     SETTINGS_FILE = Path(os.getenv("SETTINGS_FILE", str(BASE_DIR / "settings.json"))).expanduser()
     LOG_FILE = Path(os.getenv("LOG_FILE", str(DATA_DIR / "logs" / "app.log"))).expanduser()
+    CHRLINE_SAVE_PATH = Path(os.getenv("CHRLINE_SAVE_PATH", str(DATA_DIR / "chrline"))).expanduser()
 
     # Logging
     LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -46,7 +53,13 @@ class Config:
     @classmethod
     def ensure_directories(cls) -> None:
         """Create directories for configured files when needed."""
-        for path in (cls.DATA_DIR, cls.SESSION_FILE.parent, cls.SETTINGS_FILE.parent, cls.LOG_FILE.parent):
+        for path in (
+            cls.DATA_DIR,
+            cls.SESSION_FILE.parent,
+            cls.SETTINGS_FILE.parent,
+            cls.LOG_FILE.parent,
+            cls.CHRLINE_SAVE_PATH,
+        ):
             path.mkdir(parents=True, exist_ok=True)
 
     @classmethod
