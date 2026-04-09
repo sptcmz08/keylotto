@@ -4,74 +4,107 @@ LINE Personal Account Client
 
 หมายเหตุ: ใช้ Chrome Protocol หรือ Automation เนื่องจากไม่มี official API สำหรับ Personal Account
 """
+import logging
 import os
 import pickle
 import time
-import json
-import logging
 from datetime import datetime
-from typing import Optional, Dict, List, Any
-import requests
 from pathlib import Path
+from typing import Any, Dict, List, Optional
 
-# Setup logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('/var/log/line-bot/app.log'),
-        logging.StreamHandler()
-    ]
-)
+from config import Config
+
 logger = logging.getLogger(__name__)
 
 class LinePersonalClient:
-    """Client for LINE Personal Account messaging"""
-    
-    def __init__(self, session_file: str = 'line_session.pkl'):
-        self.session_file = session_file
+    """Client for LINE Personal Account messaging."""
+
+    def __init__(self, session_file: Optional[Path] = None):
+        self.session_file = Path(session_file or Config.SESSION_FILE)
         self.is_logged_in = False
         self.auth_token: Optional[str] = None
         self.last_error: Optional[str] = None
-        
-        # Try to load existing session
+        self.last_login_at: Optional[str] = None
+        self.send_mode = Config.LINE_SEND_MODE
+
         self._load_session()
     
     def _load_session(self) -> bool:
-        """Load session from file"""
+        """Load a previously saved session."""
         try:
-            if os.path.exists(self.session_file):
-                with open(self.session_file, 'rb') as f:
-                    session_data = pickle.load(f)
-                    self.auth_token = session_data.get('auth_token')
-                    self.is_logged_in = session_data.get('is_logged_in', False)
-                    
-                    if self.is_logged_in:
-                        logger.info("Session loaded successfully")
-                        return True
-        except Exception as e:
-            logger.error(f"Error loading session: {e}")
-        
+            if self.session_file.exists():
+                with self.session_file.open("rb") as file:
+                    session_data = pickle.load(file)
+
+                self.auth_token = session_data.get("auth_token")
+                self.is_logged_in = bool(session_data.get("is_logged_in", False) and self.auth_token)
+                self.last_login_at = session_data.get("last_login_at")
+                self.last_error = session_data.get("last_error")
+
+                if self.is_logged_in:
+                    logger.info("Session loaded successfully from %s", self.session_file)
+                    return True
+        except Exception as exc:
+            self.last_error = f"Error loading session: {exc}"
+            logger.error(self.last_error)
+
         return False
     
     def _save_session(self) -> bool:
-        """Save session to file"""
+        """Persist the current session."""
         try:
+            self.session_file.parent.mkdir(parents=True, exist_ok=True)
             session_data = {
-                'auth_token': self.auth_token,
-                'is_logged_in': self.is_logged_in,
-                'saved_at': datetime.now().isoformat()
+                "auth_token": self.auth_token,
+                "is_logged_in": self.is_logged_in,
+                "last_login_at": self.last_login_at,
+                "last_error": self.last_error,
+                "saved_at": datetime.now().isoformat(),
             }
-            with open(self.session_file, 'wb') as f:
-                pickle.dump(session_data, f)
+            with self.session_file.open("wb") as file:
+                pickle.dump(session_data, file)
             return True
-        except Exception as e:
-            logger.error(f"Error saving session: {e}")
+        except Exception as exc:
+            self.last_error = f"Error saving session: {exc}"
+            logger.error(self.last_error)
             return False
     
     def check_login_status(self) -> bool:
-        """Check if currently logged in"""
-        return self.is_logged_in and self.auth_token is not None
+        """Check if currently logged in."""
+        return self.is_logged_in and bool(self.auth_token)
+
+    def get_status(self) -> Dict[str, Any]:
+        """Expose runtime status for the API layer."""
+        return {
+            "logged_in": self.check_login_status(),
+            "session_file": str(self.session_file),
+            "send_mode": self.send_mode,
+            "last_login_at": self.last_login_at,
+            "last_error": self.last_error,
+            "has_auth_token": bool(self.auth_token),
+        }
+
+    def set_session(self, auth_token: str, save: bool = True) -> Dict[str, Any]:
+        """Store a session token for development or external login flows."""
+        cleaned_token = auth_token.strip()
+        if not cleaned_token:
+            return {"success": False, "error": "auth_token is required"}
+
+        self.auth_token = cleaned_token
+        self.is_logged_in = True
+        self.last_login_at = datetime.now().isoformat()
+        self.last_error = None
+
+        if save and not self._save_session():
+            return {"success": False, "error": self.last_error or "Failed to save session"}
+
+        logger.info("Session updated successfully")
+        return {
+            "success": True,
+            "logged_in": True,
+            "last_login_at": self.last_login_at,
+            "send_mode": self.send_mode,
+        }
     
     def send_text_message(self, group_id: str, message: str) -> Dict[str, Any]:
         """

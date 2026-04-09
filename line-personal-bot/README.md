@@ -34,6 +34,12 @@ chown -R www-data:www-data /var/log/line-bot
 
 ## การใช้งาน
 
+หมายเหตุสำคัญ:
+- ค่าปริยายของ `LINE_SEND_MODE` คือ `disabled` เพื่อไม่ให้ระบบตอบว่าส่งสำเร็จทั้งที่ยังไม่มี transport จริง
+- ถ้าต้องการทดสอบ integration กับ PHP โดยยังไม่ส่งจริง ให้ตั้ง `LINE_SEND_MODE=mock`
+- สามารถบันทึก session token ชั่วคราวผ่าน endpoint `POST /login/session`
+- ถ้าต้องการส่งจริงผ่าน LINE Personal ให้ติดตั้ง `linepy`, ตั้ง `LINE_SEND_MODE=linepy`, แล้ว login ด้วย `python linepy_qr_login.py`
+
 ### รันโดยตรง (สำหรับทดสอบ)
 ```bash
 source venv/bin/activate
@@ -84,9 +90,35 @@ sudo supervisorctl status line-personal-bot
 | `/groups/add` | POST | เพิ่มกลุ่ม |
 | `/groups/remove` | DELETE | ลบกลุ่ม |
 | `/settings` | GET/POST | ดู/แก้ไขการตั้งค่า |
+| `/login/session` | POST | บันทึก session token สำหรับ dev/external login flow |
 | `/login/qr` | POST | เริ่ม login ด้วย QR |
 | `/logout` | POST | ออกจากระบบ |
 | `/health` | GET | Health check |
+
+## การส่งจริงด้วย linepy
+
+1. ติดตั้ง dependencies
+```bash
+pip install -r requirements.txt
+```
+
+2. ตั้งค่า `.env`
+```env
+LINE_PERSONAL_ENABLED=true
+LINE_SEND_MODE=linepy
+```
+
+3. Login ด้วย QR แล้วบันทึก auth token/session
+```bash
+python linepy_qr_login.py
+```
+
+4. ตรวจสอบสถานะ
+```bash
+curl http://localhost:5000/status
+```
+
+ถ้า `logged_in=true` และ `send_mode=linepy` ระบบจะพร้อมส่งข้อความจริงผ่าน LINE Personal
 
 ## การเชื่อมต่อกับ PHP
 
@@ -126,6 +158,7 @@ API_PORT=5000
 
 # LINE Personal
 LINE_PERSONAL_ENABLED=true
+LINE_SEND_MODE=linepy
 
 # CORS - ใส่ domain ของคุณ
 ALLOWED_ORIGINS=https://imzshop97.com,http://imzshop97.com

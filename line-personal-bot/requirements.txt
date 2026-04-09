@@ -16,3 +16,4 @@ annotated-types==0.7.0
 pydantic-core==2.14.1
 pypng==0.20220715.0
 charset-normalizer==3.4.7
+linepy==3.0.8

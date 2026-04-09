@@ -266,6 +266,71 @@ function lineResolvedPublicBaseUrl(PDO $pdo): string
     return rtrim(trim(lineGetSetting($pdo, 'public_base_url', $default)), '/');
 }
 
+function lineResolvedPersonalApiUrl(PDO $pdo): string
+{
+    $dbValue = trim(lineGetSetting($pdo, 'personal_api_url', ''));
+    if ($dbValue !== '') {
+        return rtrim($dbValue, '/');
+    }
+
+    return rtrim((string) (defined('LINE_PERSONAL_API_URL') ? LINE_PERSONAL_API_URL : 'http://localhost:5000'), '/');
+}
+
+function lineFetchPersonalApiJson(PDO $pdo, string $path, array $query = []): array
+{
+    $baseUrl = lineResolvedPersonalApiUrl($pdo);
+    if ($baseUrl === '') {
+        return ['ok' => false, 'status' => 0, 'body' => 'LINE Personal API URL is not configured'];
+    }
+
+    $url = $baseUrl . $path;
+    if (!empty($query)) {
+        $url .= (str_contains($url, '?') ? '&' : '?') . http_build_query($query);
+    }
+
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER => [
+            'Accept: application/json',
+        ],
+        CURLOPT_TIMEOUT => 20,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_SSL_VERIFYHOST => 0,
+    ]);
+
+    $response = curl_exec($ch);
+    $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlError = curl_error($ch);
+    curl_close($ch);
+
+    if ($response === false) {
+        return ['ok' => false, 'status' => 0, 'body' => 'CURL Error: ' . $curlError];
+    }
+
+    $decoded = json_decode($response, true);
+    return [
+        'ok' => $status >= 200 && $status < 300 && is_array($decoded),
+        'status' => $status,
+        'body' => $response,
+        'data' => is_array($decoded) ? $decoded : null,
+    ];
+}
+
+function lineFetchPersonalStatus(PDO $pdo): array
+{
+    return lineFetchPersonalApiJson($pdo, '/status');
+}
+
+function lineConfigMissingMessage(PDO $pdo): string
+{
+    if (linePersonalEnabled($pdo)) {
+        return 'ยังไม่พร้อมใช้งาน LINE Personal Bot กรุณาตรวจ API URL, session login และสถานะ bot';
+    }
+
+    return 'ยังไม่ได้ตั้งค่า LINE channel secret และ access token บน server';
+}
+
 function lineAutoSendEnabled(PDO $pdo): bool
 {
     return lineGetSetting($pdo, 'auto_send_results', '1') !== '0';
@@ -2308,6 +2373,11 @@ function lineResolveBetCloseTemplateImageInfo(PDO $pdo, array $lotteryRow): ?arr
 
 function lineConfigReady(PDO $pdo): bool
 {
+    if (linePersonalEnabled($pdo)) {
+        $status = lineFetchPersonalStatus($pdo);
+        return !empty($status['ok']) && !empty($status['data']['transport_ready']);
+    }
+
     return lineResolvedChannelSecret($pdo) !== '' && lineResolvedChannelAccessToken($pdo) !== '';
 }
 
@@ -2334,30 +2404,23 @@ function lineResolveCaBundlePath(): ?string
  * Send message via LINE Personal Bot (Python API)
  * สำหรับส่งข้อความผ่าน LINE Personal Account แทน Official Account
  */
-function linePushViaPython(string $to, array $messages): array
+function linePushViaPython(PDO $pdo, string $to, array $messages): array
 {
-    $apiUrl = defined('LINE_PERSONAL_API_URL') ? LINE_PERSONAL_API_URL : 'http://localhost:5000';
+    $apiUrl = lineResolvedPersonalApiUrl($pdo);
+    $messages = array_values(lineNormalizePayloadStrings($messages));
     
     // ดึงข้อความ text จาก messages array
-    $text = '';
-    foreach ($messages as $msg) {
-        if (isset($msg['type']) && $msg['type'] === 'text' && isset($msg['text'])) {
-            $text = $msg['text'];
-            break;
-        }
-    }
-    
-    if ($text === '') {
+    if (empty($messages)) {
         return [
             'ok' => false,
             'status' => 400,
-            'body' => 'No text message found in messages array',
+            'body' => 'No messages found in messages array',
         ];
     }
     
     $payload = json_encode([
         'group_id' => $to,
-        'message' => $text
+        'messages' => $messages,
     ], JSON_UNESCAPED_UNICODE);
     
     $ch = curl_init($apiUrl . '/send');
@@ -2424,7 +2487,7 @@ function linePushMessages(PDO $pdo, string $to, array $messages): array
 {
     // ตรวจสอบว่าต้องการใช้ LINE Personal Bot หรือไม่
     if (linePersonalEnabled($pdo)) {
-        return linePushViaPython($to, $messages);
+        return linePushViaPython($pdo, $to, $messages);
     }
     
     // ใช้ LINE Official Account (เดิม)
@@ -2537,6 +2600,12 @@ function lineLogPushResult(PDO $pdo, string $groupId, string $message, array $re
 
 function lineFetchGroupSummary(PDO $pdo, string $groupId): ?array
 {
+    if (linePersonalEnabled($pdo)) {
+        $personal = lineFetchPersonalApiJson($pdo, '/groups/summary', ['group_id' => $groupId]);
+        $group = is_array($personal['data'] ?? null) ? ($personal['data']['group'] ?? null) : null;
+        return is_array($group) ? $group : null;
+    }
+
     $accessToken = lineResolvedChannelAccessToken($pdo);
 
     if ($accessToken === '' || $groupId === '') {
@@ -2591,7 +2660,7 @@ function lineRefreshGroupName(PDO $pdo, string $groupId): array
     ensureLineTables($pdo);
 
     $summary = lineFetchGroupSummary($pdo, $groupId);
-    $groupName = trim((string) ($summary['groupName'] ?? ''));
+    $groupName = trim((string) ($summary['groupName'] ?? ($summary['name'] ?? '')));
     if ($groupName === '') {
         return ['ok' => false, 'reason' => 'summary_unavailable'];
     }
@@ -2609,6 +2678,47 @@ function lineRefreshGroupName(PDO $pdo, string $groupId): array
 function lineRefreshAllGroupNames(PDO $pdo): array
 {
     ensureLineTables($pdo);
+
+    if (linePersonalEnabled($pdo)) {
+        $response = lineFetchPersonalApiJson($pdo, '/groups/joined');
+        if (empty($response['ok']) || !is_array($response['data']['groups'] ?? null)) {
+            return [
+                'ok' => false,
+                'updated' => 0,
+                'failed' => 0,
+                'total' => 0,
+            ];
+        }
+
+        $updated = 0;
+        foreach ($response['data']['groups'] as $group) {
+            $groupId = trim((string) ($group['id'] ?? ''));
+            if ($groupId === '') {
+                continue;
+            }
+
+            $groupName = trim((string) ($group['name'] ?? ''));
+            $rawSource = json_encode($group, JSON_UNESCAPED_UNICODE);
+            $stmt = $pdo->prepare("
+                INSERT INTO line_groups (group_id, source_type, group_name, joined_at, last_seen_at, is_active, raw_source)
+                VALUES (?, 'group', ?, NOW(), NOW(), 1, ?)
+                ON DUPLICATE KEY UPDATE
+                    group_name = VALUES(group_name),
+                    last_seen_at = NOW(),
+                    is_active = 1,
+                    raw_source = VALUES(raw_source)
+            ");
+            $stmt->execute([$groupId, $groupName !== '' ? $groupName : null, $rawSource]);
+            $updated++;
+        }
+
+        return [
+            'ok' => true,
+            'updated' => $updated,
+            'failed' => 0,
+            'total' => $updated,
+        ];
+    }
 
     $groupIds = $pdo->query("SELECT group_id FROM line_groups ORDER BY id ASC")->fetchAll(PDO::FETCH_COLUMN);
     $updated = 0;

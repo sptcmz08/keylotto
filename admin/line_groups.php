@@ -23,18 +23,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['form_action'] ?? '';
 
     if ($action === 'save_credentials') {
+        $useLinePersonal = isset($_POST['use_line_personal']) ? '1' : '0';
         $channelSecret = trim($_POST['channel_secret'] ?? '');
         $channelAccessToken = trim($_POST['channel_access_token'] ?? '');
+        $personalApiUrl = trim($_POST['personal_api_url'] ?? '');
         $publicBaseUrl = trim($_POST['public_base_url'] ?? '');
         $autoSendResults = isset($_POST['auto_send_results']) ? '1' : '0';
         $autoSendTexts = isset($_POST['auto_send_texts']) ? '1' : '0';
 
-        if ($channelSecret === '' || $channelAccessToken === '') {
+        if ($useLinePersonal !== '1' && ($channelSecret === '' || $channelAccessToken === '')) {
             lineGroupsRedirectWithFlash('error', 'กรุณากรอก Channel secret และ Channel access token ให้ครบ', 'settings');
         }
 
+        if ($useLinePersonal === '1' && $personalApiUrl === '') {
+            $personalApiUrl = defined('LINE_PERSONAL_API_URL') ? LINE_PERSONAL_API_URL : 'http://localhost:5000';
+        }
+
+        lineSetSetting($pdo, 'use_line_personal', $useLinePersonal);
         lineSetSetting($pdo, 'channel_secret', $channelSecret);
         lineSetSetting($pdo, 'channel_access_token', $channelAccessToken);
+        lineSetSetting($pdo, 'personal_api_url', $personalApiUrl);
         lineSetSetting($pdo, 'public_base_url', $publicBaseUrl !== '' ? $publicBaseUrl : 'https://member.imzshop97.com');
         lineSetSetting($pdo, 'auto_send_results', $autoSendResults);
         lineSetSetting($pdo, 'auto_send_texts', $autoSendTexts);
@@ -361,6 +369,10 @@ foreach ($sharedTemplateGroups as $groupKey => $groupLabel) {
 
 $savedChannelSecret = lineResolvedChannelSecret($pdo);
 $savedChannelAccessToken = lineResolvedChannelAccessToken($pdo);
+$savedPersonalApiUrl = lineResolvedPersonalApiUrl($pdo);
+$useLinePersonal = linePersonalEnabled($pdo);
+$personalStatus = $useLinePersonal ? lineFetchPersonalStatus($pdo) : [];
+$personalStatusData = is_array($personalStatus['data'] ?? null) ? $personalStatus['data'] : [];
 $savedPublicBaseUrl = lineResolvedPublicBaseUrl($pdo);
 $autoSendResults = lineAutoSendEnabled($pdo);
 $autoSendTexts = lineAutoSendTextsEnabled($pdo);
@@ -482,6 +494,42 @@ require_once 'includes/header.php';
         <div class="px-4 py-3 border-b bg-gray-50 font-semibold text-gray-700">ตั้งค่า LINE Settings</div>
         <form method="POST" class="p-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
             <input type="hidden" name="form_action" value="save_credentials">
+            <div class="lg:col-span-2 rounded-xl border border-gray-200 bg-gray-50 p-4">
+                <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div>
+                        <div class="text-sm font-semibold text-gray-800">Delivery Mode</div>
+                        <div class="text-xs text-gray-500 mt-1">เลือกว่าจะใช้ LINE Official Account เดิม หรือส่งผ่าน LINE Personal Bot</div>
+                    </div>
+                    <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-700">
+                        <input type="checkbox" name="use_line_personal" value="1" class="rounded border-gray-300" <?= $useLinePersonal ? 'checked' : '' ?>>
+                        <span>ใช้ LINE Personal</span>
+                    </label>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
+                    <div class="rounded-lg border bg-white p-3">
+                        <div class="text-xs text-gray-500">Current mode</div>
+                        <div class="mt-1 text-sm font-semibold <?= $useLinePersonal ? 'text-green-700' : 'text-blue-700' ?>">
+                            <?= $useLinePersonal ? 'LINE Personal' : 'LINE Official Account' ?>
+                        </div>
+                    </div>
+                    <div class="rounded-lg border bg-white p-3">
+                        <div class="text-xs text-gray-500">Personal status</div>
+                        <div class="mt-1 text-sm font-semibold <?= !empty($personalStatus['ok']) && !empty($personalStatusData['transport_ready']) ? 'text-green-700' : 'text-amber-700' ?>">
+                            <?= !empty($personalStatus['ok']) && !empty($personalStatusData['transport_ready']) ? 'พร้อมส่งจริง' : 'ยังไม่พร้อม' ?>
+                        </div>
+                        <div class="text-xs text-gray-500 mt-1">
+                            <?= htmlspecialchars((string) ($personalStatusData['last_error'] ?? ($useLinePersonal ? 'ตรวจ API / session login' : 'ยังไม่ได้เปิดโหมด Personal'))) ?>
+                        </div>
+                    </div>
+                    <div class="rounded-lg border bg-white p-3">
+                        <div class="text-xs text-gray-500">Session</div>
+                        <div class="mt-1 text-sm font-semibold <?= !empty($personalStatusData['logged_in']) ? 'text-green-700' : 'text-red-600' ?>">
+                            <?= !empty($personalStatusData['logged_in']) ? 'Logged in' : 'Not logged in' ?>
+                        </div>
+                        <div class="text-xs text-gray-500 mt-1 break-all"><?= htmlspecialchars((string) ($personalStatusData['session_file'] ?? $savedPersonalApiUrl)) ?></div>
+                    </div>
+                </div>
+            </div>
             <div>
                 <label class="text-xs text-gray-500 block mb-1">Channel secret</label>
                 <input type="text" name="channel_secret" class="w-full border rounded-lg px-3 py-2 text-sm outline-none" value="<?= htmlspecialchars($savedChannelSecret) ?>" placeholder="LINE Channel secret">
@@ -494,6 +542,11 @@ require_once 'includes/header.php';
                 <label class="text-xs text-gray-500 block mb-1">Public base URL</label>
                 <input type="text" name="public_base_url" class="w-full border rounded-lg px-3 py-2 text-sm outline-none" value="<?= htmlspecialchars($savedPublicBaseUrl) ?>" placeholder="https://member.imzshop97.com">
                 <div class="text-[11px] text-gray-400 mt-1">ใช้สำหรับสร้าง URL รูปภาพที่ LINE จะดึงไปแสดง</div>
+            </div>
+            <div>
+                <label class="text-xs text-gray-500 block mb-1">LINE Personal API URL</label>
+                <input type="text" name="personal_api_url" class="w-full border rounded-lg px-3 py-2 text-sm outline-none" value="<?= htmlspecialchars($savedPersonalApiUrl) ?>" placeholder="http://localhost:5000">
+                <div class="text-[11px] text-gray-400 mt-1">ใช้ตรวจสถานะ bot และเป็น endpoint สำหรับส่งข้อความ/รูปผ่าน LINE Personal</div>
             </div>
             <div class="rounded-xl border border-gray-200 bg-gray-50 p-4 space-y-3">
                 <div class="font-medium text-gray-700 text-sm">ตัวเลือกการส่งอัตโนมัติ</div>
