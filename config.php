@@ -25,6 +25,10 @@ if (file_exists($lineCredentialsFile)) {
 define('LINE_CHANNEL_SECRET', getenv('LINE_CHANNEL_SECRET') ?: ($lineCredentials['channel_secret'] ?? ''));
 define('LINE_CHANNEL_ACCESS_TOKEN', getenv('LINE_CHANNEL_ACCESS_TOKEN') ?: ($lineCredentials['channel_access_token'] ?? ''));
 
+// LINE Personal Bot API config (Python API)
+// ใช้สำหรับส่งข้อความผ่าน LINE Personal Account แทน Official Account
+define('LINE_PERSONAL_API_URL', getenv('LINE_PERSONAL_API_URL') ?: ($lineCredentials['personal_api_url'] ?? 'http://localhost:5000'));
+
 // Start session
 if (session_status() === PHP_SESSION_NONE) {
     session_start();

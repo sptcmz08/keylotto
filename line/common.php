@@ -2330,8 +2330,104 @@ function lineResolveCaBundlePath(): ?string
     return null;
 }
 
+/**
+ * Send message via LINE Personal Bot (Python API)
+ * สำหรับส่งข้อความผ่าน LINE Personal Account แทน Official Account
+ */
+function linePushViaPython(string $to, array $messages): array
+{
+    $apiUrl = defined('LINE_PERSONAL_API_URL') ? LINE_PERSONAL_API_URL : 'http://localhost:5000';
+    
+    // ดึงข้อความ text จาก messages array
+    $text = '';
+    foreach ($messages as $msg) {
+        if (isset($msg['type']) && $msg['type'] === 'text' && isset($msg['text'])) {
+            $text = $msg['text'];
+            break;
+        }
+    }
+    
+    if ($text === '') {
+        return [
+            'ok' => false,
+            'status' => 400,
+            'body' => 'No text message found in messages array',
+        ];
+    }
+    
+    $payload = json_encode([
+        'group_id' => $to,
+        'message' => $text
+    ], JSON_UNESCAPED_UNICODE);
+    
+    $ch = curl_init($apiUrl . '/send');
+    curl_setopt_array($ch, [
+        CURLOPT_POST => true,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER => [
+            'Content-Type: application/json',
+            'Accept: application/json',
+        ],
+        CURLOPT_POSTFIELDS => $payload,
+        CURLOPT_TIMEOUT => 30,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_SSL_VERIFYHOST => 0,
+    ]);
+    
+    $response = curl_exec($ch);
+    $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlErrno = curl_errno($ch);
+    $curlError = curl_error($ch);
+    curl_close($ch);
+    
+    if ($response === false) {
+        lineLog('LINE Personal push failed (curl error): ' . $curlError);
+        return [
+            'ok' => false,
+            'status' => 0,
+            'body' => 'CURL Error: ' . $curlError,
+            'curl_errno' => $curlErrno,
+        ];
+    }
+    
+    $responseData = json_decode($response, true);
+    
+    if ($status >= 200 && $status < 300) {
+        lineLog('LINE Personal push success to ' . $to);
+        return [
+            'ok' => true,
+            'status' => $status,
+            'body' => $response,
+            'data' => $responseData,
+        ];
+    } else {
+        $errorMsg = isset($responseData['detail']) ? $responseData['detail'] : $response;
+        lineLog('LINE Personal push failed to ' . $to . ' status=' . $status . ' error=' . $errorMsg);
+        return [
+            'ok' => false,
+            'status' => $status,
+            'body' => $response,
+            'error' => $errorMsg,
+        ];
+    }
+}
+
+/**
+ * Check if LINE Personal Bot is enabled
+ */
+function linePersonalEnabled(PDO $pdo): bool
+{
+    return lineGetSetting($pdo, 'use_line_personal', '0') === '1';
+}
+
 function linePushMessages(PDO $pdo, string $to, array $messages): array
 {
+    // ตรวจสอบว่าต้องการใช้ LINE Personal Bot หรือไม่
+    if (linePersonalEnabled($pdo)) {
+        return linePushViaPython($to, $messages);
+    }
+    
+    // ใช้ LINE Official Account (เดิม)
     $accessToken = lineResolvedChannelAccessToken($pdo);
 
     if ($accessToken === '') {
