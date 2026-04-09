@@ -1,5 +1,7 @@
 """Interactive helper to obtain and store a LINE Personal auth token with linepy."""
 
+import traceback
+
 from config import Config
 from line_client_runtime import line_client
 
@@ -13,6 +15,8 @@ def main() -> int:
 
     print("Starting LINE QR login...")
     print("Scan the QR code or open the login URL in your LINE app.")
+    print(f"System name: {Config.LINEPY_SYSTEM_NAME}")
+    print(f"App name: {Config.LINEPY_APP_NAME or '(linepy default)'}")
 
     try:
         kwargs = {"showQr": True, "systemName": Config.LINEPY_SYSTEM_NAME}
@@ -20,7 +24,11 @@ def main() -> int:
             kwargs["appName"] = Config.LINEPY_APP_NAME
         client = LINE(**kwargs)
     except Exception as exc:
-        print(f"Login failed: {exc}")
+        print(f"Login failed: {exc!r}")
+        print("Traceback:")
+        print(traceback.format_exc())
+        print("Hint: if this fails before showing a QR URL, LINE may be rejecting linepy's older login flow or app name.")
+        print("Try setting LINEPY_APP_NAME in .env and rerun.")
         return 1
 
     auth_token = getattr(client, "authToken", "")
