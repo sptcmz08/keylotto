@@ -272,25 +272,32 @@ async def screenshot(x_worker_token: Optional[str] = Header(default=None)):
     try:
         extension_url = f"chrome-extension://{automator.extension_id}/index.html"
         
-        # Always navigate to extension page to ensure fresh render
+        # Navigate to extension page if not already there
         if automator.extension_id not in automator.page.url:
             logger.info("Navigating to extension page for screenshot...")
             await automator.page.goto(extension_url, wait_until="domcontentloaded")
 
-        # Wait for page to fully render (networkidle or timeout 5s)
-        try:
-            await automator.page.wait_for_load_state("networkidle", timeout=5000)
-        except Exception:
-            pass  # Timeout is fine, still take screenshot
+        # Wait for LINE Vue/React app to render content
+        # Poll until content_length grows beyond the 863-byte bare HTML shell
+        logger.info("Waiting for LINE extension to render...")
+        for i in range(20):  # wait up to 10 seconds
+            content = await automator.page.content()
+            if len(content) > 2000:  # rendered content is much larger than bare HTML
+                logger.info(f"Extension rendered (content_length={len(content)}), taking screenshot...")
+                break
+            await asyncio.sleep(0.5)
+        else:
+            logger.warning("Extension content did not grow after 10s, taking screenshot anyway")
 
-        # Extra small delay for JS-rendered content (Vue/React)
-        await asyncio.sleep(2)
+        # Small extra delay for images (QR code canvas) to actually paint
+        await asyncio.sleep(1)
         
         image_bytes = await automator.page.screenshot(type="png", full_page=True)
         return {"screenshot_base64": base64.b64encode(image_bytes).decode('utf-8')}
     except Exception as e:
         logger.exception("Screenshot failed")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.get("/debug")
 async def debug_info(x_worker_token: Optional[str] = Header(default=None)) -> Dict[str, Any]:
