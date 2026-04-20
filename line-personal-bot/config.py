@@ -57,6 +57,7 @@ class Config:
     WORKER_PORT = int(os.getenv("WORKER_PORT", "5001"))
     WORKER_API_TOKEN = os.getenv("WORKER_API_TOKEN", "").strip()
     WORKER_LINE_WINDOW_TITLE_REGEX = os.getenv("WORKER_LINE_WINDOW_TITLE_REGEX", ".*LINE.*").strip()
+    WORKER_PYAUTOGUI_FAILSAFE = os.getenv("WORKER_PYAUTOGUI_FAILSAFE", "false").lower() == "true"
     WORKER_SEARCH_BOX_X = int(os.getenv("WORKER_SEARCH_BOX_X", "0"))
     WORKER_SEARCH_BOX_Y = int(os.getenv("WORKER_SEARCH_BOX_Y", "0"))
     WORKER_MESSAGE_BOX_X = int(os.getenv("WORKER_MESSAGE_BOX_X", "0"))

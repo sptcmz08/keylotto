@@ -42,6 +42,7 @@ class WorkerSendRequest(BaseModel):
 class LineDesktopAutomator:
     def __init__(self) -> None:
         pyautogui.PAUSE = 0.15
+        pyautogui.FAILSAFE = Config.WORKER_PYAUTOGUI_FAILSAFE
         self.search_box = (Config.WORKER_SEARCH_BOX_X, Config.WORKER_SEARCH_BOX_Y)
         self.message_box = (Config.WORKER_MESSAGE_BOX_X, Config.WORKER_MESSAGE_BOX_Y)
         self.attach_button = (Config.WORKER_ATTACH_BUTTON_X, Config.WORKER_ATTACH_BUTTON_Y)
@@ -57,6 +58,7 @@ class LineDesktopAutomator:
             "line_window_found": bool(window),
             "line_window_title": window.window_text() if window else "",
             "line_window_regex": Config.WORKER_LINE_WINDOW_TITLE_REGEX,
+            "pyautogui_failsafe": pyautogui.FAILSAFE,
             "search_box_configured": self._is_point_configured(self.search_box),
             "message_box_configured": self._is_point_configured(self.message_box),
             "attach_button_configured": self._is_point_configured(self.attach_button),
@@ -278,6 +280,7 @@ def send(request: WorkerSendRequest, x_worker_token: Optional[str] = Header(defa
 if __name__ == "__main__":
     print(f"Starting LINE Desktop Automation Worker on {Config.WORKER_HOST}:{Config.WORKER_PORT}")
     print(f"Window regex: {Config.WORKER_LINE_WINDOW_TITLE_REGEX}")
+    print(f"PyAutoGUI fail-safe: {pyautogui.FAILSAFE}")
     print(f"Search box: {worker.search_box}")
     print(f"Message box: {worker.message_box}")
     print(f"Attach button: {worker.attach_button}")
