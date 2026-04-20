@@ -522,9 +522,18 @@ require_once 'includes/header.php';
                         </div>
                     </div>
                     <div class="rounded-lg border bg-white p-3">
-                        <div class="text-xs text-gray-500">Session</div>
-                        <div class="mt-1 text-sm font-semibold <?= !empty($personalStatusData['logged_in']) ? 'text-green-700' : 'text-red-600' ?>">
-                            <?= !empty($personalStatusData['logged_in']) ? 'Logged in' : 'Not logged in' ?>
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <div class="text-xs text-gray-500">Session</div>
+                                <div class="mt-1 text-sm font-semibold <?= !empty($personalStatusData['logged_in']) ? 'text-green-700' : 'text-red-600' ?>">
+                                    <?= !empty($personalStatusData['logged_in']) ? 'Logged in' : 'Not logged in' ?>
+                                </div>
+                            </div>
+                            <?php if ($useLinePersonal): ?>
+                            <button type="button" onclick="openScreenshotModal()" class="text-xs bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-1 flex items-center rounded hover:bg-indigo-100 transition">
+                                <i class="fas fa-desktop mr-1"></i> ดึงภาพหน้าจอ
+                            </button>
+                            <?php endif; ?>
                         </div>
                         <div class="text-xs text-gray-500 mt-1 break-all"><?= htmlspecialchars((string) ($personalStatusData['session_file'] ?? $savedPersonalApiUrl)) ?></div>
                     </div>
@@ -2080,6 +2089,73 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 })();
+</script>
+
+<!-- Screenshot Modal -->
+<div id="screenshotModal" class="fixed inset-0 z-50 hidden bg-black/60 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+        <div class="px-4 py-3 border-b flex justify-between items-center bg-gray-50 rounded-t-xl">
+            <h3 class="font-bold text-gray-800"><i class="fas fa-desktop mr-2 text-indigo-600"></i> หน้าจอของบอท (Live Screen)</h3>
+            <button type="button" onclick="closeScreenshotModal()" class="text-gray-400 hover:text-red-500 transition">
+                <i class="fas fa-times text-lg"></i>
+            </button>
+        </div>
+        <div class="p-4 flex-1 overflow-auto flex flex-col items-center justify-center bg-gray-100 relative min-h-[300px]">
+            <div id="screenshotLoader" class="flex flex-col items-center text-gray-500">
+                <i class="fas fa-circle-notch fa-spin text-3xl mb-2 text-indigo-500"></i>
+                <span>กำลังดึงภาพหน้าจอผ่านเซิร์ฟเวอร์...</span>
+            </div>
+            <img id="screenshotImage" src="" alt="Bot Screen" class="hidden w-full h-auto max-w-full rounded border border-gray-300 shadow-sm" />
+            <div id="screenshotError" class="hidden text-red-600 bg-red-50 border border-red-200 p-3 rounded text-sm w-full max-w-md text-center">
+            </div>
+        </div>
+        <div class="px-4 py-3 border-t bg-gray-50 rounded-b-xl flex justify-between items-center">
+            <span class="text-xs text-gray-500">สามารถดึงหน้าจอนี้เพื่อสแกน QR Code เข้าสู่ระบบได้ทันที แบบไม่ต้องเปิดคอม</span>
+            <button type="button" onclick="refreshScreenshot()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition lg:min-w-[120px]">
+                <i class="fas fa-sync-alt mr-1"></i> รีเฟรชภาพใหม่
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+function openScreenshotModal() {
+    document.getElementById('screenshotModal').classList.remove('hidden');
+    refreshScreenshot();
+}
+
+function closeScreenshotModal() {
+    document.getElementById('screenshotModal').classList.add('hidden');
+    document.getElementById('screenshotImage').src = '';
+}
+
+function refreshScreenshot() {
+    const loader = document.getElementById('screenshotLoader');
+    const img = document.getElementById('screenshotImage');
+    const err = document.getElementById('screenshotError');
+    
+    loader.classList.remove('hidden');
+    img.classList.add('hidden');
+    err.classList.add('hidden');
+    
+    fetch('line_screenshot.php', { cache: 'no-store' })
+        .then(res => res.json())
+        .then(data => {
+            loader.classList.add('hidden');
+            if (data.ok && data.base64) {
+                img.src = 'data:image/png;base64,' + data.base64;
+                img.classList.remove('hidden');
+            } else {
+                err.textContent = data.error || 'ดึงภาพหน้าจอไม่สำเร็จ (บอทอาจยังไม่พร้อม/เซิร์ฟเวอร์ตาย)';
+                err.classList.remove('hidden');
+            }
+        })
+        .catch(e => {
+            loader.classList.add('hidden');
+            err.textContent = 'เกิดข้อผิดพลาดในการเชื่อมต่อกับเซิร์ฟเวอร์';
+            err.classList.remove('hidden');
+        });
+}
 </script>
 
 <?php require_once 'includes/footer.php'; ?>

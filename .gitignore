@@ -19,3 +19,9 @@ storage/logs/
 # OS files
 Thumbs.db
 .DS_Store
+
+# LINE Bot - ephemeral / large files (do not commit)
+line-personal-bot/chromium_data/
+line-personal-bot/line_extension/
+line-personal-bot/__pycache__/
+line-personal-bot/worker.log

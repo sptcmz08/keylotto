@@ -47,6 +47,8 @@ class Config:
     LOG_FILE = Path(os.getenv("LOG_FILE", str(DATA_DIR / "logs" / "app.log"))).expanduser()
     CHRLINE_SAVE_PATH = Path(os.getenv("CHRLINE_SAVE_PATH", str(DATA_DIR / "chrline"))).expanduser()
     AUTOMATION_TEMP_DIR = Path(os.getenv("AUTOMATION_TEMP_DIR", str(DATA_DIR / "automation"))).expanduser()
+    CHROMIUM_USER_DATA_DIR = Path(os.getenv("CHROMIUM_USER_DATA_DIR", str(DATA_DIR / "chromium_data"))).expanduser()
+    CHROMIUM_EXTENSION_DIR = Path(os.getenv("CHROMIUM_EXTENSION_DIR", str(BASE_DIR / "line_extension"))).expanduser()
 
     # Windows worker settings
     WORKER_HOST = os.getenv("WORKER_HOST", "127.0.0.1")
