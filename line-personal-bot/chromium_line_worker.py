@@ -482,8 +482,32 @@ async def login(request: LoginRequest, x_worker_token: Optional[str] = Header(de
         # Wait for navigation or page change (login processing)
         await page.wait_for_timeout(5000)
         
-        # Check if login succeeded by looking for login form disappearance
-        # or new elements appearing
+        # Check if login succeeded or if it prompted for a verification code
+        is_pin_screen = False
+        pin_code = ""
+        try:
+            # LINE usually shows an h1 or some text like "Verification code" and a big 4-6 digit number
+            pin_code_el = page.locator('.PinCode, .mdCMN01PinCode, .mdMN01PinCode, [class*="PinCode"], .pincode').first
+            if await pin_code_el.count() > 0:
+                is_pin_screen = True
+                pin_code = await pin_code_el.text_content()
+                pin_code = str(pin_code).strip()
+        except Exception:
+            pass
+            
+        if is_pin_screen:
+            logger.info(f"Login requires PIN verification: {pin_code}")
+            screenshot_bytes = _capture_xvfb_display()
+            result = {
+                "success": True, 
+                "message": f"กรุณานำรหัส {pin_code} ไปป้อนในแอป LINE บนมือถือของคุณเพื่อยืนยันการเข้าระบบ",
+                "pin_code": pin_code
+            }
+            if screenshot_bytes:
+                result["screenshot_base64"] = base64.b64encode(screenshot_bytes).decode('utf-8')
+            return result
+        
+        # Check if still on the login form (this means it failed)
         still_has_login = False
         try:
             email_check = page.locator('input[name="tid"], input[type="email"]').first
@@ -492,26 +516,36 @@ async def login(request: LoginRequest, x_worker_token: Optional[str] = Header(de
             still_has_login = False
         
         if still_has_login:
-            # Check for error messages
+            # We must be careful because the right side of the screen always has
+            # a red error for the broken QR code ("Unable to log in at this time")
+            # We want to find errors related to the email form specifically
             error_text = ""
             try:
-                error_el = page.locator('.MdTxtAlert, .error, [class*="error"], [class*="alert"]').first
-                if await error_el.count() > 0:
-                    error_text = await error_el.text_content()
+                # The login form is usually on the left side, or under the form inputs
+                error_els = await page.locator('.MdTxtAlert, .error, [class*="error"], [class*="alert"]').all()
+                for el in error_els:
+                    text = await el.text_content() or ""
+                    # Skip the known QR code error which is a false positive
+                    if "Unable to log in at this time" in text or "ไม่สามารถเข้าสู่ระบบ" in text:
+                        continue
+                    if text.strip() != "":
+                        error_text = text.strip()
+                        break
             except Exception:
                 pass
-            
-            # Take screenshot for debugging
-            screenshot_bytes = _capture_xvfb_display()
-            result = {
-                "success": False, 
-                "error": error_text or "Login may have failed - form still visible",
-                "hint": "Check email/password or try again"
-            }
-            if screenshot_bytes:
-                result["screenshot_base64"] = base64.b64encode(screenshot_bytes).decode('utf-8')
-            return result
-        
+                
+            if error_text:
+                # Actual form error found (e.g. invalid password)
+                screenshot_bytes = _capture_xvfb_display()
+                result = {
+                    "success": False, 
+                    "error": error_text,
+                    "hint": "Check email/password or try again"
+                }
+                if screenshot_bytes:
+                    result["screenshot_base64"] = base64.b64encode(screenshot_bytes).decode('utf-8')
+                return result
+
         logger.info("✅ LINE login successful!")
         
         # Take screenshot of logged-in state
