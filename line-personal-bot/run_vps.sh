@@ -2,7 +2,7 @@
 # ==========================================
 # LINE Chromium Worker - VPS Deployment Script
 # ==========================================
-# รัน Chrome เป็น root + --no-sandbox + xvfb display capture
+# รัน Chrome เป็น user linebot + xvfb display capture
 
 set -e
 
@@ -53,7 +53,14 @@ if ! id -u linebot > /dev/null 2>&1; then
 fi
 
 # ตั้งค่าสิทธิ์ให้ linebot เข้าถึงโฟลเดอร์รันได้
-chown -R linebot:linebot "$SCRIPT_DIR/chromium_data" >/dev/null 2>&1 || true
+mkdir -p "$SCRIPT_DIR/chromium_data" "$SCRIPT_DIR/automation" "$SCRIPT_DIR/chrline" "$SCRIPT_DIR/logs"
+touch "$SCRIPT_DIR/worker.log"
+chown -R linebot:linebot \
+    "$SCRIPT_DIR/chromium_data" \
+    "$SCRIPT_DIR/automation" \
+    "$SCRIPT_DIR/chrline" \
+    "$SCRIPT_DIR/logs" \
+    "$SCRIPT_DIR/worker.log" >/dev/null 2>&1 || true
 # อนุญาตให้ทะลุโฟลเดอร์ Plesk
 chmod a+x /var /var/www /var/www/vhosts /var/www/vhosts/imzshop97.com /var/www/vhosts/imzshop97.com/httpdocs
 
