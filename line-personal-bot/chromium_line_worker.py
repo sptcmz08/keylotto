@@ -486,7 +486,7 @@ async def login(request: LoginRequest, x_worker_token: Optional[str] = Header(de
         try:
             # LINE usually shows an h1 or some text like "Verification code" and a big 4-6 digit number
             pin_code_el = page.locator('.PinCode, .mdCMN01PinCode, .mdMN01PinCode, [class*="PinCode"], .pincode').first
-            if await pin_code_el.count() > 0:
+            if await pin_code_el.count() > 0 and await pin_code_el.is_visible():
                 is_pin_screen = True
                 pin_code = await pin_code_el.text_content()
                 pin_code = str(pin_code).strip()
@@ -508,41 +508,34 @@ async def login(request: LoginRequest, x_worker_token: Optional[str] = Header(de
         # Check if still on the login form (this means it failed)
         still_has_login = False
         try:
-            email_check = page.locator('input[name="tid"], input[type="email"]').first
-            still_has_login = await email_check.is_visible(timeout=3000)
+            login_form_check = page.locator('input[name="tid"], input[type="email"], input[name="tpasswd"], input[type="password"]').first
+            still_has_login = await login_form_check.count() > 0 and await login_form_check.is_visible()
         except Exception:
             still_has_login = False
         
         if still_has_login:
-            # We must be careful because the right side of the screen always has
-            # a red error for the broken QR code ("Unable to log in at this time")
-            # We want to find errors related to the email form specifically
             error_text = ""
             try:
-                # The login form is usually on the left side, or under the form inputs
                 error_els = await page.locator('.MdTxtAlert, .error, [class*="error"], [class*="alert"]').all()
                 for el in error_els:
-                    text = await el.text_content() or ""
-                    # Skip the known QR code error which is a false positive
-                    if "Unable to log in at this time" in text or "ไม่สามารถเข้าสู่ระบบ" in text:
+                    if not await el.is_visible():
                         continue
+                    text = await el.text_content() or ""
                     if text.strip() != "":
                         error_text = text.strip()
                         break
             except Exception:
                 pass
-                
-            if error_text:
-                # Actual form error found (e.g. invalid password)
-                screenshot_bytes = _capture_xvfb_display()
-                result = {
-                    "success": False, 
-                    "error": error_text,
-                    "hint": "Check email/password or try again"
-                }
-                if screenshot_bytes:
-                    result["screenshot_base64"] = base64.b64encode(screenshot_bytes).decode('utf-8')
-                return result
+
+            screenshot_bytes = _capture_xvfb_display()
+            result = {
+                "success": False,
+                "error": error_text or "Login did not complete. The LINE extension is still showing the login form.",
+                "hint": "Check email/password, wait a moment and try again, or use the QR code login shown in the screenshot.",
+            }
+            if screenshot_bytes:
+                result["screenshot_base64"] = base64.b64encode(screenshot_bytes).decode('utf-8')
+            return result
 
         logger.info("✅ LINE login successful!")
         
@@ -561,4 +554,3 @@ async def login(request: LoginRequest, x_worker_token: Optional[str] = Header(de
 
 if __name__ == "__main__":
     uvicorn.run("chromium_line_worker:app", host=Config.WORKER_HOST, port=Config.WORKER_PORT, log_level=Config.LOG_LEVEL.lower())
-
