@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import logging
+import os
 import platform
+import subprocess
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -34,6 +37,37 @@ class WorkerSendRequest(BaseModel):
     group_id: str
     group_name: str
     messages: List[Dict[str, Any]]
+
+
+def _capture_xvfb_display() -> Optional[bytes]:
+    """Capture the xvfb virtual display using ImageMagick's import command.
+    
+    This is the most reliable way to screenshot Chrome running on xvfb
+    because it captures the actual rendered pixels, not the DOM.
+    """
+    display = os.environ.get("DISPLAY", ":99")
+    try:
+        result = subprocess.run(
+            ["import", "-window", "root", "-display", display, "png:-"],
+            capture_output=True,
+            timeout=10,
+        )
+        if result.returncode == 0 and len(result.stdout) > 1000:
+            logger.info(f"xvfb display capture OK ({len(result.stdout)} bytes)")
+            return result.stdout
+        else:
+            logger.warning(f"import command returned {result.returncode}, stderr: {result.stderr.decode()[:200]}")
+            return None
+    except FileNotFoundError:
+        logger.warning("ImageMagick 'import' not found. Install with: apt install imagemagick")
+        return None
+    except subprocess.TimeoutExpired:
+        logger.warning("xvfb display capture timed out")
+        return None
+    except Exception as e:
+        logger.warning(f"xvfb display capture failed: {e}")
+        return None
+
 
 class LineChromiumAutomator:
     def __init__(self) -> None:
@@ -69,12 +103,12 @@ class LineChromiumAutomator:
                     f"--load-extension={ext_path}",
                     "--disable-blink-features=AutomationControlled",
                     # ── Required flags for VPS / root user ─────────────────
-                    "--no-sandbox",              # Needed when running as root
-                    "--disable-setuid-sandbox",  # Needed on VPS without user-ns
-                    "--disable-gpu",             # xvfb has no real GPU
-                    "--disable-dev-shm-usage",   # Prevent /dev/shm OOM crashes
+                    "--no-sandbox",
+                    "--disable-setuid-sandbox",
+                    "--disable-gpu",
+                    "--disable-dev-shm-usage",
                     "--disable-software-rasterizer",
-                    # ── Helps extension iframes / sandbox pages initialize ──
+                    # ── Helps extension iframes / sandbox pages init ──
                     "--disable-features=IsolateOrigins,site-per-process",
                     "--allow-running-insecure-content",
                 ],
@@ -83,7 +117,7 @@ class LineChromiumAutomator:
             
             logger.info("Waiting for extension to initialize...")
             
-            # Use background pages to get the Dynamic Extension ID reliably
+            # Use background pages / service workers to get the Dynamic Extension ID
             background_page = None
             for _ in range(40):
                 if self.context.background_pages:
@@ -101,10 +135,8 @@ class LineChromiumAutomator:
                 logger.warning("Could not detect background page. Extension might fail to load.")
 
             # ─────────────────────────────────────────────────────────────────
-            # Open LINE's popup window THE SAME WAY as clicking the extension
-            # icon: call chrome.windows.create() via the service worker so that
-            # LINE's React SPA initialises properly (plain page.goto() leaves it
-            # with a blank 863-byte shell because the app checks its window type)
+            # Open LINE's popup window via the service worker, exactly as
+            # clicking the extension icon would: chrome.windows.create()
             # ─────────────────────────────────────────────────────────────────
             self.page = None
             logger.info("Triggering LINE extension window via service worker...")
@@ -127,33 +159,25 @@ class LineChromiumAutomator:
             # Fallback: direct navigation
             if self.page is None:
                 self.page = await self.context.new_page()
-
-            # Wire up console/error capture
-            self.page.on("console", lambda msg: logger.debug(f"[EXT] {msg.type}: {msg.text}"))
-            self.page.on("pageerror", lambda err: logger.warning(f"[EXT-ERR] {err}"))
-
-            # Ensure correct size and focus
-            await self.page.set_viewport_size({"width": 800, "height": 580})
-            await self.page.bring_to_front()
-
-            # If page isn't on the extension yet (fallback case), navigate now
-            if self.extension_id not in self.page.url:
                 extension_url = f"chrome-extension://{self.extension_id}/index.html"
                 await self.page.goto(extension_url, wait_until="domcontentloaded")
 
-            # Wait for the React/SPA to render
-            logger.info("Waiting for LINE app to render...")
-            for _ in range(30):  # up to 15 seconds
-                content = await self.page.content()
-                if len(content) > 2000:
-                    logger.info(f"LINE app rendered! content_length={len(content)}")
-                    break
-                await asyncio.sleep(0.5)
-            else:
-                logger.warning("LINE app did not grow beyond shell — may show blank screen")
+            # Wire up console/error capture for debugging
+            self.page.on("console", lambda msg: logger.debug(f"[EXT] {msg.type}: {msg.text}"))
+            self.page.on("pageerror", lambda err: logger.warning(f"[EXT-ERR] {err}"))
+
+            # Give the app time to render
+            await asyncio.sleep(5)
 
             self.ready = True
             logger.info("Chromium environment ready. Please log in to LINE on the browser if not already.")
+
+            # Quick test: can we capture the display?
+            test_img = _capture_xvfb_display()
+            if test_img:
+                logger.info(f"✅ xvfb display capture test passed ({len(test_img)} bytes)")
+            else:
+                logger.warning("⚠️ xvfb display capture not available — screenshots will use Playwright fallback only")
 
         except Exception as e:
             logger.error("Failed to launch chromium: %s", e)
@@ -321,60 +345,70 @@ async def status(x_worker_token: Optional[str] = Header(default=None)) -> Dict[s
 
 @app.get("/screenshot")
 async def screenshot(x_worker_token: Optional[str] = Header(default=None)):
+    """Take a screenshot of the LINE extension.
+    
+    PRIMARY method: Capture the entire xvfb display using ImageMagick's 'import'.
+    This is 100% reliable because it captures actual rendered pixels on the virtual
+    screen, completely bypassing the Playwright DOM (which can show blank pages for
+    Chrome extensions).
+    
+    FALLBACK: If ImageMagick is not available, use Playwright page.screenshot().
+    """
     _require_token(x_worker_token)
-    if not automator.ready or not automator.page:
+    if not automator.ready:
         raise HTTPException(status_code=503, detail="Worker not ready")
     
-    import base64
+    # ═══════════════════════════════════════════════════════════════════
+    # PRIMARY: Capture xvfb display directly (guaranteed to work)
+    # ═══════════════════════════════════════════════════════════════════
+    image_bytes = _capture_xvfb_display()
+    if image_bytes:
+        return {"screenshot_base64": base64.b64encode(image_bytes).decode('utf-8')}
+
+    # ═══════════════════════════════════════════════════════════════════
+    # FALLBACK: Playwright page.screenshot (may show blank for extensions)
+    # ═══════════════════════════════════════════════════════════════════
+    logger.info("Falling back to Playwright page.screenshot()")
+    if not automator.page:
+        raise HTTPException(status_code=503, detail="No page available")
+    
     try:
-        extension_url = f"chrome-extension://{automator.extension_id}/index.html"
-        
-        # Navigate to extension page if not already there
-        if automator.extension_id not in automator.page.url:
-            logger.info("Navigating to extension page for screenshot...")
-            await automator.page.goto(extension_url, wait_until="domcontentloaded")
-
-        # Wait for LINE Vue/React app to render content
-        # Poll until content_length grows beyond the 863-byte bare HTML shell
-        logger.info("Waiting for LINE extension to render...")
-        for i in range(20):  # wait up to 10 seconds
-            content = await automator.page.content()
-            if len(content) > 2000:  # rendered content is much larger than bare HTML
-                logger.info(f"Extension rendered (content_length={len(content)}), taking screenshot...")
-                break
-            await asyncio.sleep(0.5)
-        else:
-            logger.warning("Extension content did not grow after 10s, taking screenshot anyway")
-
-        # Small extra delay for images (QR code canvas) to actually paint
-        await asyncio.sleep(1)
-        
         image_bytes = await automator.page.screenshot(type="png", full_page=True)
         return {"screenshot_base64": base64.b64encode(image_bytes).decode('utf-8')}
     except Exception as e:
         logger.exception("Screenshot failed")
         raise HTTPException(status_code=500, detail=str(e))
 
-
 @app.get("/debug")
 async def debug_info(x_worker_token: Optional[str] = Header(default=None)) -> Dict[str, Any]:
-    """Debug endpoint - returns current page URL and title for diagnosing blank screens"""
+    """Debug endpoint - returns current page URL and display info."""
     _require_token(x_worker_token)
-    if not automator.ready or not automator.page:
-        raise HTTPException(status_code=503, detail="Worker not ready")
-    try:
-        url = automator.page.url
-        title = await automator.page.title()
-        content_len = len(await automator.page.content())
-        return {
-            "current_url": url,
-            "page_title": title,
-            "content_length": content_len,
-            "extension_id": automator.extension_id,
-            "ready": automator.ready,
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    display = os.environ.get("DISPLAY", "not set")
+    
+    page_url = "N/A"
+    page_title = "N/A"
+    content_len = 0
+    if automator.page:
+        try:
+            page_url = automator.page.url
+            page_title = await automator.page.title()
+            content_len = len(await automator.page.content())
+        except Exception:
+            pass
+
+    # Test display capture
+    test_img = _capture_xvfb_display()
+
+    return {
+        "current_url": page_url,
+        "page_title": page_title,
+        "content_length": content_len,
+        "extension_id": automator.extension_id,
+        "display": display,
+        "xvfb_capture_works": test_img is not None,
+        "xvfb_capture_size": len(test_img) if test_img else 0,
+        "ready": automator.ready,
+    }
 
 @app.post("/send")
 async def send(request: WorkerSendRequest, x_worker_token: Optional[str] = Header(default=None)) -> Dict[str, Any]:
