@@ -18,3 +18,4 @@ pypng==0.20220715.0
 charset-normalizer==3.4.7
 linepy==3.0.8
 CHRLINE==2.5.14
+playwright>=1.40.0
