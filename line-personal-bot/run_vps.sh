@@ -62,17 +62,23 @@ pkill -f "chromium_line_worker.py" || true
 pkill -f "Xvfb :99" || true
 sleep 2
 
+# ── เปิด traverse permission ให้ linebot เข้าถึงโปรเจกต์ได้ ──
+# Plesk ล็อค parent dir ไว้ — ต้องเปิด o+x ให้ linebot traverse เข้ามาได้
+chmod o+x /var/www /var/www/vhosts /var/www/vhosts/imzshop97.com /var/www/vhosts/imzshop97.com/httpdocs 2>/dev/null || true
+chmod -R o+rx "$SCRIPT_DIR/venv-310/bin/" 2>/dev/null || true
+
+# ลบ chromium_data เก่าที่ root สร้างไว้ (linebot ต้องสร้างใหม่เอง)
+rm -rf "$SCRIPT_DIR/chromium_data" 2>/dev/null || true
+
 # เริ่ม xvfb display :99 (รันเป็น root, -ac = allow all clients)
 Xvfb :99 -screen 0 1280x720x24 -ac &
 XVFB_PID=$!
 sleep 1
 echo "Xvfb started on :99 (PID: $XVFB_PID)"
 
-# ── รัน Worker เป็น linebot ──
-# DISPLAY=:99         → ให้ Chrome render บน xvfb
-# PLAYWRIGHT_BROWSERS_PATH → ให้ Playwright หา browser ที่ติดตั้งไว้ได้
+# ── รัน Worker เป็น linebot (ใช้ env เพื่อส่ง ENV variables) ──
 VENV_PYTHON="$SCRIPT_DIR/venv-310/bin/python"
-sudo -u "$BOT_USER" \
+sudo -u "$BOT_USER" env \
     DISPLAY=:99 \
     PLAYWRIGHT_BROWSERS_PATH="$PLAYWRIGHT_BROWSERS_PATH" \
     HOME="/home/$BOT_USER" \
