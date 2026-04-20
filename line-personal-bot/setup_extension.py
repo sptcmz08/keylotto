@@ -43,6 +43,21 @@ def get_extension():
     if ZIP_PATH.exists():
         ZIP_PATH.unlink()
         
+    # ---------- PATCH MANIFEST.JSON FOR LTSM (SharedArrayBuffer) ----------
+    manifest_path = DEST_DIR / "manifest.json"
+    if manifest_path.exists():
+        import json
+        with open(manifest_path, 'r', encoding='utf-8') as mf:
+            data = json.load(mf)
+            
+        # Add COOP and COEP to enable SharedArrayBuffer without flags
+        data["cross_origin_embedder_policy"] = {"value": "require-corp"}
+        data["cross_origin_opener_policy"] = {"value": "same-origin"}
+        
+        with open(manifest_path, 'w', encoding='utf-8') as mf:
+            json.dump(data, mf, indent=2, ensure_ascii=False)
+        print("[+] manifest.json patched for LTSM (SharedArrayBuffer enabled).")
+        
     print("[+] Extension successfully extracted to 'line_extension' folder.")
 
 if __name__ == "__main__":
