@@ -108,8 +108,10 @@ class LineChromiumAutomator:
                     "--disable-gpu",
                     "--disable-dev-shm-usage",
                     "--disable-software-rasterizer",
-                    # ── LTSM sandbox needs SharedArrayBuffer for crypto ──
-                    "--enable-features=SharedArrayBuffer",
+                    # ── LTSM fix: allow SharedArrayBuffer without cross-origin isolation ──
+                    # ltsmSandbox.js uses SharedArrayBuffer (12x), WebAssembly (7x),
+                    # crypto.subtle (14x) — SAB needs this flag in sandbox pages
+                    "--enable-features=UnrestrictedSharedArrayBuffer,SharedArrayBuffer",
                 ],
                 no_viewport=True
             )
