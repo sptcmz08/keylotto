@@ -2109,11 +2109,31 @@ document.addEventListener('DOMContentLoaded', function () {
             <div id="screenshotError" class="hidden text-red-600 bg-red-50 border border-red-200 p-3 rounded text-sm w-full max-w-md text-center">
             </div>
         </div>
-        <div class="px-4 py-3 border-t bg-gray-50 rounded-b-xl flex justify-between items-center">
-            <span class="text-xs text-gray-500">สามารถดึงหน้าจอนี้เพื่อสแกน QR Code เข้าสู่ระบบได้ทันที แบบไม่ต้องเปิดคอม</span>
-            <button type="button" onclick="refreshScreenshot()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition lg:min-w-[120px]">
-                <i class="fas fa-sync-alt mr-1"></i> รีเฟรชภาพใหม่
-            </button>
+        <div class="px-4 py-3 border-t bg-gray-50 rounded-b-xl">
+            <!-- Login Form -->
+            <div id="loginFormSection" class="mb-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <h4 class="text-sm font-semibold text-blue-800 mb-2"><i class="fas fa-sign-in-alt mr-1"></i> Login LINE (ครั้งเดียว)</h4>
+                <div class="flex flex-wrap gap-2 items-end">
+                    <div class="flex-1 min-w-[180px]">
+                        <label class="block text-xs text-gray-600 mb-1">Email</label>
+                        <input type="email" id="lineLoginEmail" class="w-full border rounded px-3 py-1.5 text-sm" placeholder="your@email.com">
+                    </div>
+                    <div class="flex-1 min-w-[180px]">
+                        <label class="block text-xs text-gray-600 mb-1">Password</label>
+                        <input type="password" id="lineLoginPassword" class="w-full border rounded px-3 py-1.5 text-sm" placeholder="••••••••">
+                    </div>
+                    <button type="button" onclick="doLineLogin()" id="loginBtn" class="bg-green-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-green-700 transition whitespace-nowrap">
+                        <i class="fas fa-sign-in-alt mr-1"></i> Login
+                    </button>
+                </div>
+                <div id="loginResult" class="hidden mt-2 text-sm p-2 rounded"></div>
+            </div>
+            <div class="flex justify-between items-center">
+                <span class="text-xs text-gray-500">Login ครั้งเดียว session จะเก็บถาวร ไม่ต้อง login ใหม่</span>
+                <button type="button" onclick="refreshScreenshot()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition lg:min-w-[120px]">
+                    <i class="fas fa-sync-alt mr-1"></i> รีเฟรชภาพใหม่
+                </button>
+            </div>
         </div>
     </div>
 </div>
@@ -2155,6 +2175,73 @@ function refreshScreenshot() {
             err.textContent = 'เกิดข้อผิดพลาดในการเชื่อมต่อกับเซิร์ฟเวอร์';
             err.classList.remove('hidden');
         });
+}
+
+function doLineLogin() {
+    const email = document.getElementById('lineLoginEmail').value.trim();
+    const password = document.getElementById('lineLoginPassword').value.trim();
+    const resultDiv = document.getElementById('loginResult');
+    const loginBtn = document.getElementById('loginBtn');
+    
+    if (!email || !password) {
+        resultDiv.className = 'mt-2 text-sm p-2 rounded bg-yellow-50 text-yellow-800 border border-yellow-200';
+        resultDiv.textContent = 'กรุณากรอก Email และ Password';
+        resultDiv.classList.remove('hidden');
+        return;
+    }
+    
+    // Disable button
+    loginBtn.disabled = true;
+    loginBtn.innerHTML = '<i class="fas fa-circle-notch fa-spin mr-1"></i> กำลัง Login...';
+    resultDiv.className = 'mt-2 text-sm p-2 rounded bg-blue-50 text-blue-700 border border-blue-200';
+    resultDiv.textContent = 'กำลัง login... กรุณารอสักครู่ (ประมาณ 10 วินาที)';
+    resultDiv.classList.remove('hidden');
+    
+    fetch('line_login.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+    })
+    .then(res => res.json())
+    .then(data => {
+        loginBtn.disabled = false;
+        loginBtn.innerHTML = '<i class="fas fa-sign-in-alt mr-1"></i> Login';
+        
+        if (data.ok) {
+            resultDiv.className = 'mt-2 text-sm p-2 rounded bg-green-50 text-green-800 border border-green-200';
+            resultDiv.innerHTML = '<i class="fas fa-check-circle mr-1"></i> ' + (data.message || 'Login สำเร็จ!') + ' — Session เก็บถาวรแล้ว';
+            // Refresh screenshot to show logged-in state
+            if (data.base64) {
+                const img = document.getElementById('screenshotImage');
+                const loader = document.getElementById('screenshotLoader');
+                const err = document.getElementById('screenshotError');
+                loader.classList.add('hidden');
+                err.classList.add('hidden');
+                img.src = 'data:image/png;base64,' + data.base64;
+                img.classList.remove('hidden');
+            } else {
+                setTimeout(refreshScreenshot, 2000);
+            }
+        } else {
+            resultDiv.className = 'mt-2 text-sm p-2 rounded bg-red-50 text-red-800 border border-red-200';
+            resultDiv.innerHTML = '<i class="fas fa-times-circle mr-1"></i> ' + (data.error || 'Login ไม่สำเร็จ');
+            if (data.hint) resultDiv.innerHTML += '<br><small class="text-red-600">' + data.hint + '</small>';
+            // Show screenshot if available
+            if (data.base64) {
+                const img = document.getElementById('screenshotImage');
+                const loader = document.getElementById('screenshotLoader');
+                loader.classList.add('hidden');
+                img.src = 'data:image/png;base64,' + data.base64;
+                img.classList.remove('hidden');
+            }
+        }
+    })
+    .catch(e => {
+        loginBtn.disabled = false;
+        loginBtn.innerHTML = '<i class="fas fa-sign-in-alt mr-1"></i> Login';
+        resultDiv.className = 'mt-2 text-sm p-2 rounded bg-red-50 text-red-800 border border-red-200';
+        resultDiv.textContent = 'เกิดข้อผิดพลาด: ' + e.message;
+    });
 }
 </script>
 

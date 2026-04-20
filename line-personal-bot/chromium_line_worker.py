@@ -420,5 +420,113 @@ async def send(request: WorkerSendRequest, x_worker_token: Optional[str] = Heade
         logger.exception("Automation send failed")
         raise HTTPException(status_code=400, detail={"error": str(exc)}) from exc
 
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+@app.post("/login")
+async def login(request: LoginRequest, x_worker_token: Optional[str] = Header(default=None)) -> Dict[str, Any]:
+    """Login to LINE using email and password.
+    
+    Fills in the login form on the LINE extension page automatically.
+    Session will be persisted in chromium_data/ for future use.
+    """
+    _require_token(x_worker_token)
+    if not automator.ready or not automator.page:
+        raise HTTPException(status_code=503, detail="Worker not ready")
+    
+    try:
+        page = automator.page
+        logger.info("Attempting LINE login with email/password...")
+        
+        # Wait for the login form to be visible
+        try:
+            await page.wait_for_selector('input[name="tid"]', timeout=10000)
+        except Exception:
+            # Try alternative selectors
+            try:
+                await page.wait_for_selector('input[type="email"], input[placeholder*="Email"], input[placeholder*="email"]', timeout=5000)
+            except Exception:
+                return {"success": False, "error": "Login form not found. The extension may already be logged in or not loaded."}
+        
+        # Fill email field
+        email_input = page.locator('input[name="tid"]').first
+        if await email_input.count() == 0:
+            email_input = page.locator('input[type="email"], input[placeholder*="Email"], input[placeholder*="email"]').first
+        
+        await email_input.click()
+        await email_input.fill("")
+        await email_input.fill(request.email)
+        await page.wait_for_timeout(500)
+        
+        # Fill password field  
+        password_input = page.locator('input[name="tpasswd"]').first
+        if await password_input.count() == 0:
+            password_input = page.locator('input[type="password"]').first
+        
+        await password_input.click()
+        await password_input.fill("")
+        await password_input.fill(request.password)
+        await page.wait_for_timeout(500)
+        
+        # Click login button
+        login_btn = page.locator('button:has-text("Log in"), button:has-text("เข้าสู่ระบบ")').first
+        if await login_btn.count() == 0:
+            login_btn = page.locator('button[type="submit"]').first
+        
+        await login_btn.click()
+        logger.info("Login form submitted, waiting for response...")
+        
+        # Wait for navigation or page change (login processing)
+        await page.wait_for_timeout(5000)
+        
+        # Check if login succeeded by looking for login form disappearance
+        # or new elements appearing
+        still_has_login = False
+        try:
+            email_check = page.locator('input[name="tid"], input[type="email"]').first
+            still_has_login = await email_check.is_visible(timeout=3000)
+        except Exception:
+            still_has_login = False
+        
+        if still_has_login:
+            # Check for error messages
+            error_text = ""
+            try:
+                error_el = page.locator('.MdTxtAlert, .error, [class*="error"], [class*="alert"]').first
+                if await error_el.count() > 0:
+                    error_text = await error_el.text_content()
+            except Exception:
+                pass
+            
+            # Take screenshot for debugging
+            screenshot_bytes = _capture_xvfb_display()
+            result = {
+                "success": False, 
+                "error": error_text or "Login may have failed - form still visible",
+                "hint": "Check email/password or try again"
+            }
+            if screenshot_bytes:
+                result["screenshot_base64"] = base64.b64encode(screenshot_bytes).decode('utf-8')
+            return result
+        
+        logger.info("✅ LINE login successful!")
+        
+        # Take screenshot of logged-in state
+        await page.wait_for_timeout(3000)
+        screenshot_bytes = _capture_xvfb_display()
+        result = {"success": True, "message": "Login successful! Session saved."}
+        if screenshot_bytes:
+            result["screenshot_base64"] = base64.b64encode(screenshot_bytes).decode('utf-8')
+        return result
+        
+    except Exception as e:
+        logger.exception("Login failed")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 if __name__ == "__main__":
     uvicorn.run("chromium_line_worker:app", host=Config.WORKER_HOST, port=Config.WORKER_PORT, log_level=Config.LOG_LEVEL.lower())
+
