@@ -67,7 +67,16 @@ class LineChromiumAutomator:
                 args=[
                     f"--disable-extensions-except={ext_path}",
                     f"--load-extension={ext_path}",
-                    "--disable-blink-features=AutomationControlled"
+                    "--disable-blink-features=AutomationControlled",
+                    # ── Required flags for VPS / root user ─────────────────
+                    "--no-sandbox",              # Needed when running as root
+                    "--disable-setuid-sandbox",  # Needed on VPS without user-ns
+                    "--disable-gpu",             # xvfb has no real GPU
+                    "--disable-dev-shm-usage",   # Prevent /dev/shm OOM crashes
+                    "--disable-software-rasterizer",
+                    # ── Helps extension iframes / sandbox pages initialize ──
+                    "--disable-features=IsolateOrigins,site-per-process",
+                    "--allow-running-insecure-content",
                 ],
                 no_viewport=True
             )
