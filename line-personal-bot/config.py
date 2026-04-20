@@ -49,6 +49,8 @@ class Config:
     AUTOMATION_TEMP_DIR = Path(os.getenv("AUTOMATION_TEMP_DIR", str(DATA_DIR / "automation"))).expanduser()
     CHROMIUM_USER_DATA_DIR = Path(os.getenv("CHROMIUM_USER_DATA_DIR", str(DATA_DIR / "chromium_data"))).expanduser()
     CHROMIUM_EXTENSION_DIR = Path(os.getenv("CHROMIUM_EXTENSION_DIR", str(BASE_DIR / "line_extension"))).expanduser()
+    CHROMIUM_USER_AGENT = os.getenv("CHROMIUM_USER_AGENT", "").strip() or None
+    CHROMIUM_STEALTH = os.getenv("CHROMIUM_STEALTH", "true").lower() == "true"
 
     # Windows worker settings
     WORKER_HOST = os.getenv("WORKER_HOST", "127.0.0.1")

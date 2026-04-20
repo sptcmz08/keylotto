@@ -132,16 +132,17 @@ class LineChromiumAutomator:
             return
 
         try:
-            # We use standard Playwright Chromium but mask the User-Agent so LINE doesn't drop WebSockets
-            real_ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-            self.context = await self.playwright.chromium.launch_persistent_context(
-                user_data_dir=str(user_data_dir),
-                headless=False,
-                user_agent=real_ua,
-                args=[
+            launch_options: Dict[str, Any] = {
+                "user_data_dir": str(user_data_dir),
+                "headless": False,
+                "args": [
                     f"--disable-extensions-except={ext_path}",
                     f"--load-extension={ext_path}",
                     "--disable-blink-features=AutomationControlled",
+                    "--disable-infobars",
+                    "--no-first-run",
+                    "--no-default-browser-check",
+                    "--lang=en-US",
                     # ── VPS flags (Sandbox is now enabled because we run as non-root 'linebot') ──
                     "--disable-gpu",
                     "--disable-dev-shm-usage",
@@ -151,8 +152,25 @@ class LineChromiumAutomator:
                     # crypto.subtle (14x) — SAB needs this flag in sandbox pages
                     "--enable-features=UnrestrictedSharedArrayBuffer,SharedArrayBuffer",
                 ],
-                no_viewport=True
-            )
+                "no_viewport": True,
+                "locale": "en-US",
+            }
+            if Config.CHROMIUM_USER_AGENT:
+                launch_options["user_agent"] = Config.CHROMIUM_USER_AGENT
+            if Config.CHROMIUM_STEALTH:
+                launch_options["ignore_default_args"] = ["--enable-automation"]
+
+            self.context = await self.playwright.chromium.launch_persistent_context(**launch_options)
+
+            if Config.CHROMIUM_STEALTH:
+                await self.context.add_init_script("""
+                    Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+                    Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
+                    Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+                    Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => 4 });
+                    window.chrome = window.chrome || { runtime: {} };
+                """)
+                await self.context.set_extra_http_headers({"Accept-Language": "en-US,en;q=0.9"})
             
             logger.info("Waiting for extension to initialize...")
             
