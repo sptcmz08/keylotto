@@ -93,8 +93,23 @@ class LineChromiumAutomator:
 
             # Navigate directly to the LINE interface
             self.page = await self.context.new_page()
+            await self.page.set_viewport_size({"width": 1280, "height": 800})
+
+            # Capture console messages from extension for debugging
+            self.page.on("console", lambda msg: logger.debug(f"[EXT-CONSOLE] {msg.type}: {msg.text}"))
+            self.page.on("pageerror", lambda err: logger.warning(f"[EXT-ERROR] {err}"))
+
             extension_url = f"chrome-extension://{self.extension_id}/index.html"
-            await self.page.goto(extension_url)
+            await self.page.bring_to_front()
+            await self.page.goto(extension_url, wait_until="domcontentloaded")
+            # Give Vue.js time to boot
+            await asyncio.sleep(3)
+            # If content still minimal, reload once to trigger re-initialization
+            content = await self.page.content()
+            if len(content) < 2000:
+                logger.info("Extension not rendered yet, reloading page...")
+                await self.page.reload(wait_until="domcontentloaded")
+                await asyncio.sleep(3)
             
             self.ready = True
             logger.info("Chromium environment ready. Please log in to LINE on the browser if not already.")
