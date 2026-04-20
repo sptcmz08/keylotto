@@ -102,9 +102,7 @@ class LineChromiumAutomator:
                     f"--disable-extensions-except={ext_path}",
                     f"--load-extension={ext_path}",
                     "--disable-blink-features=AutomationControlled",
-                    # ── VPS / root flags ──
-                    "--no-sandbox",
-                    "--disable-setuid-sandbox",
+                    # ── VPS flags (Sandbox is now enabled because we run as non-root 'linebot') ──
                     "--disable-gpu",
                     "--disable-dev-shm-usage",
                     "--disable-software-rasterizer",

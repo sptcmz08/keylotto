@@ -55,20 +55,6 @@ def get_extension():
         
         with open(manifest_path, 'w', encoding='utf-8') as mf:
             json.dump(data, mf, indent=2, ensure_ascii=False)
-            
-    # ---------- PATCH MAIN.JS TO BYPASS LTSM CRASH ----------
-    # Even with manifest changes, --no-sandbox disables SharedArrayBuffer entirely.
-    # We must patch main.js to not crash the app.
-    main_js_path = DEST_DIR / "static" / "js" / "main.js"
-    if main_js_path.exists():
-        with open(main_js_path, 'r', encoding='utf-8') as f:
-            content = f.read()
-            
-        if 'throw new Hp(Id.LTSM_NOT_AVAILABLE)' in content:
-            content = content.replace('throw new Hp(Id.LTSM_NOT_AVAILABLE)', 'console.warn("LTSM bypassed on VPS")')
-            with open(main_js_path, 'w', encoding='utf-8') as f:
-                f.write(content)
-            print("[+] main.js patched to bypass LTSM crash.")
         
     print("[+] Extension successfully extracted to 'line_extension' folder.")
 

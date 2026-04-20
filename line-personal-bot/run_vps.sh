@@ -38,30 +38,41 @@ rm -rf line_extension
 python setup_extension.py
 
 echo "=========================================="
-echo "4. กำลังเริ่มการทำงานของ Worker (Background)"
+echo "4. กำลังเริ่มการทำงานของ Worker (Background/Non-Root)"
 echo "=========================================="
 # กวาดล้างโพรเซสเก่า
 pkill -f "chromium_line_worker.py" || true
 pkill -f "Xvfb :99" || true
 sleep 2
 
-# เริ่ม xvfb display :99
+# ตรวจสอบว่ามี user 'linebot' หรือไม่ ถ้าไม่มีให้สร้าง (รัน worker แบบไม่ใช้ root เพื่อให้ Chrome Sandbox ทำงานได้)
+if ! id -u linebot > /dev/null 2>&1; then
+    echo "Creating non-root user 'linebot' for Chrome Sandbox..."
+    useradd -m -s /bin/bash linebot
+fi
+
+# ตั้งค่าสิทธิ์ให้ linebot เข้าถึงโฟลเดอร์รันได้
+chown -R linebot:linebot "$SCRIPT_DIR/chromium_data" >/dev/null 2>&1 || true
+# อนุญาตให้ทะลุโฟลเดอร์ Plesk
+chmod a+x /var /var/www /var/www/vhosts /var/www/vhosts/imzshop97.com /var/www/vhosts/imzshop97.com/httpdocs
+
+export PLAYWRIGHT_BROWSERS_PATH="$SCRIPT_DIR/pw-browsers"
+chown -R linebot:linebot "$PLAYWRIGHT_BROWSERS_PATH" >/dev/null 2>&1 || true
+chown -R linebot:linebot "$SCRIPT_DIR/line_extension" >/dev/null 2>&1 || true
+
+# เริ่ม xvfb display :99 เป็น root ได้ ไม่เป็นไร
 Xvfb :99 -screen 0 1280x720x24 -ac &
 XVFB_PID=$!
 sleep 1
 echo "Xvfb started on :99 (PID: $XVFB_PID)"
 
-# รัน Worker (root + --no-sandbox ใน Chrome args)
-VENV_PYTHON="$SCRIPT_DIR/venv-310/bin/python"
-DISPLAY=:99 nohup "$VENV_PYTHON" "$SCRIPT_DIR/chromium_line_worker.py" \
-    > "$SCRIPT_DIR/worker.log" 2>&1 &
-WORKER_PID=$!
-
 echo "✨ ติดตั้งและเริ่มการทำงานเรียบร้อยแล้ว!"
 echo "Xvfb PID: $XVFB_PID (display :99)"
-echo "Worker PID: $WORKER_PID (port 5001)"
 echo "=========================================="
 echo "Log (กำลังรอ worker เริ่ม...):"
-sleep 10
-tail -n 20 worker.log
 
+# รัน Worker ด้วย linebot user (เป็น background)
+su - linebot -c "cd '$SCRIPT_DIR' && export DISPLAY=:99 && export PLAYWRIGHT_BROWSERS_PATH='$PLAYWRIGHT_BROWSERS_PATH' && source venv-310/bin/activate && nohup python chromium_line_worker.py > worker.log 2>&1 &"
+
+sleep 5
+tail -n 20 worker.log
