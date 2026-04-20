@@ -270,14 +270,46 @@ async def screenshot(x_worker_token: Optional[str] = Header(default=None)):
     
     import base64
     try:
-        # Guarantee page is on extension
+        extension_url = f"chrome-extension://{automator.extension_id}/index.html"
+        
+        # Always navigate to extension page to ensure fresh render
         if automator.extension_id not in automator.page.url:
-            await automator.page.goto(f"chrome-extension://{automator.extension_id}/index.html")
-            await asyncio.sleep(1)
+            logger.info("Navigating to extension page for screenshot...")
+            await automator.page.goto(extension_url, wait_until="domcontentloaded")
+
+        # Wait for page to fully render (networkidle or timeout 5s)
+        try:
+            await automator.page.wait_for_load_state("networkidle", timeout=5000)
+        except Exception:
+            pass  # Timeout is fine, still take screenshot
+
+        # Extra small delay for JS-rendered content (Vue/React)
+        await asyncio.sleep(2)
+        
         image_bytes = await automator.page.screenshot(type="png", full_page=True)
         return {"screenshot_base64": base64.b64encode(image_bytes).decode('utf-8')}
     except Exception as e:
         logger.exception("Screenshot failed")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/debug")
+async def debug_info(x_worker_token: Optional[str] = Header(default=None)) -> Dict[str, Any]:
+    """Debug endpoint - returns current page URL and title for diagnosing blank screens"""
+    _require_token(x_worker_token)
+    if not automator.ready or not automator.page:
+        raise HTTPException(status_code=503, detail="Worker not ready")
+    try:
+        url = automator.page.url
+        title = await automator.page.title()
+        content_len = len(await automator.page.content())
+        return {
+            "current_url": url,
+            "page_title": title,
+            "content_length": content_len,
+            "extension_id": automator.extension_id,
+            "ready": automator.ready,
+        }
+    except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/send")
