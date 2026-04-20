@@ -102,10 +102,14 @@ class LineChromiumAutomator:
                     f"--disable-extensions-except={ext_path}",
                     f"--load-extension={ext_path}",
                     "--disable-blink-features=AutomationControlled",
-                    # ── xvfb display flags ──
+                    # ── VPS / root flags ──
+                    "--no-sandbox",
+                    "--disable-setuid-sandbox",
                     "--disable-gpu",
                     "--disable-dev-shm-usage",
                     "--disable-software-rasterizer",
+                    # ── LTSM sandbox needs SharedArrayBuffer for crypto ──
+                    "--enable-features=SharedArrayBuffer",
                 ],
                 no_viewport=True
             )
