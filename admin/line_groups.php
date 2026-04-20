@@ -98,6 +98,48 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         lineGroupsRedirectWithFlash('success', 'บันทึกการตั้งค่าการส่งของกลุ่มสำเร็จ', 'groups');
     }
 
+    if ($action === 'add_personal_group') {
+        $groupName = trim((string) ($_POST['group_name'] ?? ''));
+        $groupId = trim((string) ($_POST['group_id'] ?? ''));
+
+        if ($groupName === '') {
+            lineGroupsRedirectWithFlash('error', 'กรุณากรอกชื่อกลุ่ม LINE Desktop ให้ตรงกับในแอป LINE', 'groups');
+        }
+
+        if ($groupId === '') {
+            $groupId = 'personal_' . substr(hash('sha1', mb_strtolower($groupName, 'UTF-8')), 0, 16);
+        }
+        $groupId = preg_replace('/[^A-Za-z0-9_.:-]/', '_', $groupId) ?: '';
+
+        if ($groupId === '') {
+            lineGroupsRedirectWithFlash('error', 'ไม่สามารถสร้าง Group ID สำหรับกลุ่มนี้ได้', 'groups');
+        }
+
+        $rawSource = json_encode([
+            'source' => 'line_desktop_manual',
+            'group_name' => $groupName,
+        ], JSON_UNESCAPED_UNICODE);
+
+        $stmt = $pdo->prepare("
+            INSERT INTO line_groups (
+                group_id, source_type, group_name, joined_at, last_seen_at,
+                is_active, allow_texts, allow_images, raw_source
+            )
+            VALUES (?, 'personal', ?, NOW(), NOW(), 1, 1, 1, ?)
+            ON DUPLICATE KEY UPDATE
+                source_type = VALUES(source_type),
+                group_name = VALUES(group_name),
+                last_seen_at = NOW(),
+                is_active = 1,
+                allow_texts = 1,
+                allow_images = 1,
+                raw_source = VALUES(raw_source)
+        ");
+        $stmt->execute([$groupId, $groupName, $rawSource]);
+
+        lineGroupsRedirectWithFlash('success', 'เพิ่มกลุ่ม LINE Personal สำเร็จ', 'groups');
+    }
+
     if ($action === 'refresh_group_names') {
         if (!lineConfigReady($pdo)) {
             lineGroupsRedirectWithFlash('error', 'ยังไม่ได้ตั้งค่า LINE channel secret และ access token บน server', 'groups');
@@ -1202,6 +1244,24 @@ require_once 'includes/header.php';
 <section data-line-panel="groups" class="line-panel <?= $activeTab === 'groups' ? '' : 'hidden' ?>">
     <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
         <div class="xl:col-span-2 bg-white rounded-xl shadow-sm border overflow-hidden">
+            <form method="POST" class="border-b bg-green-50/60 p-4">
+                <input type="hidden" name="form_action" value="add_personal_group">
+                <div class="grid grid-cols-1 lg:grid-cols-[minmax(220px,1fr)_220px_120px] gap-3 items-end">
+                    <div>
+                        <label class="text-xs font-semibold text-gray-600 block mb-1">ชื่อกลุ่ม LINE Desktop</label>
+                        <input type="text" name="group_name" class="w-full border rounded-lg px-3 py-2 text-sm outline-none" placeholder="เช่น Gotzeela ¢ gotnaruk (2)">
+                        <div class="text-[11px] text-gray-500 mt-1">ต้องตรงกับชื่อที่ค้นหาเจอใน LINE Desktop</div>
+                    </div>
+                    <div>
+                        <label class="text-xs font-semibold text-gray-600 block mb-1">Group ID ภายใน</label>
+                        <input type="text" name="group_id" class="w-full border rounded-lg px-3 py-2 text-sm outline-none" placeholder="เว้นว่างได้">
+                        <div class="text-[11px] text-gray-500 mt-1">ระบบจะสร้างให้ถ้าเว้นว่าง</div>
+                    </div>
+                    <button type="submit" class="bg-[#2e7d32] text-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-[#1b5e20] transition">
+                        <i class="fas fa-plus mr-1"></i>เพิ่มกลุ่ม
+                    </button>
+                </div>
+            </form>
             <div class="px-4 py-3 border-b bg-gray-50 flex items-center justify-between gap-3">
                 <div class="font-semibold text-gray-700">รายชื่อกลุ่ม LINE</div>
                 <form method="POST">
