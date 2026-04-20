@@ -26,6 +26,24 @@ fi
 source venv-310/bin/activate
 pip install -r requirements.txt
 
+LINE_SEND_MODE_CONFIG=""
+if [ -f ".env" ]; then
+    LINE_SEND_MODE_CONFIG="$(awk -F= '/^[[:space:]]*LINE_SEND_MODE[[:space:]]*=/ { gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2); print tolower($2); exit }' .env | tr -d "\"'\r")"
+fi
+
+if [ "$LINE_SEND_MODE_CONFIG" = "automation" ]; then
+    echo "=========================================="
+    echo "3. ตรวจพบ LINE_SEND_MODE=automation"
+    echo "=========================================="
+    echo "โหมดนี้ใช้ Windows LINE Desktop Worker ผ่าน SSH tunnel"
+    echo "กำลังปิด Chromium worker เก่าบน VPS เพื่อคืนพอร์ต 5001..."
+    pkill -f "chromium_line_worker.py" || true
+    pkill -f "Xvfb :99" || true
+    echo "ข้ามการเปิด Chromium worker บน VPS แล้ว"
+    echo "ให้เปิด Windows worker และ start_worker_tunnel.ps1 แทน"
+    exit 0
+fi
+
 echo "=========================================="
 echo "3. ติดตั้ง Playwright Chromium"
 echo "=========================================="
