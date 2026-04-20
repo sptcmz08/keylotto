@@ -75,6 +75,8 @@ class LinePersonalClient:
     def check_login_status(self) -> bool:
         if self.send_mode == "automation":
             worker_status = self._get_automation_worker_status()
+            if "logged_in" in worker_status:
+                return bool(worker_status.get("logged_in"))
             return bool(worker_status.get("ready"))
         return self.is_logged_in and bool(self.auth_token)
 
@@ -257,7 +259,10 @@ class LinePersonalClient:
         if self.send_mode == "mock":
             return True
         if self.send_mode == "automation":
-            return bool(self._get_automation_worker_status().get("ready"))
+            worker_status = self._get_automation_worker_status()
+            if "logged_in" in worker_status:
+                return bool(worker_status.get("logged_in"))
+            return bool(worker_status.get("ready"))
         if self.send_mode in {"chrline", "linepy"}:
             return bool(self.auth_token)
         return False

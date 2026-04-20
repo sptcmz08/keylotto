@@ -7,6 +7,7 @@ import base64
 import logging
 import os
 import platform
+import re
 import subprocess
 import time
 from pathlib import Path
@@ -37,6 +38,45 @@ class WorkerSendRequest(BaseModel):
     group_id: str
     group_name: str
     messages: List[Dict[str, Any]]
+
+
+async def _locator_visible(locator) -> bool:
+    try:
+        return await locator.count() > 0 and await locator.first.is_visible()
+    except Exception:
+        return False
+
+
+async def _visible_texts(page: Page, selector: str) -> List[str]:
+    texts: List[str] = []
+    try:
+        elements = await page.locator(selector).all()
+        for element in elements:
+            try:
+                if not await element.is_visible():
+                    continue
+                text = " ".join((await element.text_content() or "").split())
+                if text and text not in texts:
+                    texts.append(text)
+            except Exception:
+                continue
+    except Exception:
+        pass
+    return texts
+
+
+async def _body_text(page: Page) -> str:
+    try:
+        return await page.locator("body").inner_text(timeout=2000)
+    except Exception:
+        return ""
+
+
+def _extract_pin_code(text: str) -> str:
+    for match in re.findall(r"\b\d{4,8}\b", text):
+        if len(match) in {4, 6, 8}:
+            return match
+    return ""
 
 
 def _capture_xvfb_display() -> Optional[bytes]:
@@ -189,12 +229,115 @@ class LineChromiumAutomator:
         self.ready = False
 
     async def status(self) -> Dict[str, Any]:
+        ui_state = await self.get_ui_state()
         return {
             "ready": self.ready,
             "platform": platform.platform(),
             "mode": "chromium_extension",
-            "extension_loaded": self.ready
+            "extension_loaded": self.ready,
+            "logged_in": bool(ui_state.get("logged_in")),
+            "login_state": ui_state.get("state"),
+            "login_error": ui_state.get("error", ""),
+            "ui_state": ui_state,
         }
+
+    async def get_ui_state(self) -> Dict[str, Any]:
+        if not self.ready or not self.page:
+            return {
+                "state": "not_ready",
+                "logged_in": False,
+                "ready": self.ready,
+                "error": "Worker is not ready",
+            }
+
+        page = self.page
+        state: Dict[str, Any] = {
+            "state": "unknown",
+            "logged_in": False,
+            "ready": self.ready,
+            "url": page.url,
+            "title": "",
+            "error": "",
+            "pin_code": "",
+        }
+
+        try:
+            state["title"] = await page.title()
+        except Exception:
+            pass
+
+        pin_locator = page.locator(
+            '.PinCode, .mdCMN01PinCode, .mdMN01PinCode, [class*="PinCode"], [class*="pinCode"], .pincode'
+        )
+        if await _locator_visible(pin_locator):
+            pin_text = " ".join((await pin_locator.first.text_content() or "").split())
+            state.update({
+                "state": "pin_required",
+                "logged_in": False,
+                "pin_code": _extract_pin_code(pin_text) or pin_text,
+            })
+            return state
+
+        email_selector = 'input[name="tid"], input[type="email"], input[placeholder*="Email"], input[placeholder*="email"]'
+        password_selector = 'input[name="tpasswd"], input[type="password"]'
+        email_visible = await _locator_visible(page.locator(email_selector))
+        password_visible = await _locator_visible(page.locator(password_selector))
+        login_form_visible = email_visible or password_visible
+
+        search_selector = (
+            'input[placeholder*="Search"], input[placeholder*="search"], '
+            'input[placeholder*="ค้น"], [aria-label*="Search"], [aria-label*="search"], [aria-label*="ค้น"]'
+        )
+        search_visible = await _locator_visible(page.locator(search_selector))
+        composer_visible = await _locator_visible(page.locator('[contenteditable="true"], textarea'))
+
+        body_text = await _body_text(page)
+        if not state["pin_code"] and re.search(r"verification|verify|pin|code|รหัส|ยืนยัน", body_text, re.IGNORECASE):
+            pin_code = _extract_pin_code(body_text)
+            if pin_code:
+                state.update({
+                    "state": "pin_required",
+                    "logged_in": False,
+                    "pin_code": pin_code,
+                })
+                return state
+
+        if search_visible:
+            state.update({
+                "state": "logged_in",
+                "logged_in": True,
+                "has_search": True,
+                "has_composer": composer_visible,
+            })
+            return state
+
+        if login_form_visible:
+            error_texts = _visible_texts(
+                page,
+                '.MdTxtAlert, .error, [class*="error"], [class*="Error"], [class*="alert"], [class*="Alert"]',
+            )
+            errors = await error_texts
+            state.update({
+                "state": "login_failed" if errors else "login_form",
+                "logged_in": False,
+                "error": errors[0] if errors else "",
+                "errors": errors,
+                "has_email_input": email_visible,
+                "has_password_input": password_visible,
+            })
+            return state
+
+        if composer_visible:
+            state.update({
+                "state": "maybe_logged_in",
+                "logged_in": True,
+                "has_search": False,
+                "has_composer": True,
+            })
+            return state
+
+        state["body_preview"] = " ".join(body_text.split())[:300]
+        return state
 
     async def send(self, group_name: str, messages: List[Dict[str, Any]]) -> Dict[str, Any]:
         if not self.ready or not self.page:
@@ -387,11 +530,13 @@ async def debug_info(x_worker_token: Optional[str] = Header(default=None)) -> Di
     page_url = "N/A"
     page_title = "N/A"
     content_len = 0
+    ui_state: Dict[str, Any] = {}
     if automator.page:
         try:
             page_url = automator.page.url
             page_title = await automator.page.title()
             content_len = len(await automator.page.content())
+            ui_state = await automator.get_ui_state()
         except Exception:
             pass
 
@@ -407,6 +552,9 @@ async def debug_info(x_worker_token: Optional[str] = Header(default=None)) -> Di
         "xvfb_capture_works": test_img is not None,
         "xvfb_capture_size": len(test_img) if test_img else 0,
         "ready": automator.ready,
+        "logged_in": bool(ui_state.get("logged_in")),
+        "login_state": ui_state.get("state"),
+        "ui_state": ui_state,
     }
 
 @app.post("/send")
@@ -436,116 +584,179 @@ async def login(request: LoginRequest, x_worker_token: Optional[str] = Header(de
         raise HTTPException(status_code=503, detail="Worker not ready")
     
     try:
-        page = automator.page
-        logger.info("Attempting LINE login with email/password...")
-        
-        # Wait for the login form to be visible
-        try:
-            await page.wait_for_selector('input[name="tid"]', timeout=10000)
-        except Exception:
-            # Try alternative selectors
+        async with automator._lock:
+            page = automator.page
+            logger.info("Attempting LINE login with email/password...")
+
+            current_state = await automator.get_ui_state()
+            if current_state.get("logged_in"):
+                screenshot_bytes = _capture_xvfb_display()
+                result = {
+                    "success": True,
+                    "status": "logged_in",
+                    "logged_in": True,
+                    "message": "Already logged in. Session is available.",
+                    "ui_state": current_state,
+                }
+                if screenshot_bytes:
+                    result["screenshot_base64"] = base64.b64encode(screenshot_bytes).decode('utf-8')
+                return result
+
+            if current_state.get("state") == "pin_required":
+                screenshot_bytes = _capture_xvfb_display()
+                result = {
+                    "success": True,
+                    "status": "pin_required",
+                    "logged_in": False,
+                    "message": f"กรุณานำรหัส {current_state.get('pin_code', '')} ไปป้อนในแอป LINE บนมือถือของคุณเพื่อยืนยันการเข้าระบบ",
+                    "pin_code": current_state.get("pin_code", ""),
+                    "ui_state": current_state,
+                }
+                if screenshot_bytes:
+                    result["screenshot_base64"] = base64.b64encode(screenshot_bytes).decode('utf-8')
+                return result
+
             try:
-                await page.wait_for_selector('input[type="email"], input[placeholder*="Email"], input[placeholder*="email"]', timeout=5000)
+                await page.wait_for_selector(
+                    'input[name="tid"], input[type="email"], input[placeholder*="Email"], input[placeholder*="email"]',
+                    timeout=10000,
+                )
             except Exception:
-                return {"success": False, "error": "Login form not found. The extension may already be logged in or not loaded."}
-        
-        # Fill email field
-        email_input = page.locator('input[name="tid"]').first
-        if await email_input.count() == 0:
-            email_input = page.locator('input[type="email"], input[placeholder*="Email"], input[placeholder*="email"]').first
-        
-        await email_input.click()
-        await email_input.fill("")
-        await email_input.fill(request.email)
-        await page.wait_for_timeout(500)
-        
-        # Fill password field  
-        password_input = page.locator('input[name="tpasswd"]').first
-        if await password_input.count() == 0:
-            password_input = page.locator('input[type="password"]').first
-        
-        await password_input.click()
-        await password_input.fill("")
-        await password_input.fill(request.password)
-        await page.wait_for_timeout(500)
-        
-        # Click login button
-        login_btn = page.locator('button:has-text("Log in"), button:has-text("เข้าสู่ระบบ")').first
-        if await login_btn.count() == 0:
-            login_btn = page.locator('button[type="submit"]').first
-        
-        await login_btn.click()
-        logger.info("Login form submitted, waiting for response...")
-        
-        # Wait for navigation or page change (login processing)
-        await page.wait_for_timeout(5000)
-        
-        # Check if login succeeded or if it prompted for a verification code
-        is_pin_screen = False
-        pin_code = ""
-        try:
-            # LINE usually shows an h1 or some text like "Verification code" and a big 4-6 digit number
-            pin_code_el = page.locator('.PinCode, .mdCMN01PinCode, .mdMN01PinCode, [class*="PinCode"], .pincode').first
-            if await pin_code_el.count() > 0 and await pin_code_el.is_visible():
-                is_pin_screen = True
-                pin_code = await pin_code_el.text_content()
-                pin_code = str(pin_code).strip()
-        except Exception:
-            pass
-            
-        if is_pin_screen:
-            logger.info(f"Login requires PIN verification: {pin_code}")
-            screenshot_bytes = _capture_xvfb_display()
-            result = {
-                "success": True, 
-                "message": f"กรุณานำรหัส {pin_code} ไปป้อนในแอป LINE บนมือถือของคุณเพื่อยืนยันการเข้าระบบ",
-                "pin_code": pin_code
-            }
-            if screenshot_bytes:
-                result["screenshot_base64"] = base64.b64encode(screenshot_bytes).decode('utf-8')
-            return result
-        
-        # Check if still on the login form (this means it failed)
-        still_has_login = False
-        try:
-            login_form_check = page.locator('input[name="tid"], input[type="email"], input[name="tpasswd"], input[type="password"]').first
-            still_has_login = await login_form_check.count() > 0 and await login_form_check.is_visible()
-        except Exception:
-            still_has_login = False
-        
-        if still_has_login:
-            error_text = ""
+                screenshot_bytes = _capture_xvfb_display()
+                result = {
+                    "success": False,
+                    "status": current_state.get("state", "unknown"),
+                    "logged_in": False,
+                    "error": "Login form not found. The extension is not on a usable login screen.",
+                    "hint": "Refresh the bot screen and check whether the LINE extension is showing the login form.",
+                    "ui_state": current_state,
+                }
+                if screenshot_bytes:
+                    result["screenshot_base64"] = base64.b64encode(screenshot_bytes).decode('utf-8')
+                return result
+
+            email_input = page.locator(
+                'input[name="tid"], input[type="email"], input[placeholder*="Email"], input[placeholder*="email"]'
+            ).first
+            password_input = page.locator('input[name="tpasswd"], input[type="password"]').first
+            if not await _locator_visible(email_input) or not await _locator_visible(password_input):
+                screenshot_bytes = _capture_xvfb_display()
+                result = {
+                    "success": False,
+                    "status": "login_form",
+                    "logged_in": False,
+                    "error": "Email or password field is not visible on the LINE login form.",
+                    "ui_state": await automator.get_ui_state(),
+                }
+                if screenshot_bytes:
+                    result["screenshot_base64"] = base64.b64encode(screenshot_bytes).decode('utf-8')
+                return result
+
+            await email_input.click()
+            await email_input.fill("")
+            await email_input.fill(request.email)
+            await page.wait_for_timeout(300)
+
+            await password_input.click()
+            await password_input.fill("")
+            await password_input.fill(request.password)
+            await page.wait_for_timeout(300)
+
+            login_btn = page.locator('button:has-text("Log in"), button:has-text("เข้าสู่ระบบ"), button[type="submit"]').first
+            if await login_btn.count() == 0:
+                screenshot_bytes = _capture_xvfb_display()
+                result = {
+                    "success": False,
+                    "status": "login_form",
+                    "logged_in": False,
+                    "error": "Login button not found on the LINE extension login form.",
+                    "ui_state": await automator.get_ui_state(),
+                }
+                if screenshot_bytes:
+                    result["screenshot_base64"] = base64.b64encode(screenshot_bytes).decode('utf-8')
+                return result
+
             try:
-                error_els = await page.locator('.MdTxtAlert, .error, [class*="error"], [class*="alert"]').all()
-                for el in error_els:
-                    if not await el.is_visible():
-                        continue
-                    text = await el.text_content() or ""
-                    if text.strip() != "":
-                        error_text = text.strip()
-                        break
-            except Exception:
-                pass
+                await login_btn.click(timeout=8000)
+            except Exception as click_err:
+                screenshot_bytes = _capture_xvfb_display()
+                result = {
+                    "success": False,
+                    "status": "login_form",
+                    "logged_in": False,
+                    "error": f"Could not click LINE login button: {click_err}",
+                    "ui_state": await automator.get_ui_state(),
+                }
+                if screenshot_bytes:
+                    result["screenshot_base64"] = base64.b64encode(screenshot_bytes).decode('utf-8')
+                return result
+            logger.info("Login form submitted, waiting for LINE state change...")
+
+            last_state: Dict[str, Any] = {}
+            started_at = time.monotonic()
+            timeout_seconds = 45
+            while time.monotonic() - started_at < timeout_seconds:
+                await page.wait_for_timeout(1000)
+                last_state = await automator.get_ui_state()
+                state_name = str(last_state.get("state", "unknown"))
+                logger.info("LINE login state: %s", state_name)
+
+                if last_state.get("logged_in"):
+                    logger.info("✅ LINE login successful!")
+                    screenshot_bytes = _capture_xvfb_display()
+                    result = {
+                        "success": True,
+                        "status": "logged_in",
+                        "logged_in": True,
+                        "message": "Login successful. Session saved.",
+                        "ui_state": last_state,
+                    }
+                    if screenshot_bytes:
+                        result["screenshot_base64"] = base64.b64encode(screenshot_bytes).decode('utf-8')
+                    return result
+
+                if state_name == "pin_required":
+                    pin_code = str(last_state.get("pin_code", "")).strip()
+                    logger.info("Login requires PIN verification: %s", pin_code)
+                    screenshot_bytes = _capture_xvfb_display()
+                    result = {
+                        "success": True,
+                        "status": "pin_required",
+                        "logged_in": False,
+                        "message": f"กรุณานำรหัส {pin_code} ไปป้อนในแอป LINE บนมือถือของคุณเพื่อยืนยันการเข้าระบบ",
+                        "pin_code": pin_code,
+                        "ui_state": last_state,
+                    }
+                    if screenshot_bytes:
+                        result["screenshot_base64"] = base64.b64encode(screenshot_bytes).decode('utf-8')
+                    return result
+
+                if state_name == "login_failed" and time.monotonic() - started_at >= 8:
+                    screenshot_bytes = _capture_xvfb_display()
+                    result = {
+                        "success": False,
+                        "status": "login_failed",
+                        "logged_in": False,
+                        "error": last_state.get("error") or "LINE rejected the login attempt.",
+                        "hint": "LINE may temporarily block extension login on this VPS. Wait a few minutes, refresh the bot screen, then try again.",
+                        "ui_state": last_state,
+                    }
+                    if screenshot_bytes:
+                        result["screenshot_base64"] = base64.b64encode(screenshot_bytes).decode('utf-8')
+                    return result
 
             screenshot_bytes = _capture_xvfb_display()
             result = {
                 "success": False,
-                "error": error_text or "Login did not complete. The LINE extension is still showing the login form.",
-                "hint": "Check email/password, wait a moment and try again, or use the QR code login shown in the screenshot.",
+                "status": str(last_state.get("state", "timeout") or "timeout"),
+                "logged_in": bool(last_state.get("logged_in")),
+                "error": "Login did not finish within 45 seconds.",
+                "hint": "Check the screenshot. If a verification code is visible, enter it in the LINE mobile app and refresh the status.",
+                "ui_state": last_state,
             }
             if screenshot_bytes:
                 result["screenshot_base64"] = base64.b64encode(screenshot_bytes).decode('utf-8')
             return result
-
-        logger.info("✅ LINE login successful!")
-        
-        # Take screenshot of logged-in state
-        await page.wait_for_timeout(3000)
-        screenshot_bytes = _capture_xvfb_display()
-        result = {"success": True, "message": "Login successful! Session saved."}
-        if screenshot_bytes:
-            result["screenshot_base64"] = base64.b64encode(screenshot_bytes).decode('utf-8')
-        return result
         
     except Exception as e:
         logger.exception("Login failed")

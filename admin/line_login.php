@@ -40,29 +40,44 @@ curl_setopt_array($ch, [
         'Accept: application/json',
     ],
     CURLOPT_POSTFIELDS => json_encode(['email' => $email, 'password' => $password]),
-    CURLOPT_TIMEOUT => 30,
+    CURLOPT_TIMEOUT => 70,
     CURLOPT_SSL_VERIFYPEER => false,
     CURLOPT_SSL_VERIFYHOST => 0,
 ]);
 
 $response = curl_exec($ch);
 $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+$curlError = curl_error($ch);
 curl_close($ch);
 
 $data = json_decode($response, true);
 
 header('Content-Type: application/json; charset=utf-8');
 
+if ($response === false) {
+    echo json_encode(['ok' => false, 'error' => 'CURL Error: ' . $curlError]);
+    exit;
+}
+
 if ($status >= 200 && $status < 300 && !empty($data['success'])) {
     echo json_encode([
         'ok' => true,
+        'status' => $data['status'] ?? '',
+        'logged_in' => !empty($data['logged_in']),
+        'pin_code' => $data['pin_code'] ?? '',
         'message' => $data['message'] ?? 'Login successful',
         'base64' => $data['screenshot_base64'] ?? null,
     ]);
 } else {
+    $detail = $data['detail'] ?? null;
+    if (is_array($detail)) {
+        $detail = $detail['error'] ?? json_encode($detail, JSON_UNESCAPED_UNICODE);
+    }
     echo json_encode([
         'ok' => false,
-        'error' => $data['error'] ?? $data['detail'] ?? "HTTP $status",
+        'status' => $data['status'] ?? '',
+        'logged_in' => !empty($data['logged_in']),
+        'error' => $data['error'] ?? $detail ?? "HTTP $status",
         'hint' => $data['hint'] ?? '',
         'base64' => $data['screenshot_base64'] ?? null,
     ]);

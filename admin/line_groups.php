@@ -2194,7 +2194,7 @@ function doLineLogin() {
     loginBtn.disabled = true;
     loginBtn.innerHTML = '<i class="fas fa-circle-notch fa-spin mr-1"></i> กำลัง Login...';
     resultDiv.className = 'mt-2 text-sm p-2 rounded bg-blue-50 text-blue-700 border border-blue-200';
-    resultDiv.textContent = 'กำลัง login... กรุณารอสักครู่ (ประมาณ 10 วินาที)';
+    resultDiv.textContent = 'กำลัง login... กรุณารอสักครู่ ระบบจะรอ LINE ตอบกลับสูงสุดประมาณ 45 วินาที';
     resultDiv.classList.remove('hidden');
     
     fetch('line_login.php', {
@@ -2208,8 +2208,18 @@ function doLineLogin() {
         loginBtn.innerHTML = '<i class="fas fa-sign-in-alt mr-1"></i> Login';
         
         if (data.ok) {
-            resultDiv.className = 'mt-2 text-sm p-2 rounded bg-green-50 text-green-800 border border-green-200';
-            resultDiv.innerHTML = '<i class="fas fa-check-circle mr-1"></i> ' + (data.message || 'Login สำเร็จ!') + ' — Session เก็บถาวรแล้ว';
+            if (data.status === 'pin_required' || data.pin_code) {
+                resultDiv.className = 'mt-2 text-sm p-2 rounded bg-yellow-50 text-yellow-800 border border-yellow-200';
+                resultDiv.innerHTML = '<i class="fas fa-key mr-1"></i> ' + (data.message || 'กรุณายืนยันรหัสในแอป LINE');
+                if (data.pin_code) resultDiv.innerHTML += '<br><strong>PIN: ' + data.pin_code + '</strong>';
+                resultDiv.innerHTML += '<br><small>หลังยืนยันแล้วให้กดรีเฟรชภาพ/ตรวจสถานะอีกครั้ง</small>';
+            } else if (data.logged_in || data.status === 'logged_in') {
+                resultDiv.className = 'mt-2 text-sm p-2 rounded bg-green-50 text-green-800 border border-green-200';
+                resultDiv.innerHTML = '<i class="fas fa-check-circle mr-1"></i> ' + (data.message || 'Login สำเร็จ!') + ' — Session เก็บถาวรแล้ว';
+            } else {
+                resultDiv.className = 'mt-2 text-sm p-2 rounded bg-blue-50 text-blue-800 border border-blue-200';
+                resultDiv.innerHTML = '<i class="fas fa-info-circle mr-1"></i> ' + (data.message || 'กำลังรอการยืนยันจาก LINE');
+            }
             // Refresh screenshot to show logged-in state
             if (data.base64) {
                 const img = document.getElementById('screenshotImage');
