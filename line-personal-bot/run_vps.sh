@@ -29,6 +29,7 @@ pip install -r requirements.txt
 echo "=========================================="
 echo "3. ติดตั้ง Playwright Chromium"
 echo "=========================================="
+export PLAYWRIGHT_BROWSERS_PATH="$SCRIPT_DIR/pw-browsers"
 python -m playwright install chromium
 python -m playwright install-deps chromium
 
