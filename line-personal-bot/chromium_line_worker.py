@@ -91,28 +91,61 @@ class LineChromiumAutomator:
             else:
                 logger.warning("Could not detect background page. Extension might fail to load.")
 
-            # Navigate directly to the LINE interface
-            self.page = await self.context.new_page()
-            await self.page.set_viewport_size({"width": 1280, "height": 800})
+            # ─────────────────────────────────────────────────────────────────
+            # Open LINE's popup window THE SAME WAY as clicking the extension
+            # icon: call chrome.windows.create() via the service worker so that
+            # LINE's React SPA initialises properly (plain page.goto() leaves it
+            # with a blank 863-byte shell because the app checks its window type)
+            # ─────────────────────────────────────────────────────────────────
+            self.page = None
+            logger.info("Triggering LINE extension window via service worker...")
+            try:
+                async with self.context.expect_page(timeout=10000) as page_info:
+                    await background_page.evaluate("""
+                        chrome.windows.create({
+                            url: chrome.runtime.getURL('index.html'),
+                            focused: true,
+                            width: 800,
+                            height: 580,
+                            type: 'popup'
+                        })
+                    """)
+                self.page = await page_info.value
+                logger.info(f"LINE popup window opened: {self.page.url}")
+            except Exception as popup_err:
+                logger.warning(f"Service-worker window.create failed ({popup_err}). Falling back to page.goto...")
 
-            # Capture console messages from extension for debugging
-            self.page.on("console", lambda msg: logger.debug(f"[EXT-CONSOLE] {msg.type}: {msg.text}"))
-            self.page.on("pageerror", lambda err: logger.warning(f"[EXT-ERROR] {err}"))
+            # Fallback: direct navigation
+            if self.page is None:
+                self.page = await self.context.new_page()
 
-            extension_url = f"chrome-extension://{self.extension_id}/index.html"
+            # Wire up console/error capture
+            self.page.on("console", lambda msg: logger.debug(f"[EXT] {msg.type}: {msg.text}"))
+            self.page.on("pageerror", lambda err: logger.warning(f"[EXT-ERR] {err}"))
+
+            # Ensure correct size and focus
+            await self.page.set_viewport_size({"width": 800, "height": 580})
             await self.page.bring_to_front()
-            await self.page.goto(extension_url, wait_until="domcontentloaded")
-            # Give Vue.js time to boot
-            await asyncio.sleep(3)
-            # If content still minimal, reload once to trigger re-initialization
-            content = await self.page.content()
-            if len(content) < 2000:
-                logger.info("Extension not rendered yet, reloading page...")
-                await self.page.reload(wait_until="domcontentloaded")
-                await asyncio.sleep(3)
-            
+
+            # If page isn't on the extension yet (fallback case), navigate now
+            if self.extension_id not in self.page.url:
+                extension_url = f"chrome-extension://{self.extension_id}/index.html"
+                await self.page.goto(extension_url, wait_until="domcontentloaded")
+
+            # Wait for the React/SPA to render
+            logger.info("Waiting for LINE app to render...")
+            for _ in range(30):  # up to 15 seconds
+                content = await self.page.content()
+                if len(content) > 2000:
+                    logger.info(f"LINE app rendered! content_length={len(content)}")
+                    break
+                await asyncio.sleep(0.5)
+            else:
+                logger.warning("LINE app did not grow beyond shell — may show blank screen")
+
             self.ready = True
             logger.info("Chromium environment ready. Please log in to LINE on the browser if not already.")
+
         except Exception as e:
             logger.error("Failed to launch chromium: %s", e)
 
