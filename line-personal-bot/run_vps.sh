@@ -40,7 +40,25 @@ if [ "$LINE_SEND_MODE_CONFIG" = "automation" ]; then
     pkill -f "chromium_line_worker.py" || true
     pkill -f "Xvfb :99" || true
     echo "ข้ามการเปิด Chromium worker บน VPS แล้ว"
-    echo "ให้เปิด Windows worker และ start_worker_tunnel.ps1 แทน"
+
+    mkdir -p "$SCRIPT_DIR/logs"
+    touch "$SCRIPT_DIR/logs/api.log"
+
+    if ss -ltn 2>/dev/null | awk '{print $4}' | grep -Eq '(^|:)5000$'; then
+        echo "LINE Personal API ทำงานอยู่แล้วบนพอร์ต 5000"
+    else
+        echo "กำลังเริ่ม LINE Personal API บนพอร์ต 5000..."
+        nohup python api.py > "$SCRIPT_DIR/logs/api.log" 2>&1 &
+        API_PID=$!
+        echo "LINE Personal API PID: $API_PID"
+    fi
+
+    sleep 2
+    echo "=========================================="
+    echo "API log:"
+    tail -n 20 "$SCRIPT_DIR/logs/api.log" || true
+    echo "=========================================="
+    echo "ให้เปิด Windows worker และ start_worker_tunnel.ps1 ค้างไว้"
     exit 0
 fi
 
