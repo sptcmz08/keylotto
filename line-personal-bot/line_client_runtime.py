@@ -212,10 +212,16 @@ class LinePersonalClient:
             return self._send_text_via_automation(group_id, message, group_name=group_name)
 
         if self.send_mode == "chrline":
-            return self._send_text_via_chrline(group_id, message)
+            resolved_group_id = self._resolve_direct_group_id(group_id, group_name=group_name)
+            if not resolved_group_id["success"]:
+                return {**resolved_group_id, "mode": "chrline", "type": "text"}
+            return self._send_text_via_chrline(str(resolved_group_id["group_id"]), message)
 
         if self.send_mode == "linepy":
-            return self._send_text_via_linepy(group_id, message)
+            resolved_group_id = self._resolve_direct_group_id(group_id, group_name=group_name)
+            if not resolved_group_id["success"]:
+                return {**resolved_group_id, "mode": "linepy", "type": "text"}
+            return self._send_text_via_linepy(str(resolved_group_id["group_id"]), message)
 
         return {
             "success": False,
@@ -244,10 +250,16 @@ class LinePersonalClient:
             return self._send_image_via_automation(group_id, image_url, group_name=group_name)
 
         if self.send_mode == "chrline":
-            return self._send_image_via_chrline(group_id, image_url)
+            resolved_group_id = self._resolve_direct_group_id(group_id, group_name=group_name)
+            if not resolved_group_id["success"]:
+                return {**resolved_group_id, "mode": "chrline", "type": "image", "image_url": image_url}
+            return self._send_image_via_chrline(str(resolved_group_id["group_id"]), image_url)
 
         if self.send_mode == "linepy":
-            return self._send_image_via_linepy(group_id, image_url)
+            resolved_group_id = self._resolve_direct_group_id(group_id, group_name=group_name)
+            if not resolved_group_id["success"]:
+                return {**resolved_group_id, "mode": "linepy", "type": "image", "image_url": image_url}
+            return self._send_image_via_linepy(str(resolved_group_id["group_id"]), image_url)
 
         return {
             "success": False,
@@ -266,6 +278,48 @@ class LinePersonalClient:
         if self.send_mode in {"chrline", "linepy"}:
             return bool(self.auth_token)
         return False
+
+    def _resolve_direct_group_id(self, group_id: str, group_name: Optional[str] = None) -> Dict[str, Any]:
+        normalized_group_id = group_id.strip()
+        if normalized_group_id == "":
+            return {"success": False, "error": "group_id is required"}
+
+        if not normalized_group_id.startswith("personal_"):
+            return {"success": True, "group_id": normalized_group_id}
+
+        target_name = self._normalize_group_name(group_name or "")
+        if target_name:
+            for group in self.get_joined_groups():
+                candidate_id = str(group.get("id", "")).strip()
+                candidate_name = self._normalize_group_name(
+                    str(group.get("name") or group.get("groupName") or "")
+                )
+                if candidate_id and not candidate_id.startswith("personal_") and candidate_name == target_name:
+                    logger.info(
+                        "Resolved manual LINE Desktop group %s (%s) to direct group id %s",
+                        normalized_group_id,
+                        group_name,
+                        candidate_id,
+                    )
+                    return {
+                        "success": True,
+                        "group_id": candidate_id,
+                        "resolved_from": normalized_group_id,
+                    }
+
+        return {
+            "success": False,
+            "error": (
+                "Manual LINE Desktop group IDs (personal_*) require LINE_SEND_MODE=automation. "
+                "Use Refresh groups to select the real LINE group ID for CHRLINE/linepy, "
+                "or switch the VPS .env to LINE_SEND_MODE=automation with the Windows worker tunnel."
+            ),
+            "group_id": normalized_group_id,
+        }
+
+    @staticmethod
+    def _normalize_group_name(value: str) -> str:
+        return " ".join(str(value).strip().casefold().split())
 
     def _reset_clients(self) -> None:
         self._linepy_client = None

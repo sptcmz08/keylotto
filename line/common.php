@@ -390,6 +390,65 @@ function lineNormalizePayloadStrings($value)
     return $value;
 }
 
+function lineExtractFirstImageUrlFromPayload($value): string
+{
+    if (!is_array($value)) {
+        return '';
+    }
+
+    $type = strtolower(trim((string) ($value['type'] ?? '')));
+    $url = trim((string) ($value['url'] ?? ''));
+    if ($type === 'image' && preg_match('/^https?:\/\//i', $url)) {
+        return $url;
+    }
+
+    foreach ($value as $item) {
+        if (is_array($item)) {
+            $nestedUrl = lineExtractFirstImageUrlFromPayload($item);
+            if ($nestedUrl !== '') {
+                return $nestedUrl;
+            }
+        }
+    }
+
+    return '';
+}
+
+function linePersonalCompatibleMessages(array $messages): array
+{
+    $converted = [];
+
+    foreach ($messages as $message) {
+        if (!is_array($message)) {
+            continue;
+        }
+
+        $messageType = strtolower(trim((string) ($message['type'] ?? 'text')));
+        if ($messageType === 'flex') {
+            $imageUrl = lineExtractFirstImageUrlFromPayload($message);
+            if ($imageUrl !== '') {
+                $converted[] = [
+                    'type' => 'image',
+                    'originalContentUrl' => $imageUrl,
+                    'previewImageUrl' => $imageUrl,
+                ];
+                continue;
+            }
+
+            $altText = trim((string) ($message['altText'] ?? ''));
+            $converted[] = [
+                'type' => 'text',
+                'text' => $altText !== '' ? $altText : 'LINE message',
+            ];
+            continue;
+        }
+
+        $converted[] = $message;
+    }
+
+    return $converted;
+}
+
 function lineNormalizeScheduledMessageTime(string $value): string
 {
     $value = trim($value);
@@ -2408,6 +2467,7 @@ function linePushViaPython(PDO $pdo, string $to, array $messages): array
 {
     $apiUrl = lineResolvedPersonalApiUrl($pdo);
     $messages = array_values(lineNormalizePayloadStrings($messages));
+    $messages = linePersonalCompatibleMessages($messages);
     $groupName = '';
 
     try {
@@ -2468,6 +2528,18 @@ function linePushViaPython(PDO $pdo, string $to, array $messages): array
     
     $responseData = json_decode($response, true);
     
+    if ($status >= 200 && $status < 300 && is_array($responseData) && (($responseData['success'] ?? null) === false)) {
+        $errorMsg = trim((string) ($responseData['error'] ?? $responseData['detail'] ?? $response));
+        lineLog('LINE Personal push failed to ' . $to . ' status=' . $status . ' error=' . $errorMsg);
+        return [
+            'ok' => false,
+            'status' => $status,
+            'body' => $response,
+            'error' => $errorMsg,
+            'data' => $responseData,
+        ];
+    }
+
     if ($status >= 200 && $status < 300) {
         lineLog('LINE Personal push success to ' . $to);
         return [
