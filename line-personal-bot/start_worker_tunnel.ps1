@@ -17,7 +17,7 @@ $ssh = Get-Command ssh -ErrorAction Stop
 $forwardSpec = "${RemoteBindAddress}:${RemotePort}:${LocalHost}:${LocalPort}"
 
 Write-Host "Starting reverse SSH tunnel..." -ForegroundColor Cyan
-Write-Host "Server: $ServerUser@$ServerHost:$ServerPort"
+Write-Host "Server: ${ServerUser}@${ServerHost}:${ServerPort}"
 Write-Host "Remote bind: $RemoteBindAddress`:$RemotePort"
 Write-Host "Local worker: $LocalHost`:$LocalPort"
 Write-Host ""
