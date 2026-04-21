@@ -46,6 +46,28 @@ $KEY_TO_RAAKAADEE_URL = [
     'lao-pattana' => 'https://www.raakaadee.com/ตรวจหวย-หุ้น/หวยลาวพัฒนา/',
 ];
 
+function getMonitorExpectedDrawDate(array $lottery, int $nowTs, string $todayReal) {
+    $schedule = $lottery['draw_schedule'] ?? 'daily';
+    $openTime = $lottery['open_time'] ?? '06:00:00';
+    $resultTime = $lottery['result_time'] ?? '00:00:00';
+
+    $openHour = intval(substr($openTime, 0, 2));
+    $resultHour = intval(substr($resultTime, 0, 2));
+    $isCrossMidnight = $resultHour < $openHour && $resultHour < 6;
+
+    $referenceDate = $todayReal;
+    if ($isCrossMidnight && date('H:i:s', $nowTs) < $openTime) {
+        $referenceDate = date('Y-m-d', strtotime($todayReal . ' -1 day'));
+    }
+
+    return getCurrentDrawDate($schedule, $referenceDate);
+}
+
+function buildMonitorResultDates(string $drawDate, string $today, string $todayReal) {
+    $dates = [$drawDate, $today, $todayReal, date('Y-m-d', strtotime($todayReal . ' -1 day'))];
+    return array_values(array_unique($dates));
+}
+
 foreach ($SLUG_TO_LOTTERY_NAME as $keySlug => $thaiName) {
     if (isset($KEY_TO_EXPHUAY[$keySlug])) {
         $NAME_TO_EXPHUAY_SLUG[$thaiName] = $KEY_TO_EXPHUAY[$keySlug];
@@ -64,12 +86,19 @@ $dueLotteries = [];
 $timedOutLotteries = [];
 
 foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $lt) {
-    $expectedDate = getCurrentDrawDate($lt['draw_schedule'] ?? 'daily');
+    $expectedDate = getMonitorExpectedDrawDate($lt, $now, $todayReal);
     if ($expectedDate !== $today && $expectedDate !== $todayReal) {
-        continue;
+        $openTime = $lt['open_time'] ?? '06:00:00';
+        $resultTime = $lt['result_time'] ?? '00:00:00';
+        $openHour = intval(substr($openTime, 0, 2));
+        $resultHour = intval(substr($resultTime, 0, 2));
+        $isCrossMidnight = $resultHour < $openHour && $resultHour < 6;
+        if (!$isCrossMidnight) {
+            continue;
+        }
     }
 
-    if (findUsableResultForDates($pdo, $lt['id'], [$expectedDate, $today, $todayReal])) {
+    if (findUsableResultForDates($pdo, $lt['id'], buildMonitorResultDates($expectedDate, $today, $todayReal))) {
         continue;
     }
 
@@ -97,7 +126,7 @@ foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $lt) {
 }
 
 foreach ($timedOutLotteries as $lt) {
-    $drawDates = array_values(array_unique([$lt['draw_date'], $today, $todayReal]));
+    $drawDates = buildMonitorResultDates($lt['draw_date'], $today, $todayReal);
 
     $logCheck = $pdo->prepare("
         SELECT COUNT(*)
@@ -157,8 +186,8 @@ if ($data && !empty($data['success'])) {
 
 $stillMissing = [];
 foreach ($dueLotteries as $lt) {
-    if (!findUsableResultForDates($pdo, $lt['id'], [$lt['draw_date'], $today, $todayReal])) {
-        $stillMissing[] = ['id' => $lt['id'], 'name' => $lt['name']];
+    if (!findUsableResultForDates($pdo, $lt['id'], buildMonitorResultDates($lt['draw_date'], $today, $todayReal))) {
+        $stillMissing[] = ['id' => $lt['id'], 'name' => $lt['name'], 'draw_date' => $lt['draw_date']];
     }
 }
 
@@ -235,7 +264,7 @@ if (!empty($stillMissing)) {
                             'source' => 'exphuay.com/result/' . $expSlug,
                         ]];
                         $singleStats = processResults($pdo, $singleResult, 'monitor-single');
-                        if ($singleStats['success'] > 0 || findUsableResultForDates($pdo, $missing['id'], [$today, $todayReal])) {
+                        if ($singleStats['success'] > 0 || findUsableResultForDates($pdo, $missing['id'], buildMonitorResultDates($missing['draw_date'], $today, $todayReal))) {
                             $saved = true;
                             echo "  💾 บันทึกแล้ว!\n";
                         }
@@ -273,7 +302,7 @@ if (!empty($stillMissing)) {
 
             if ($exitCode === 0 && !empty($data['success']) && !empty($results)) {
                 $fallbackStats = processResults($pdo, $results, 'monitor-raakaadee');
-                if ($fallbackStats['success'] > 0 || findUsableResultForDates($pdo, $missing['id'], [$today, $todayReal])) {
+                if ($fallbackStats['success'] > 0 || findUsableResultForDates($pdo, $missing['id'], buildMonitorResultDates($missing['draw_date'], $today, $todayReal))) {
                     echo "  💾 บันทึกจาก Raakaadee แล้ว!\n";
                 } else {
                     echo "  ⏳ Raakaadee พบผล แต่ยังบันทึกไม่ได้ในรอบนี้\n";
