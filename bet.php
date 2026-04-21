@@ -717,8 +717,9 @@ require_once 'includes/header.php';
                             <button
                                 type="button"
                                 id="addBetButton"
-                                onclick="triggerAddBetFromClick(event)"
-                                onpointerdown="triggerAddBetFromTap(event)"
+                                onclick="requestAddBet(event)"
+                                onpointerdown="requestAddBet(event)"
+                                ontouchend="requestAddBet(event)"
                                 class="w-full bg-[#26a69a] text-white py-2 rounded text-[13px] hover:bg-teal-600 transition h-[40px] flex items-center justify-center font-medium">
                                 <i class="fas fa-plus mr-1"></i> เพิ่มบิล
                             </button>
@@ -1070,7 +1071,8 @@ let betGroups = [];
 let selectedNums = [];
 let classicBetGroups = [];
 let pasteBetGroups = [];
-let lastAddBetTapAt = 0;
+let lastAddBetRequestAt = 0;
+let pendingAddBetTimer = null;
 
 // โหลดข้อมูลจาก sessionStorage
 (function loadSavedState() {
@@ -1567,24 +1569,42 @@ function addBetItem() {
     document.getElementById('numInput').focus();
 }
 
-function triggerAddBetFromTap(event) {
-    if (event && event.pointerType === 'mouse') {
-        return;
+function flushPendingAddBet() {
+    if (pendingAddBetTimer) {
+        clearTimeout(pendingAddBetTimer);
+        pendingAddBetTimer = null;
     }
-    if (event) {
-        event.preventDefault();
-    }
-    lastAddBetTapAt = Date.now();
     addBetItem();
 }
 
-function triggerAddBetFromClick(event) {
-    if (lastAddBetTapAt && Date.now() - lastAddBetTapAt < 700) {
-        if (event) {
-            event.preventDefault();
-        }
+function requestAddBet(event) {
+    const now = Date.now();
+    if (event) {
+        event.preventDefault();
+    }
+    if (now - lastAddBetRequestAt < 400) {
         return;
     }
+    lastAddBetRequestAt = now;
+
+    const activeEl = document.activeElement;
+    const activeId = activeEl ? activeEl.id : '';
+    const needsBlurFirst = activeEl && ['numInput', 'topAmount', 'botAmount'].includes(activeId);
+
+    if (pendingAddBetTimer) {
+        clearTimeout(pendingAddBetTimer);
+        pendingAddBetTimer = null;
+    }
+
+    if (needsBlurFirst && typeof activeEl.blur === 'function') {
+        activeEl.blur();
+        pendingAddBetTimer = setTimeout(() => {
+            pendingAddBetTimer = null;
+            addBetItem();
+        }, 30);
+        return;
+    }
+
     addBetItem();
 }
 
