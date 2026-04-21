@@ -719,6 +719,7 @@ require_once 'includes/header.php';
                                 id="addBetButton"
                                 onclick="requestAddBet(event)"
                                 onpointerdown="requestAddBet(event)"
+                                ontouchstart="requestAddBet(event)"
                                 ontouchend="requestAddBet(event)"
                                 class="w-full bg-[#26a69a] text-white py-2 rounded text-[13px] hover:bg-teal-600 transition h-[40px] flex items-center justify-center font-medium">
                                 <i class="fas fa-plus mr-1"></i> เพิ่มบิล
@@ -1073,6 +1074,7 @@ let classicBetGroups = [];
 let pasteBetGroups = [];
 let lastAddBetRequestAt = 0;
 let pendingAddBetTimer = null;
+let pendingAddBetAfterBlur = false;
 
 // โหลดข้อมูลจาก sessionStorage
 (function loadSavedState() {
@@ -1596,6 +1598,7 @@ function flushPendingAddBet() {
         clearTimeout(pendingAddBetTimer);
         pendingAddBetTimer = null;
     }
+    pendingAddBetAfterBlur = false;
     addBetItem();
 }
 
@@ -1619,14 +1622,17 @@ function requestAddBet(event) {
     }
 
     if (needsBlurFirst && typeof activeEl.blur === 'function') {
+        pendingAddBetAfterBlur = true;
         activeEl.blur();
         pendingAddBetTimer = setTimeout(() => {
             pendingAddBetTimer = null;
+            pendingAddBetAfterBlur = false;
             addBetItem();
         }, 30);
         return;
     }
 
+    pendingAddBetAfterBlur = false;
     addBetItem();
 }
 
@@ -2318,6 +2324,17 @@ document.getElementById('topAmount')?.addEventListener('keypress', function(e) {
 });
 document.getElementById('botAmount')?.addEventListener('keypress', function(e) {
     if (e.key === 'Enter') addBetItem();
+});
+
+['numInput', 'topAmount', 'botAmount'].forEach(id => {
+    document.getElementById(id)?.addEventListener('blur', function() {
+        if (!pendingAddBetAfterBlur) return;
+        setTimeout(() => {
+            if (pendingAddBetAfterBlur) {
+                flushPendingAddBet();
+            }
+        }, 0);
+    });
 });
 
 // Classic mode: auto-advance rows
