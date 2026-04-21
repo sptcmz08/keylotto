@@ -571,6 +571,7 @@ $stmtBills = $pdo->query("
     FROM bets b
     JOIN lottery_types lt ON b.lottery_type_id = lt.id
     JOIN lottery_categories lc ON lt.category_id = lc.id
+    WHERE DATE(b.created_at) = CURDATE()
     ORDER BY b.id DESC LIMIT 15
 ");
 $recentBills = $stmtBills->fetchAll();
@@ -702,7 +703,7 @@ require_once 'includes/header.php';
                             <input type="text" id="numInput" class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:border-blue-500 outline-none h-[40px]" placeholder="12 21 31 54...">
                         </div>
                         <div class="col-span-12 sm:col-span-1 flex items-end">
-                            <button onclick="reverseNumber()" id="btn-reverse" class="w-full bg-[#ffca28] text-yellow-900 py-2 rounded text-[13px] font-bold hover:bg-yellow-400 transition h-[40px]">กลับเลข</button>
+                            <button onclick="reverseNumber()" id="btn-reverse" tabindex="-1" class="w-full bg-[#ffca28] text-yellow-900 py-2 rounded text-[13px] font-bold hover:bg-yellow-400 transition h-[40px]">กลับเลข</button>
                         </div>
                         <div class="col-span-6 sm:col-span-3">
                             <label class="text-[11px] text-gray-500 block mb-0.5 text-center" id="topLabel">บน</label>
@@ -1240,11 +1241,22 @@ function reverseNumber() {
     const reversed = [];
     const addedRevs = [];
     selectedNums.forEach(num => {
-        reversed.push(num);
-        const rev = num.split('').reverse().join('');
-        if (rev !== num && !reversed.includes(rev)) {
-            reversed.push(rev);
-            addedRevs.push(rev);
+        if (!reversed.includes(num)) reversed.push(num);
+        
+        if (num.length === 3) {
+            const perms = getPermutations(num);
+            perms.forEach(p => {
+                if (!reversed.includes(p)) {
+                    reversed.push(p);
+                    addedRevs.push(p);
+                }
+            });
+        } else {
+            const rev = num.split('').reverse().join('');
+            if (rev !== num && !reversed.includes(rev)) {
+                reversed.push(rev);
+                addedRevs.push(rev);
+            }
         }
     });
     selectedNums = reversed;
@@ -1534,10 +1546,18 @@ function addBetItem() {
     });
     
     renderBetItems();
-    selectedNums = [];
-    renderSelectedNumbers();
+    if (document.getElementById('winPanel') && document.getElementById('winPanel').style.display !== 'none') {
+        resetWinPanel();
+        document.getElementById('normalInputPanel').style.display = 'none';
+        currentBetType = 'win';
+    } else {
+        selectedNums = [];
+        renderSelectedNumbers();
+    }
     saveState();
     document.getElementById('numInput').value = '';
+    document.getElementById('topAmount').value = '';
+    document.getElementById('botAmount').value = '';
     document.getElementById('numInput').focus();
 }
 
@@ -1555,6 +1575,11 @@ function cancelBet() {
             document.getElementById('numInput').value = '';
             document.getElementById('topAmount').value = '';
             document.getElementById('botAmount').value = '';
+            resetWinPanel();
+            if (document.getElementById('winPanel') && document.getElementById('winPanel').style.display !== 'none') {
+                document.getElementById('normalInputPanel').style.display = 'none';
+                currentBetType = 'win';
+            }
         }
     });
 }
@@ -2199,8 +2224,11 @@ document.getElementById('numInput')?.addEventListener('paste', function(e) {
         this.value = '';
     }
 });
-document.getElementById('numInput')?.addEventListener('keypress', function(e) {
-    if (e.key === 'Enter') {
+document.getElementById('numInput')?.addEventListener('keydown', function(e) {
+    if (e.key === ' ' || e.code === 'Space') {
+        e.preventDefault();
+        reverseNumber();
+    } else if (e.key === 'Enter') {
         if (selectedNums.length > 0) {
             const top = document.getElementById('topAmount');
             if (!top.value) top.focus();
