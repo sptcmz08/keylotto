@@ -22,6 +22,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $twoBot = trim($_POST['two_bot'] ?? '');
         $runTop = trim($_POST['run_top'] ?? '');
         $runBot = trim($_POST['run_bot'] ?? '');
+        $lotteryNameStmt = $pdo->prepare("SELECT name FROM lottery_types WHERE id = ?");
+        $lotteryNameStmt->execute([$lotteryId]);
+        $lotteryName = $lotteryNameStmt->fetchColumn() ?: ('lottery_id=' . $lotteryId);
 
         $stmt = $pdo->prepare("
             INSERT INTO results (lottery_type_id, draw_date, three_top, three_tod, two_top, two_bot, run_top, run_bot)
@@ -43,10 +46,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($resetCount > 0 || $processedCount > 0) {
             $msg .= " (รีเซ็ต {$resetCount} โพย, คำนวณใหม่ {$processedCount} โพย)";
         }
+        $logParts = [];
+        foreach ([
+            '3top' => $threeTop,
+            '3tod' => $threeTod,
+            '2top' => $twoTop,
+            '2bot' => $twoBot,
+            'run_top' => $runTop,
+            'run_bot' => $runBot,
+        ] as $label => $value) {
+            if ($value !== '') {
+                $logParts[] = $label . '=' . $value;
+            }
+        }
+        $logParts[] = 'reset=' . $resetCount;
+        $logParts[] = 'recalc=' . $processedCount;
+        logScrape($pdo, $lotteryName, 'admin', 'success', 'Manual save: ' . implode(', ', $logParts), $drawDate);
         $msgType = 'success';
     } elseif ($action === 'delete_result') {
         $id = intval($_POST['id']);
+        $resultInfoStmt = $pdo->prepare("
+            SELECT r.draw_date, lt.name
+            FROM results r
+            JOIN lottery_types lt ON lt.id = r.lottery_type_id
+            WHERE r.id = ?
+        ");
+        $resultInfoStmt->execute([$id]);
+        $resultInfo = $resultInfoStmt->fetch(PDO::FETCH_ASSOC);
         $pdo->prepare("DELETE FROM results WHERE id = ?")->execute([$id]);
+        if ($resultInfo) {
+            logScrape($pdo, $resultInfo['name'], 'admin', 'success', 'Manual delete: result_id=' . $id, $resultInfo['draw_date']);
+        }
         $msg = 'ลบผลรางวัลสำเร็จ';
         $msgType = 'success';
     }

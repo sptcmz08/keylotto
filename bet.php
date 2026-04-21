@@ -714,7 +714,12 @@ require_once 'includes/header.php';
                             <input type="number" id="botAmount" min="0" class="w-full border border-gray-300 rounded px-3 py-2 text-sm text-center focus:border-blue-500 outline-none h-[40px]">
                         </div>
                         <div class="col-span-12 sm:col-span-2">
-                            <button onclick="addBetItem()" class="w-full bg-[#26a69a] text-white py-2 rounded text-[13px] hover:bg-teal-600 transition h-[40px] flex items-center justify-center font-medium">
+                            <button
+                                type="button"
+                                id="addBetButton"
+                                onclick="triggerAddBetFromClick(event)"
+                                onpointerdown="triggerAddBetFromTap(event)"
+                                class="w-full bg-[#26a69a] text-white py-2 rounded text-[13px] hover:bg-teal-600 transition h-[40px] flex items-center justify-center font-medium">
                                 <i class="fas fa-plus mr-1"></i> เพิ่มบิล
                             </button>
                         </div>
@@ -1065,6 +1070,7 @@ let betGroups = [];
 let selectedNums = [];
 let classicBetGroups = [];
 let pasteBetGroups = [];
+let lastAddBetTapAt = 0;
 
 // โหลดข้อมูลจาก sessionStorage
 (function loadSavedState() {
@@ -1559,6 +1565,27 @@ function addBetItem() {
     document.getElementById('topAmount').value = '';
     document.getElementById('botAmount').value = '';
     document.getElementById('numInput').focus();
+}
+
+function triggerAddBetFromTap(event) {
+    if (event && event.pointerType === 'mouse') {
+        return;
+    }
+    if (event) {
+        event.preventDefault();
+    }
+    lastAddBetTapAt = Date.now();
+    addBetItem();
+}
+
+function triggerAddBetFromClick(event) {
+    if (lastAddBetTapAt && Date.now() - lastAddBetTapAt < 700) {
+        if (event) {
+            event.preventDefault();
+        }
+        return;
+    }
+    addBetItem();
 }
 
 // ==========================================
