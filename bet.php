@@ -1396,12 +1396,34 @@ function removeSelectedNum(index) {
     saveState();
 }
 
+function flushPendingNumbersFromInput() {
+    const input = document.getElementById('numInput');
+    if (!input) return;
+
+    let val = (input.value || '').replace(/[^\d\s]/g, ' ').trim();
+    if (!val) return;
+
+    if (/\s/.test(val)) {
+        handleMultiPaste(val);
+        input.value = '';
+        return;
+    }
+
+    if (addSingleNumber(val)) {
+        input.value = '';
+        renderSelectedNumbers();
+        saveState();
+    }
+}
+
 // (reverseNumber removed - replaced by toggleReverse)
 
 // ==========================================
 // Add Bet Item (Quick Mode) - uses selectedNums if available
 // ==========================================
 function addBetItem() {
+    flushPendingNumbersFromInput();
+
     const top = parseFloat(document.getElementById('topAmount').value) || 0;
     const bot = parseFloat(document.getElementById('botAmount').value) || 0;
     
