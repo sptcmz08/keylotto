@@ -1451,7 +1451,7 @@ function normalizeNumbersForCurrentType(parts) {
 // ==========================================
 // Add Bet Item (Quick Mode) - uses selectedNums if available
 // ==========================================
-function addBetItem() {
+function addBetItem(nextFocusId = 'numInput') {
     const top = parseFloat(document.getElementById('topAmount').value) || 0;
     const bot = parseFloat(document.getElementById('botAmount').value) || 0;
     
@@ -1626,7 +1626,8 @@ function addBetItem() {
     document.getElementById('numInput').value = '';
     document.getElementById('topAmount').value = '';
     document.getElementById('botAmount').value = '';
-    document.getElementById('numInput').focus();
+    const nextFocusEl = document.getElementById(nextFocusId) || document.getElementById('numInput');
+    nextFocusEl?.focus();
 }
 
 function flushPendingAddBet() {
@@ -2367,7 +2368,7 @@ document.getElementById('topAmount')?.addEventListener('keydown', function(e) {
 
     if (botHidden || !botInput) {
         e.preventDefault();
-        addBetItem();
+        addBetItem('betNote');
         return;
     }
 
@@ -2380,7 +2381,7 @@ document.getElementById('botAmount')?.addEventListener('keypress', function(e) {
 document.getElementById('botAmount')?.addEventListener('keydown', function(e) {
     if (e.key === 'Tab') {
         e.preventDefault();
-        addBetItem();
+        addBetItem('betNote');
     }
 });
 
