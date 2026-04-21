@@ -1418,28 +1418,64 @@ function flushPendingNumbersFromInput() {
     }
 }
 
+function normalizeNumbersForCurrentType(parts) {
+    const normalized = [];
+    const pushUnique = (value) => {
+        if (!normalized.includes(value)) {
+            normalized.push(value);
+        }
+    };
+
+    parts.forEach(part => {
+        const val = String(part || '').trim();
+        if (!val) return;
+
+        if (currentBetType === '2' && /^\d{2}$/.test(val)) {
+            pushUnique(val);
+        } else if (currentBetType === '3' && /^\d{3}$/.test(val)) {
+            pushUnique(val);
+        } else if (currentBetType === '6' && /^\d{3}$/.test(val)) {
+            getPermutations(val).forEach(pushUnique);
+        } else if (currentBetType === '19' && /^\d$/.test(val)) {
+            get19Door(val).forEach(pushUnique);
+        } else if ((currentBetType === 'run' || currentBetType === 'win') && /^\d$/.test(val)) {
+            pushUnique(val);
+        }
+    });
+
+    return normalized;
+}
+
 // (reverseNumber removed - replaced by toggleReverse)
 
 // ==========================================
 // Add Bet Item (Quick Mode) - uses selectedNums if available
 // ==========================================
 function addBetItem() {
-    flushPendingNumbersFromInput();
-
     const top = parseFloat(document.getElementById('topAmount').value) || 0;
     const bot = parseFloat(document.getElementById('botAmount').value) || 0;
     
     // ❌ Block negative amounts
     if (top < 0 || bot < 0) { Swal.fire({ icon: 'error', title: 'จำนวนเงินไม่ถูกต้อง', text: 'ไม่สามารถใส่จำนวนเงินติดลบได้', confirmButtonColor: '#e53935' }); return; }
     
-    // Use selectedNums if any, fallback to input field
-    let numbers = [];
-    if (selectedNums.length > 0) {
-        numbers = [...selectedNums];
-    } else {
-        const numInputStr = document.getElementById('numInput').value.trim();
-        if (!numInputStr) { Swal.fire({ icon: 'warning', title: 'กรุณาใส่เลข', confirmButtonColor: '#f59e0b' }); return; }
-        numbers = numInputStr.split(/[\s,]+/).filter(n => n.length > 0);
+    const numInputEl = document.getElementById('numInput');
+    const rawInput = ((numInputEl?.value) || '').replace(/[^\d\s]/g, ' ').trim();
+    const inputParts = rawInput ? rawInput.split(/\s+/).filter(n => n.length > 0) : [];
+    const pendingInputNumbers = normalizeNumbersForCurrentType(inputParts);
+
+    let numbers = [...selectedNums];
+    pendingInputNumbers.forEach(num => {
+        if (!numbers.includes(num)) {
+            numbers.push(num);
+        }
+    });
+
+    if (numbers.length === 0) {
+        if (!rawInput) {
+            Swal.fire({ icon: 'warning', title: 'กรุณาใส่เลข', confirmButtonColor: '#f59e0b' });
+            return;
+        }
+        numbers = inputParts;
     }
     
     if (numbers.length === 0) { Swal.fire({ icon: 'warning', title: 'กรุณาใส่เลข', confirmButtonColor: '#f59e0b' }); return; }
@@ -2335,6 +2371,12 @@ document.getElementById('botAmount')?.addEventListener('keypress', function(e) {
             }
         }, 0);
     });
+});
+
+document.getElementById('betNote')?.addEventListener('focus', function() {
+    if (pendingAddBetAfterBlur) {
+        flushPendingAddBet();
+    }
 });
 
 // Classic mode: auto-advance rows
