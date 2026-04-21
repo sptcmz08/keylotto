@@ -42,7 +42,9 @@ $resetCount = $resetStmt->rowCount();
 $cronPath = realpath(__DIR__ . '/../cron_scrape.php');
 $output = [];
 $exitCode = 0;
-exec("php \"{$cronPath}\" all 2>&1", $output, $exitCode);
+$targetLotteryId = intval($result['lottery_type_id']);
+$targetDrawDate = preg_replace('/[^0-9-]/', '', (string) $drawDate);
+exec("php \"{$cronPath}\" targeted --lottery-id={$targetLotteryId} --draw-date={$targetDrawDate} 2>&1", $output, $exitCode);
 $cronOutput = implode("\n", $output);
 
 // Check if result was re-fetched

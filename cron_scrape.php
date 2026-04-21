@@ -31,6 +31,88 @@ $PYTHON_PATH = file_exists(__DIR__ . '/.venv/bin/python')
     ? __DIR__ . '/.venv/bin/python'
     : 'python3';
 
+$SCRAPE_FILTERS = [
+    'lottery_type_id' => null,
+    'draw_date' => null,
+];
+
+function setScrapeFilters(array $filters) {
+    global $SCRAPE_FILTERS;
+
+    if (isset($filters['lottery_type_id'])) {
+        $lotteryTypeId = intval($filters['lottery_type_id']);
+        $SCRAPE_FILTERS['lottery_type_id'] = $lotteryTypeId > 0 ? $lotteryTypeId : null;
+    }
+
+    if (isset($filters['draw_date'])) {
+        $drawDate = trim((string) $filters['draw_date']);
+        $SCRAPE_FILTERS['draw_date'] = preg_match('/^\d{4}-\d{2}-\d{2}$/', $drawDate) ? $drawDate : null;
+    }
+}
+
+function hasScrapeFilters() {
+    global $SCRAPE_FILTERS;
+    return !empty($SCRAPE_FILTERS['lottery_type_id']) || !empty($SCRAPE_FILTERS['draw_date']);
+}
+
+function shouldProcessLotteryResult($lotteryTypeId, $drawDate) {
+    global $SCRAPE_FILTERS;
+
+    if (!empty($SCRAPE_FILTERS['lottery_type_id']) && intval($SCRAPE_FILTERS['lottery_type_id']) !== intval($lotteryTypeId)) {
+        return false;
+    }
+
+    if (!empty($SCRAPE_FILTERS['draw_date']) && $SCRAPE_FILTERS['draw_date'] !== $drawDate) {
+        return false;
+    }
+
+    return true;
+}
+
+function hasTargetResult($pdo) {
+    global $SCRAPE_FILTERS;
+
+    if (empty($SCRAPE_FILTERS['lottery_type_id']) || empty($SCRAPE_FILTERS['draw_date'])) {
+        return false;
+    }
+
+    $stmt = $pdo->prepare("
+        SELECT 1
+        FROM results r
+        WHERE r.lottery_type_id = ?
+          AND r.draw_date = ?
+          AND " . usefulResultSqlCondition('r') . "
+        LIMIT 1
+    ");
+    $stmt->execute([$SCRAPE_FILTERS['lottery_type_id'], $SCRAPE_FILTERS['draw_date']]);
+
+    return (bool) $stmt->fetchColumn();
+}
+
+function parseCliOptions(array $args) {
+    $options = [
+        'lottery_type_id' => null,
+        'draw_date' => null,
+    ];
+
+    foreach ($args as $arg) {
+        if (!preg_match('/^--([^=]+)=(.*)$/', $arg, $m)) {
+            continue;
+        }
+
+        $key = $m[1];
+        $value = $m[2];
+
+        if ($key === 'lottery-id') {
+            $options['lottery_type_id'] = intval($value);
+        } elseif ($key === 'draw-date') {
+            $options['draw_date'] = $value;
+        }
+    }
+
+    return $options;
+}
+
 // =============================================
 // Slug → lottery_types.name Mapping
 // =============================================
@@ -180,11 +262,20 @@ function cancelBetsBecauseNoResult($pdo, $lotteryTypeId, array $drawDates, $appr
 // Smart Pre-check: นับผลที่ยังขาดวันนี้
 // ถ้าครบแล้ว → ข้าม scraping (ประหยัด CPU/RAM)
 // =============================================
-function countMissingResults($pdo, $expectedCount = 62) {
+function countMissingResults($pdo) {
     $today = date('Y-m-d', time() - 4 * 3600);
     
     // นับหวยที่ active ทั้งหมด
     $totalActive = $pdo->query("SELECT COUNT(*) FROM lottery_types WHERE is_active = 1")->fetchColumn();
+
+    $expectedCount = 0;
+    $expectedStmt = $pdo->query("SELECT draw_schedule FROM lottery_types WHERE is_active = 1");
+    foreach ($expectedStmt->fetchAll(PDO::FETCH_ASSOC) as $lottery) {
+        $schedule = $lottery['draw_schedule'] ?? 'daily';
+        if (getCurrentDrawDate($schedule, $today) === $today) {
+            $expectedCount++;
+        }
+    }
     
     // นับผลที่มีอยู่แล้ววันนี้
     $todayResults = $pdo->prepare("
@@ -527,6 +618,11 @@ function processResults($pdo, $results, $source) {
 
         // === ⛔ SAFEGUARD 2: ตรวจสอบว่าวันที่ตรงกับงวดที่ควรออก ===
         // เช่น ลาวพัฒนา (จ/พ/ศ) จะไม่บันทึกผลในวันอังคาร
+        if (!shouldProcessLotteryResult($lotteryTypeId, $drawDate)) {
+            $skippedCount++;
+            continue;
+        }
+
         $scheduleStmt = $pdo->prepare("SELECT draw_schedule FROM lottery_types WHERE id = ?");
         $scheduleStmt->execute([$lotteryTypeId]);
         $scheduleInfo = $scheduleStmt->fetch();
@@ -554,18 +650,24 @@ function processResults($pdo, $results, $source) {
         $runBot = !empty($twoBot) ? substr($twoBot, -1) : '';
 
         // Check if already exists
-        $stmt = $pdo->prepare("SELECT id, three_top, two_bot FROM results WHERE lottery_type_id = ? AND draw_date = ?");
+        $stmt = $pdo->prepare("SELECT id, three_top, two_top, two_bot, run_top, run_bot FROM results WHERE lottery_type_id = ? AND draw_date = ?");
         $stmt->execute([$lotteryTypeId, $drawDate]);
         $existing = $stmt->fetch();
 
         if ($existing) {
             // ถ้ามีอยู่แล้ว เช็คว่าตรงกันไหม
             $existingThree = $existing['three_top'] ?? '';
+            $existingTwoTop = $existing['two_top'] ?? '';
             $existingBot = $existing['two_bot'] ?? '';
+            $existingRunTop = $existing['run_top'] ?? '';
+            $existingRunBot = $existing['run_bot'] ?? '';
             
             $isMatch = true;
             if ($threeTop && $existingThree && $existingThree !== $threeTop) $isMatch = false;
+            if ($twoTop && $existingTwoTop && $existingTwoTop !== $twoTop) $isMatch = false;
             if ($twoBot && $existingBot && $existingBot !== $twoBot) $isMatch = false;
+            if ($runTop && $existingRunTop && $existingRunTop !== $runTop) $isMatch = false;
+            if ($runBot && $existingRunBot && $existingRunBot !== $runBot) $isMatch = false;
             
             if ($isMatch) {
                 echo "⏭️  {$keyLotteryName}: มีผลอยู่แล้ว ({$existingThree}/{$existingBot})\n";
@@ -640,7 +742,7 @@ function scrapeRaakaadee($pdo) {
     echo "🌐 Raakaadee Scraper (Camoufox)...\n";
 
     // Smart pre-check: ถ้าผลวันนี้ครบแล้ว ข้าม
-    $check = countMissingResults($pdo, 62);
+    $check = countMissingResults($pdo);
     if ($check['missing'] <= 0) {
         echo "✅ ผลวันนี้ครบแล้ว ({$check['found_today']}/{$check['expected']}) → ข้าม Raakaadee\n";
         return;
@@ -905,7 +1007,7 @@ function scrapePonhuay24($pdo) {
     echo "🎯 Ponhuay24 Backup Scraper (ดึงหวยที่ Raakaadee ไม่มี)...\n";
 
     // Smart pre-check: ถ้าผลวันนี้ครบแล้ว ข้าม
-    $check = countMissingResults($pdo, 62);
+    $check = countMissingResults($pdo);
     if ($check['missing'] <= 0) {
         echo "✅ ผลวันนี้ครบแล้ว ({$check['found_today']}/{$check['expected']}) → ข้าม Ponhuay24\n";
         return;
@@ -980,6 +1082,7 @@ function scrapeSmart($pdo) {
             SELECT 1 FROM results r 
             WHERE r.lottery_type_id = lt.id 
             AND (r.draw_date = ? OR r.draw_date = ?)
+            AND " . usefulResultSqlCondition('r') . "
         )
     ");
     $missingStmt->execute([$today, $todayReal]);
@@ -1110,6 +1213,45 @@ function scrapeSmart($pdo) {
     }
 }
 
+function scrapeTargeted($pdo) {
+    global $SCRAPE_FILTERS;
+
+    if (!hasScrapeFilters()) {
+        echo "ERROR: Targeted scraper requires --lottery-id and/or --draw-date\n";
+        return;
+    }
+
+    echo "Targeted Scraper";
+    if (!empty($SCRAPE_FILTERS['lottery_type_id'])) {
+        echo " [lottery_id={$SCRAPE_FILTERS['lottery_type_id']}]";
+    }
+    if (!empty($SCRAPE_FILTERS['draw_date'])) {
+        echo " [draw_date={$SCRAPE_FILTERS['draw_date']}]";
+    }
+    echo "\n";
+
+    scrapeExphuay($pdo);
+    if (hasTargetResult($pdo)) return;
+
+    echo "\n---------------------------------------\n\n";
+    scrapePonhuay24($pdo);
+    if (hasTargetResult($pdo)) return;
+
+    echo "\n---------------------------------------\n\n";
+    scrapeRaakaadee($pdo);
+    if (hasTargetResult($pdo)) return;
+
+    $dayOfMonth = intval(date('d'));
+    if ($dayOfMonth === 1 || $dayOfMonth === 16) {
+        echo "\n---------------------------------------\n\n";
+        scrapeThaiRayriffy($pdo);
+        if (hasTargetResult($pdo)) return;
+
+        echo "\n---------------------------------------\n\n";
+        scrapeGSB($pdo);
+    }
+}
+
 function runSmartSource($pdo, $source) {
     global $SCRIPT_DIR, $PYTHON_PATH;
     
@@ -1157,7 +1299,10 @@ function runSmartSource($pdo, $source) {
 // Main (only runs when called directly, not via require)
 // =============================================
 if (basename(__FILE__) === basename($_SERVER['SCRIPT_FILENAME'] ?? $_SERVER['argv'][0] ?? '')) {
-$scraper = $argv[1] ?? 'all';
+$argvList = $_SERVER['argv'] ?? [];
+$scraper = $argvList[1] ?? 'all';
+$cliOptions = parseCliOptions(array_slice($argvList, 2));
+setScrapeFilters($cliOptions);
 $startTime = microtime(true);
 
 echo "═══════════════════════════════════════\n";
@@ -1209,6 +1354,9 @@ try {
 }
 
 switch ($scraper) {
+    case 'targeted':
+        scrapeTargeted($pdo);
+        break;
     case 'smart':
         scrapeSmart($pdo);
         break;
@@ -1260,7 +1408,7 @@ switch ($scraper) {
         break;
     default:
         echo "❌ Unknown scraper: {$scraper}\n";
-        echo "Usage: php cron_scrape.php [smart|raakaadee|ponhuay24|exphuay|all]\n";
+        echo "Usage: php cron_scrape.php [targeted|smart|raakaadee|ponhuay24|exphuay|all] [--lottery-id=ID] [--draw-date=YYYY-MM-DD]\n";
         exit(1);
 }
 

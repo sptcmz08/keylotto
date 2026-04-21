@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../auth.php';
 requireLogin();
+require_once __DIR__ . '/../cron_scrape.php';
 
 if (isset($_GET['logout'])) { session_destroy(); header('Location: login.php'); exit; }
 
@@ -29,6 +30,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ");
         $stmt->execute([$lotteryId, $drawDate, $threeTop, $threeTod, $twoTop, $twoBot, $runTop, $runBot]);
         $msg = 'บันทึกผลรางวัลสำเร็จ';
+        $resetStmt = $pdo->prepare("
+            UPDATE bets
+            SET status = 'pending', win_amount = 0
+            WHERE lottery_type_id = ? AND draw_date = ? AND status IN ('won', 'lost')
+        ");
+        $resetStmt->execute([$lotteryId, $drawDate]);
+        $resetCount = $resetStmt->rowCount();
+
+        $processedCount = processBetPayouts($pdo, $lotteryId, $drawDate);
+
+        if ($resetCount > 0 || $processedCount > 0) {
+            $msg .= " (รีเซ็ต {$resetCount} โพย, คำนวณใหม่ {$processedCount} โพย)";
+        }
         $msgType = 'success';
     } elseif ($action === 'delete_result') {
         $id = intval($_POST['id']);
