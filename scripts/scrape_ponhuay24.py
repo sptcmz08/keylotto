@@ -46,6 +46,7 @@ NAME_MAPPINGS = {
     'ลาว VIP': 'lao-vip',
     'ลาวอาเซียน': 'lao-asean',
     'ลาวพัฒนา': 'lao-pattana',
+    'หวยลาวพัฒนา': 'lao-pattana',
     'ประชาชนลาว': 'lao-prachachon',
     'ลาวประชาคม': 'lao-prachachon',
 
@@ -104,7 +105,7 @@ NAME_MAPPINGS = {
 
 # Slugs we really need from ponhuay24 (ones raakaadee can't get)
 PRIORITY_SLUGS = {
-    'lao-tai', 'lao-pratuchai', 'lao-santiphap',
+    'lao-pattana', 'lao-tai', 'lao-pratuchai', 'lao-santiphap',
     'dowjones-star', 'hanoi-chinese-ny', 'rasi-12',
     'nikkei-morning', 'nikkei-afternoon',
     'egypt', 'malay',
