@@ -46,6 +46,28 @@ $KEY_TO_RAAKAADEE_URL = [
     'lao-pattana' => 'https://www.raakaadee.com/ตรวจหวย-หุ้น/หวยลาวพัฒนา/',
 ];
 
+$KEY_TO_PONHUAY24_SLUG = [
+    'lao-pattana' => 'lao-pattana',
+    'lao-tai' => 'lao-tai',
+    'lao-pratuchai' => 'lao-pratuchai',
+    'lao-santiphap' => 'lao-santiphap',
+    'lao-redcross' => 'lao-redcross',
+    'lao-extra' => 'lao-extra',
+    'lao-tv' => 'lao-tv',
+    'lao-hd' => 'lao-hd',
+    'lao-star' => 'lao-star',
+    'lao-star-vip' => 'lao-star-vip',
+    'lao-samakki' => 'lao-samakki',
+    'lao-samakki-vip' => 'lao-samakki-vip',
+    'lao-vip' => 'lao-vip',
+    'lao-asean' => 'lao-asean',
+    'lao-prachachon' => 'lao-prachachon',
+];
+
+$EXP_RESULT_PAGE_UNSUPPORTED = [
+    'lao-pattana' => true,
+];
+
 function getMonitorExpectedDrawDate(array $lottery, int $nowTs, string $todayReal) {
     $schedule = $lottery['draw_schedule'] ?? 'daily';
     $openTime = $lottery['open_time'] ?? '06:00:00';
@@ -200,7 +222,7 @@ if (!empty($stillMissing)) {
         $expSlug = $NAME_TO_EXPHUAY_SLUG[$missing['name']] ?? null;
         $saved = false;
 
-        if ($expSlug) {
+        if ($expSlug && empty($EXP_RESULT_PAGE_UNSUPPORTED[$keySlug])) {
             echo "  🌐 {$missing['name']} → exphuay.com/result/{$expSlug}...\n";
 
             $pageUrl = "https://exphuay.com/result/{$expSlug}";
@@ -279,6 +301,37 @@ if (!empty($stillMissing)) {
 
         if ($saved) {
             continue;
+        }
+
+        if ($keySlug && isset($KEY_TO_PONHUAY24_SLUG[$keySlug])) {
+            $ponhuaySlug = $KEY_TO_PONHUAY24_SLUG[$keySlug];
+            echo "  ðŸŒ {$missing['name']} â†’ Ponhuay24 fallback...\n";
+
+            $stderrFile = tempnam(sys_get_temp_dir(), 'monitor_ponhuay24_');
+            $output = [];
+            $exitCode = 0;
+            $command = escapeshellarg($PYTHON_PATH)
+                . ' ' . escapeshellarg($SCRIPT_DIR . '/scrape_ponhuay24.py')
+                . ' --slug ' . escapeshellarg($ponhuaySlug)
+                . " 2>{$stderrFile}";
+            exec($command, $output, $exitCode);
+            @unlink($stderrFile);
+
+            $json = implode("\n", $output);
+            $data = json_decode($json, true);
+            $results = $data['results'] ?? [];
+
+            if ($exitCode === 0 && !empty($data['success']) && !empty($results)) {
+                $fallbackStats = processResults($pdo, $results, 'monitor-ponhuay24');
+                if ($fallbackStats['success'] > 0 || findUsableResultForDates($pdo, $missing['id'], buildMonitorResultDates($missing['draw_date'], $today, $todayReal))) {
+                    echo "  ðŸ’¾ à¸šà¸±à¸™à¸—à¸¶à¸à¸ˆà¸²à¸ Ponhuay24 à¹à¸¥à¹‰à¸§!\n";
+                    continue;
+                }
+
+                echo "  â³ Ponhuay24 à¸žà¸šà¸œà¸¥ à¹à¸•à¹ˆà¸¢à¸±à¸‡à¸šà¸±à¸™à¸—à¸¶à¸à¹„à¸¡à¹ˆà¹„à¸”à¹‰à¹ƒà¸™à¸£à¸­à¸šà¸™à¸µà¹‰\n";
+            } else {
+                echo "  â³ Ponhuay24 à¸¢à¸±à¸‡à¹„à¸¡à¹ˆà¸¡à¸µà¸œà¸¥ â†’ à¸¥à¸­à¸‡à¹à¸«à¸¥à¹ˆà¸‡à¸ªà¸³à¸£à¸­à¸‡à¸–à¸±à¸”à¹„à¸›\n";
+            }
         }
 
         if ($keySlug && isset($KEY_TO_RAAKAADEE_URL[$keySlug])) {
