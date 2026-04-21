@@ -2358,8 +2358,30 @@ document.getElementById('topAmount')?.addEventListener('keypress', function(e) {
         else addBetItem();
     }
 });
+document.getElementById('topAmount')?.addEventListener('keydown', function(e) {
+    if (e.key !== 'Tab') return;
+
+    const botWrap = document.getElementById('botAmountWrap');
+    const botInput = document.getElementById('botAmount');
+    const botHidden = botWrap && getComputedStyle(botWrap).display === 'none';
+
+    if (botHidden || !botInput) {
+        e.preventDefault();
+        addBetItem();
+        return;
+    }
+
+    e.preventDefault();
+    botInput.focus();
+});
 document.getElementById('botAmount')?.addEventListener('keypress', function(e) {
     if (e.key === 'Enter') addBetItem();
+});
+document.getElementById('botAmount')?.addEventListener('keydown', function(e) {
+    if (e.key === 'Tab') {
+        e.preventDefault();
+        addBetItem();
+    }
 });
 
 ['numInput', 'topAmount', 'botAmount'].forEach(id => {
