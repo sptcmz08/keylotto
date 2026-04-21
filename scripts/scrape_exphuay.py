@@ -171,6 +171,21 @@ RESULT_SLUG_TO_KEY = {}
 for exp_slug, key_slug in EXPHUAY_LOTTERIES.items():
     RESULT_SLUG_TO_KEY[exp_slug] = key_slug
 
+# Some late-night / cross-midnight lotteries can show stale "latest" values on
+# /result before the dated archive has rolled over. We skip them on the shared
+# page and let backward pages provide the date-specific result instead.
+RESULT_PAGE_EXCLUDED_SLUGS = {
+    'dji',
+    'dowjones-vip',
+    'dowjonestar',
+    'ftse100',
+    'england-vip',
+    'gdaxi',
+    'germany-vip',
+    'moexbc',
+    'russia-vip',
+}
+
 
 def scrape_result_page(target_date, debug=False):
     """Scrape from /result page — gets ALL today's results in one request"""
@@ -195,6 +210,11 @@ def scrape_result_page(target_date, debug=False):
     found_slugs = set()
     
     for exp_slug, key_slug in EXPHUAY_LOTTERIES.items():
+        if exp_slug in RESULT_PAGE_EXCLUDED_SLUGS:
+            if debug:
+                print(f'[ExpHuay]   ⏭️ {exp_slug} skipped on /result (date-sensitive)', file=sys.stderr)
+            continue
+
         slug_pattern = f'/result/{exp_slug}'
         
         # Find ALL occurrences of the slug
