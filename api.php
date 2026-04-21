@@ -50,7 +50,6 @@ try {
                 echo json_encode(['error' => 'ไม่พบหวยที่เลือก']);
                 exit;
             }
-
             // =============================================
             // ตรวจสอบปิดรับ (bet_closed flag + close_time)
             // =============================================
@@ -59,7 +58,8 @@ try {
                 exit;
             }
 
-            $closeTime = $lottery['close_time'] ?? null;
+            $betRound = resolveLotteryBetRound($lottery);
+            $closeTime = null;
             if ($closeTime) {
                 $nowDT = new DateTime();
                 $drawSchedule = normalizeSchedule($lottery['draw_schedule'] ?? 'daily');
@@ -92,6 +92,16 @@ try {
                     echo json_encode(['error' => '❌ ' . $lottery['name'] . ' ปิดรับแทงแล้ว (เลยเวลา ' . $closeTime . ')']);
                     exit;
                 }
+            }
+
+            if (empty($betRound['is_open'])) {
+                $closeLabel = $lottery['close_time'] ?? '-';
+                if (!empty($betRound['is_waiting'])) {
+                    echo json_encode(['error' => 'âŒ ' . $lottery['name'] . ' à¸¢à¸±à¸‡à¹„à¸¡à¹ˆà¹€à¸›à¸´à¸”à¸£à¸±à¸šà¹à¸—à¸‡']);
+                } else {
+                    echo json_encode(['error' => 'âŒ ' . $lottery['name'] . ' à¸›à¸´à¸”à¸£à¸±à¸šà¹à¸—à¸‡à¹à¸¥à¹‰à¸§ (à¹€à¸¥à¸¢à¹€à¸§à¸¥à¸² ' . $closeLabel . ')']);
+                }
+                exit;
             }
 
             // Server-side validation: digit count + negative amounts
@@ -204,6 +214,7 @@ try {
                     }
                 }
             }
+            $drawDate = $betRound['draw_date'] ?? $drawDate;
 
             // =============================================
             // ตรวจสอบยอดรับสูงสุดต่อเลข (max_per_number)

@@ -561,6 +561,12 @@ if ($drawSchedule === 'daily' || empty($drawSchedule)) {
     }
 }
 
+$betRound = resolveLotteryBetRound($lottery);
+$calcDrawDate = $betRound['draw_date'] ?? $calcDrawDate;
+$closeDateTime = !empty($betRound['close_time'])
+    ? $betRound['close_time']
+    : $closeDateTime;
+
 $drawDate = date('d-m-Y', strtotime($calcDrawDate));
 
 // Fetch recent 15 bills

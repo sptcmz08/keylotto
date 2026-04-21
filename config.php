@@ -322,3 +322,109 @@ function getNextDrawDate($schedule, $refDate = null) {
     
     return date('Y-m-d', strtotime('+1 day', $ref));
 }
+
+/**
+ * สร้างช่วงเวลาเปิดรับแทงของงวดที่กำหนด
+ */
+function buildLotteryBetWindow($drawDate, $openTime, $closeTime) {
+    $drawDate = date('Y-m-d', strtotime($drawDate));
+    $openTime = $openTime ?: '06:00:00';
+
+    if (empty($closeTime)) {
+        return [
+            'draw_date' => $drawDate,
+            'is_cross_midnight' => false,
+            'open_dt' => null,
+            'close_dt' => null,
+        ];
+    }
+
+    $isCrossMidnight = strcmp($closeTime, $openTime) <= 0;
+    $openDate = $isCrossMidnight
+        ? date('Y-m-d', strtotime($drawDate . ' -1 day'))
+        : $drawDate;
+
+    return [
+        'draw_date' => $drawDate,
+        'is_cross_midnight' => $isCrossMidnight,
+        'open_dt' => new DateTimeImmutable($openDate . ' ' . $openTime),
+        'close_dt' => new DateTimeImmutable($drawDate . ' ' . $closeTime),
+    ];
+}
+
+/**
+ * หางวดที่กำลังเปิดรับแทงจริงของหวยแต่ละตัวให้ใช้ตรงกันทั้งหน้าเว็บและ API
+ */
+function resolveLotteryBetRound(array $lottery, $reference = null) {
+    $now = $reference instanceof DateTimeInterface
+        ? DateTimeImmutable::createFromInterface($reference)
+        : new DateTimeImmutable($reference ?: 'now');
+
+    $schedule = normalizeSchedule($lottery['draw_schedule'] ?? 'daily');
+    $openTime = $lottery['open_time'] ?? '06:00:00';
+    $closeTime = $lottery['close_time'] ?? null;
+    $today = $now->format('Y-m-d');
+
+    if (empty($schedule) || $schedule === 'daily') {
+        $currentDrawDate = $today;
+    } else {
+        $currentDrawDate = getCurrentDrawDate($schedule, $today);
+    }
+
+    $candidateDrawDates = [$currentDrawDate];
+    $lastDrawDate = $currentDrawDate;
+    for ($i = 0; $i < 2; $i++) {
+        $nextDrawDate = getNextDrawDate($schedule, $lastDrawDate);
+        if ($nextDrawDate === $lastDrawDate) {
+            break;
+        }
+        $candidateDrawDates[] = $nextDrawDate;
+        $lastDrawDate = $nextDrawDate;
+    }
+
+    $selectedWindow = null;
+    $selectedState = 'closed';
+
+    foreach ($candidateDrawDates as $drawDate) {
+        $window = buildLotteryBetWindow($drawDate, $openTime, $closeTime);
+        $openDT = $window['open_dt'];
+        $closeDT = $window['close_dt'];
+
+        if (!$openDT || !$closeDT) {
+            $selectedWindow = $window;
+            $selectedState = 'open';
+            break;
+        }
+
+        if ($now < $openDT) {
+            $selectedWindow = $window;
+            $selectedState = 'waiting';
+            break;
+        }
+
+        if ($now <= $closeDT) {
+            $selectedWindow = $window;
+            $selectedState = 'open';
+            break;
+        }
+
+        $selectedWindow = $window;
+        $selectedState = 'closed';
+    }
+
+    if (!$selectedWindow) {
+        $selectedWindow = buildLotteryBetWindow($currentDrawDate, $openTime, $closeTime);
+    }
+
+    $openDT = $selectedWindow['open_dt'];
+    $closeDT = $selectedWindow['close_dt'];
+
+    return $selectedWindow + [
+        'state' => $selectedState,
+        'is_open' => $selectedState === 'open',
+        'is_waiting' => $selectedState === 'waiting',
+        'is_closed' => $selectedState === 'closed',
+        'open_time' => $openDT ? $openDT->format('Y-m-d H:i:s') : null,
+        'close_time' => $closeDT ? $closeDT->format('Y-m-d H:i:s') : null,
+    ];
+}
