@@ -1253,6 +1253,10 @@ function scrapeTargeted($pdo) {
     }
     echo "\n";
 
+    scrapeStockVip($pdo);
+    if (hasTargetResult($pdo)) return;
+
+    echo "\n---------------------------------------\n\n";
     scrapeExphuay($pdo);
     if (hasTargetResult($pdo)) return;
 
