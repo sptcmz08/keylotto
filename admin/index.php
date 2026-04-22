@@ -35,16 +35,27 @@ try {
             
             if ($result && !empty($result['three_top'])) {
                 // Results exist — recalculate this bet's win/loss
-                $rateStmt = $pdo->prepare("SELECT bet_type, pay_rate FROM pay_rates WHERE lottery_type_id = ?");
+                $rateStmt = $pdo->prepare("SELECT bet_type, pay_rate, over_threshold, over_pay_rate FROM pay_rates WHERE lottery_type_id = ?");
                 $rateStmt->execute([$ltId]);
                 $rateMap = [];
+                $overRateMap = [];
                 foreach ($rateStmt->fetchAll() as $r) {
                     $rateMap[$r['bet_type']] = floatval($r['pay_rate']);
+                    if (intval($r['over_threshold'] ?? 0) > 0 && floatval($r['over_pay_rate'] ?? 0) > 0) {
+                        $overRateMap[$r['bet_type']] = [
+                            'threshold' => intval($r['over_threshold']),
+                            'rate' => floatval($r['over_pay_rate']),
+                        ];
+                    }
                 }
                 
                 $itemStmt = $pdo->prepare("SELECT * FROM bet_items WHERE bet_id = ?");
                 $itemStmt->execute([$betId]);
                 $items = $itemStmt->fetchAll();
+                $typeCounts = [];
+                foreach ($items as $item) {
+                    $typeCounts[$item['bet_type']] = ($typeCounts[$item['bet_type']] ?? 0) + 1;
+                }
                 
                 $sortStr = function($s) { $a = str_split($s); sort($a); return implode('', $a); };
                 $totalWin = 0;
@@ -71,11 +82,7 @@ try {
                     
                     if ($isWinner) {
                         $hasWin = true;
-                        if (!empty($item['pay_rate']) && floatval($item['pay_rate']) > 0) {
-                            $payRate = floatval($item['pay_rate']);
-                        } else {
-                            $payRate = $rateMap[$type] ?? 0;
-                        }
+                        $payRate = resolveBetItemPayRate($item, $type, $rateMap, $overRateMap, $typeCounts);
                         $totalWin += $amount * $payRate;
                     }
                 }

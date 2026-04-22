@@ -216,16 +216,32 @@ try {
             }
             $drawDate = $betRound['draw_date'] ?? $drawDate;
 
+            $payRateStmt = $pdo->prepare("
+                SELECT bet_type, pay_rate, max_per_number, over_threshold, over_pay_rate
+                FROM pay_rates
+                WHERE lottery_type_id = ?
+            ");
+            $payRateStmt->execute([$lotteryId]);
+            $baseRates = [];
+            $limits = [];
+            $overRatesByType = [];
+            foreach ($payRateStmt->fetchAll() as $r) {
+                $betType = $r['bet_type'];
+                $baseRates[$betType] = floatval($r['pay_rate']);
+                if (floatval($r['max_per_number'] ?? 0) > 0) {
+                    $limits[$betType] = intval($r['max_per_number']);
+                }
+                if (intval($r['over_threshold'] ?? 0) > 0 && floatval($r['over_pay_rate'] ?? 0) > 0) {
+                    $overRatesByType[$betType] = [
+                        'threshold' => intval($r['over_threshold']),
+                        'rate' => floatval($r['over_pay_rate']),
+                    ];
+                }
+            }
+
             // =============================================
             // ตรวจสอบยอดรับสูงสุดต่อเลข (max_per_number)
             // =============================================
-            $stmtRates = $pdo->prepare("SELECT bet_type, max_per_number FROM pay_rates WHERE lottery_type_id = ? AND max_per_number > 0");
-            $stmtRates->execute([$lotteryId]);
-            $limits = [];
-            foreach ($stmtRates->fetchAll() as $r) {
-                $limits[$r['bet_type']] = intval($r['max_per_number']);
-            }
-
             if (!empty($limits)) {
                 $blocked = [];
                 $stmtCheck = $pdo->prepare("
@@ -355,15 +371,6 @@ try {
             // =============================================
             // อัตราจ่ายลดอัตโนมัติเมื่อเกิน threshold (ต่อหวย ต่อประเภท)
             // =============================================
-            $stmtOverRates = $pdo->prepare("SELECT bet_type, over_threshold, over_pay_rate FROM pay_rates WHERE lottery_type_id = ? AND over_threshold > 0 AND over_pay_rate > 0");
-            $stmtOverRates->execute([$lotteryId]);
-            $overRatesByType = [];
-            foreach ($stmtOverRates->fetchAll() as $or) {
-                $overRatesByType[$or['bet_type']] = [
-                    'threshold' => intval($or['over_threshold']),
-                    'rate' => floatval($or['over_pay_rate']),
-                ];
-            }
             $adjustedRates = [];
             foreach ($overRatesByType as $bt => $cfg) {
                 $adjustedRates[$bt] = $cfg['rate'];
@@ -458,7 +465,13 @@ try {
                 if (in_array($item['type'], $overLimitTypes) && isset($adjustedRates[$item['type']])) {
                     $adjustedRate = $adjustedRates[$item['type']];
                 }
-                $stmtItem->execute([$betId, $item['number'], $item['type'], floatval($item['amount']), $adjustedRate]);
+                $effectiveRate = calculateEffectiveBetItemPayRate(
+                    $item['type'],
+                    $baseRates,
+                    !empty($item['half_pay']),
+                    $adjustedRate
+                );
+                $stmtItem->execute([$betId, $item['number'], $item['type'], floatval($item['amount']), $effectiveRate]);
             }
 
             $pdo->commit();

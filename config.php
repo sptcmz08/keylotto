@@ -76,6 +76,55 @@ function formatMoney($amount)
     return number_format((float) $amount, 2);
 }
 
+function getStoredBetItemPayRate(array $item)
+{
+    foreach (['adjusted_pay_rate', 'pay_rate'] as $field) {
+        if (array_key_exists($field, $item) && $item[$field] !== null && $item[$field] !== '') {
+            return floatval($item[$field]);
+        }
+    }
+
+    return 0.0;
+}
+
+function resolveBetItemPayRate(array $item, $betType, array $rateMap = [], array $overRateMap = [], array $typeCounts = [])
+{
+    $storedRate = getStoredBetItemPayRate($item);
+    if ($storedRate > 0) {
+        return $storedRate;
+    }
+
+    if (isset($overRateMap[$betType])) {
+        $threshold = intval($overRateMap[$betType]['threshold'] ?? 0);
+        if ($threshold > 0 && intval($typeCounts[$betType] ?? 0) >= $threshold) {
+            return floatval($overRateMap[$betType]['rate'] ?? 0);
+        }
+    }
+
+    if (!isset($rateMap[$betType])) {
+        return 0.0;
+    }
+
+    if (is_array($rateMap[$betType])) {
+        return floatval($rateMap[$betType]['pay_rate'] ?? 0);
+    }
+
+    return floatval($rateMap[$betType]);
+}
+
+function calculateEffectiveBetItemPayRate($betType, array $baseRateMap = [], $isHalfPay = false, $overrideRate = null)
+{
+    $rate = $overrideRate !== null
+        ? floatval($overrideRate)
+        : floatval($baseRateMap[$betType] ?? 0);
+
+    if ($isHalfPay) {
+        $rate /= 2;
+    }
+
+    return max(0, $rate);
+}
+
 function getFlagForCountry($emoji, $lotteryName = '')
 {
     // Flag emoji → URL mapping

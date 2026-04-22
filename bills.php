@@ -49,15 +49,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'detail' && isset($_GET['bet_id'])
     foreach ($items as &$item) {
         $item['is_winner'] = false;
         $bt = $item['bet_type'];
-        // เช็คว่า bet_type นี้เกิน threshold หรือไม่ → ใช้ over_pay_rate
-        if (isset($overRateMap[$bt]) && ($typeCounts[$bt] ?? 0) >= $overRateMap[$bt]['threshold']) {
-            $item['pay_multiplier'] = $overRateMap[$bt]['rate'];
-        } elseif (!empty($item['pay_rate']) && floatval($item['pay_rate']) > 0) {
-            // ใช้ pay_rate ที่บันทึกไว้ตอนแทง (เลขอั้นจ่ายครึ่ง)
-            $item['pay_multiplier'] = floatval($item['pay_rate']);
-        } else {
-            $item['pay_multiplier'] = floatval($rateMap[$bt]['pay_rate'] ?? 0);
-        }
+        $item['pay_multiplier'] = resolveBetItemPayRate($item, $bt, $rateMap, $overRateMap, $typeCounts);
         $item['net_amount'] = floatval($item['amount']);
         $item['win_amount'] = 0;
         

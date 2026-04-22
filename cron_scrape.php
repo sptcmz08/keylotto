@@ -413,15 +413,31 @@ function processBetPayouts($pdo, $lotteryTypeId, $drawDate) {
     if (!$result || empty($result['three_top'])) return 0;
 
     // 2) Get pay rates for this lottery
-    $rateStmt = $pdo->prepare("SELECT bet_type, pay_rate FROM pay_rates WHERE lottery_type_id = ?");
+    $rateStmt = $pdo->prepare("SELECT bet_type, pay_rate, over_threshold, over_pay_rate FROM pay_rates WHERE lottery_type_id = ?");
     $rateStmt->execute([$lotteryTypeId]);
     $rateMap = [];
+    $overRateMap = [];
     foreach ($rateStmt->fetchAll() as $r) {
         $rateMap[$r['bet_type']] = floatval($r['pay_rate']);
+        if (intval($r['over_threshold'] ?? 0) > 0 && floatval($r['over_pay_rate'] ?? 0) > 0) {
+            $overRateMap[$r['bet_type']] = [
+                'threshold' => intval($r['over_threshold']),
+                'rate' => floatval($r['over_pay_rate']),
+            ];
+        }
     }
 
-    // 3) Get all pending bets
-    $betStmt = $pdo->prepare("SELECT id FROM bets WHERE lottery_type_id = ? AND draw_date = ? AND status = 'pending'");
+    // 3) Get bets that still need settlement or repair
+    $betStmt = $pdo->prepare("
+        SELECT id
+        FROM bets
+        WHERE lottery_type_id = ?
+          AND draw_date = ?
+          AND (
+              status = 'pending'
+              OR (status = 'won' AND COALESCE(win_amount, 0) = 0)
+          )
+    ");
     $betStmt->execute([$lotteryTypeId, $drawDate]);
     $pendingBets = $betStmt->fetchAll();
     if (empty($pendingBets)) return 0;
@@ -437,6 +453,10 @@ function processBetPayouts($pdo, $lotteryTypeId, $drawDate) {
         $itemStmt = $pdo->prepare("SELECT * FROM bet_items WHERE bet_id = ?");
         $itemStmt->execute([$betId]);
         $items = $itemStmt->fetchAll();
+        $typeCounts = [];
+        foreach ($items as $item) {
+            $typeCounts[$item['bet_type']] = ($typeCounts[$item['bet_type']] ?? 0) + 1;
+        }
 
         $totalWin = 0;
         $hasWin = false;
@@ -480,7 +500,7 @@ function processBetPayouts($pdo, $lotteryTypeId, $drawDate) {
                 } elseif (!empty($item['adjusted_pay_rate'])) {
                     $payRate = floatval($item['adjusted_pay_rate']);
                 } else {
-                    $payRate = $rateMap[$type] ?? 0;
+                    $payRate = resolveBetItemPayRate($item, $type, $rateMap, $overRateMap, $typeCounts);
                 }
                 $winAmount = $amount * $payRate;
                 $totalWin += $winAmount;
@@ -489,7 +509,7 @@ function processBetPayouts($pdo, $lotteryTypeId, $drawDate) {
 
         // Update bet status
         $newStatus = $hasWin ? 'won' : 'lost';
-        $updateStmt = $pdo->prepare("UPDATE bets SET status = ?, win_amount = ? WHERE id = ? AND status = 'pending'");
+        $updateStmt = $pdo->prepare("UPDATE bets SET status = ?, win_amount = ? WHERE id = ? AND status != 'cancelled'");
         $updateStmt->execute([$newStatus, $totalWin, $betId]);
         $processed++;
     }
@@ -1136,7 +1156,10 @@ function scrapeSmart($pdo) {
         SELECT DISTINCT b.lottery_type_id, b.draw_date
         FROM bets b
         JOIN results r ON r.lottery_type_id = b.lottery_type_id AND r.draw_date = b.draw_date
-        WHERE b.status = 'pending'
+        WHERE (
+            b.status = 'pending'
+            OR (b.status = 'won' AND COALESCE(b.win_amount, 0) = 0)
+        )
         AND r.three_top IS NOT NULL AND r.three_top != ''
     ");
     $catchAllPairs = $catchAllStmt->fetchAll();
