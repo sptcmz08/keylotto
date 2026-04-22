@@ -45,6 +45,12 @@ const INDIVIDUAL_SITES = [
         slugs: { closed: 'india-vip' },
         names: { closed: 'หุ้นอินเดีย VIP' },
     },
+    {
+        url: 'https://taiexvip.com/',
+        stock: 'taiwan',
+        slugs: { closed: 'taiwan-vip' },
+        names: { closed: 'à¸«à¸¸à¹‰à¸™à¹„à¸•à¹‰à¸«à¸§à¸±à¸™ VIP' },
+    },
 ];
 
 // Stocks that don't have individual sites → scrape from stocks-vip.com
@@ -327,14 +333,6 @@ async function scrapeStocksVipFallback(page, foundSlugs) {
             }
         }
 
-        // Map stock names to their slug/config
-        const stockToSlugMap = {};
-        for (const [slug, config] of Object.entries(STOCKS_VIP_FALLBACK)) {
-            for (const kw of config.keywords) {
-                stockToSlugMap[kw.toLowerCase()] = { slug, config };
-            }
-        }
-
         // Parse each section independently (no cross-contamination!)
         for (const [stock, sectionText] of Object.entries(sectionData)) {
             // Find which slug this stock section corresponds to
@@ -343,12 +341,23 @@ async function scrapeStocksVipFallback(page, foundSlugs) {
 
             for (const [slug, config] of Object.entries(STOCKS_VIP_FALLBACK)) {
                 if (foundSlugs.has(slug)) continue;
-                const isMatch = config.keywords.some(kw => kw.toLowerCase() === stock) ||
-                    config.keywords.some(kw => sectionText.toLowerCase().includes(kw.toLowerCase()));
+                const isMatch = config.keywords.some(kw => kw.toLowerCase() === stock.toLowerCase());
                 if (isMatch) {
                     targetSlug = slug;
                     targetConfig = config;
                     break; // First match wins — each section maps to ONE stock only
+                }
+            }
+
+            if (!targetSlug) {
+                for (const [slug, config] of Object.entries(STOCKS_VIP_FALLBACK)) {
+                    if (foundSlugs.has(slug)) continue;
+                    const isMatch = config.keywords.some(kw => sectionText.toLowerCase().includes(kw.toLowerCase()));
+                    if (isMatch) {
+                        targetSlug = slug;
+                        targetConfig = config;
+                        break; // First match wins â€” each section maps to ONE stock only
+                    }
                 }
             }
 
