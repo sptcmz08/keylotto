@@ -10,6 +10,7 @@ require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/cron_scrape.php';
 
 date_default_timezone_set('Asia/Bangkok');
+ensureScraperLogsTable($pdo);
 
 $TIMEOUT_MINUTES = 120;
 $now = time();
@@ -40,10 +41,6 @@ $KEY_TO_EXPHUAY = [
     'lao-prachachon' => 'laocitizen', 'lao-extra' => 'laoextra',
     'lao-tv' => 'laotv', 'lao-hd' => 'laoshd', 'lao-asean' => 'laosasean',
     'lao-redcross' => 'laoredcross', 'lao-pattana' => 'lao-pattana',
-];
-
-$KEY_TO_RAAKAADEE_URL = [
-    'lao-pattana' => 'https://www.raakaadee.com/ตรวจหวย-หุ้น/หวยลาวพัฒนา/',
 ];
 
 $KEY_TO_PONHUAY24_SLUG = [
@@ -332,39 +329,6 @@ if (!empty($stillMissing)) {
             } else {
                 echo "  â³ Ponhuay24 à¸¢à¸±à¸‡à¹„à¸¡à¹ˆà¸¡à¸µà¸œà¸¥ â†’ à¸¥à¸­à¸‡à¹à¸«à¸¥à¹ˆà¸‡à¸ªà¸³à¸£à¸­à¸‡à¸–à¸±à¸”à¹„à¸›\n";
             }
-        }
-
-        if ($keySlug && isset($KEY_TO_RAAKAADEE_URL[$keySlug])) {
-            $raakaadeeUrl = $KEY_TO_RAAKAADEE_URL[$keySlug];
-            echo "  🌐 {$missing['name']} → Raakaadee fallback...\n";
-
-            $stderrFile = tempnam(sys_get_temp_dir(), 'monitor_raakaadee_');
-            $output = [];
-            $exitCode = 0;
-            $command = escapeshellarg($PYTHON_PATH)
-                . ' ' . escapeshellarg($SCRIPT_DIR . '/scrape_raakaadee.py')
-                . ' --slug ' . escapeshellarg($keySlug)
-                . ' --url ' . escapeshellarg($raakaadeeUrl)
-                . " 2>{$stderrFile}";
-            exec($command, $output, $exitCode);
-            @unlink($stderrFile);
-
-            $json = implode("\n", $output);
-            $data = json_decode($json, true);
-            $results = $data['results'] ?? [];
-
-            if ($exitCode === 0 && !empty($data['success']) && !empty($results)) {
-                $fallbackStats = processResults($pdo, $results, 'monitor-raakaadee');
-                if ($fallbackStats['success'] > 0 || findUsableResultForDates($pdo, $missing['id'], buildMonitorResultDates($missing['draw_date'], $today, $todayReal))) {
-                    echo "  💾 บันทึกจาก Raakaadee แล้ว!\n";
-                } else {
-                    echo "  ⏳ Raakaadee พบผล แต่ยังบันทึกไม่ได้ในรอบนี้\n";
-                }
-            } else {
-                echo "  ⏳ Raakaadee ยังไม่มีผล → รอรอบถัดไป\n";
-            }
-
-            continue;
         }
 
         if (!$expSlug) {

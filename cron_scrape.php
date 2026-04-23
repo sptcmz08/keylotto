@@ -4,10 +4,10 @@
  * Lottery Auto-Scrape — PHP Wrapper for crontab
  * =============================================
  * เรียกจาก crontab เพื่อดึงผลหวยอัตโนมัติ
- * ใช้ Raakaadee + Ponhuay24 เป็นแหล่งหลัก
+ * ใช้ ExpHuay เป็นแหล่งหลัก และ Ponhuay24 เป็นสำรอง
  *
  * Usage:
- *   php cron_scrape.php raakaadee        ← ดึงจาก Raakaadee (แหล่งหลัก)
+ *   php cron_scrape.php exphuay          ← ดึงจาก ExpHuay (แหล่งหลัก)
  *   php cron_scrape.php ponhuay24        ← ดึงจาก Ponhuay24 (สำรอง)
  *   php cron_scrape.php rayriffy         ← ดึงรัฐบาลไทย
  *   php cron_scrape.php gsb             ← ดึงออมสิน
@@ -149,7 +149,7 @@ $SLUG_TO_LOTTERY_NAME = [
     'malaysia'           => 'หวยมาเลเซีย',
     'malay'              => 'หวยมาเลเซีย',
 
-    // === หุ้น VIP (จาก Raakaadee) ===
+    // === หุ้น VIP ===
     'dowjones-vip'           => 'ดาวโจนส์ VIP',
     'dowjones-star'          => 'ดาวโจนส์ STAR',
     'germany-vip'            => 'เยอรมัน VIP',
@@ -165,7 +165,7 @@ $SLUG_TO_LOTTERY_NAME = [
     'uk-vip'                 => 'อังกฤษ VIP',
     'korea-vip'              => 'เกาหลี VIP',
 
-    // === หุ้นปกติ (จาก Raakaadee) ===
+    // === หุ้นปกติ ===
     'nikkei-morning'     => 'นิเคอิ - เช้า',
     'nikkei-afternoon'   => 'นิเคอิ - บ่าย',
     'china-morning'      => 'หุ้นจีน - เช้า',
@@ -358,8 +358,40 @@ function getLotteryTypeId($pdo, $lotteryName) {
 // =============================================
 // Log helper
 // =============================================
+function ensureScraperLogsTable($pdo) {
+    static $ensured = false;
+
+    if ($ensured) {
+        return true;
+    }
+
+    try {
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS scraper_logs (
+                id INT(11) NOT NULL AUTO_INCREMENT,
+                lottery_name VARCHAR(100) NOT NULL,
+                source VARCHAR(50) NOT NULL,
+                status VARCHAR(20) NOT NULL DEFAULT 'success',
+                message TEXT DEFAULT NULL,
+                draw_date DATE DEFAULT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (id),
+                KEY idx_scraper_logs_lookup (draw_date, lottery_name, created_at),
+                KEY idx_scraper_logs_status (status, created_at)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ");
+        $ensured = true;
+        return true;
+    } catch (Exception $e) {
+        return false;
+    }
+}
+
 function logScrape($pdo, $lotteryName, $source, $status, $message = '', $drawDate = null) {
     try {
+        if (!ensureScraperLogsTable($pdo)) {
+            return;
+        }
         $stmt = $pdo->prepare("INSERT INTO scraper_logs (lottery_name, source, status, message, draw_date) VALUES (?, ?, ?, ?, ?)");
         $stmt->execute([$lotteryName, $source, $status, $message, $drawDate]);
     } catch (Exception $e) {
@@ -754,43 +786,7 @@ function processResults($pdo, $results, $source) {
 // Scraper Runners
 // =============================================
 
-// ManyCai removed — ใช้ Raakaadee + Ponhuay24 แทนทั้งหมด
-
-function scrapeRaakaadee($pdo) {
-    global $SCRIPT_DIR, $PYTHON_PATH;
-
-    echo "🌐 Raakaadee Scraper (Camoufox)...\n";
-
-    // Smart pre-check: ถ้าผลวันนี้ครบแล้ว ข้าม
-    $check = countMissingResults($pdo);
-    if ($check['missing'] <= 0) {
-        echo "✅ ผลวันนี้ครบแล้ว ({$check['found_today']}/{$check['expected']}) → ข้าม Raakaadee\n";
-        return;
-    }
-    echo "📋 ยังขาด {$check['missing']} ผล ({$check['found_today']}/{$check['expected']}) → เริ่มดึง...\n";
-
-    $stderrFile = tempnam(sys_get_temp_dir(), 'raakaadee_');
-    $output = [];
-    $exitCode = 0;
-    exec("{$PYTHON_PATH} \"{$SCRIPT_DIR}/scrape_raakaadee.py\" 2>{$stderrFile}", $output, $exitCode);
-    @unlink($stderrFile);
-
-    $jsonOutput = implode("\n", $output);
-    $data = json_decode($jsonOutput, true);
-
-    if (!$data || empty($data['success'])) {
-        echo "❌ Raakaadee: " . ($data['error'] ?? 'No data') . "\n";
-        logScrape($pdo, 'ALL', 'raakaadee', 'failed', $data['error'] ?? 'No data');
-        return;
-    }
-
-    $results = $data['results'] ?? [];
-    echo "📊 Raakaadee: " . count($results) . " results found\n";
-
-    // Raakaadee results already have slug → processResults handles mapping
-    $stats = processResults($pdo, $results, 'raakaadee');
-    echo "\n📊 Raakaadee Done! ✅ {$stats['success']} ใหม่, ⏭️ {$stats['skipped']} ข้าม, ❌ {$stats['failed']} ล้มเหลว\n";
-}
+// ManyCai removed — ใช้ ExpHuay + Ponhuay24 แทนทั้งหมด
 
 function scrapeStockVip($pdo) {
     global $SCRIPT_DIR, $NODE_PATH;
@@ -1024,7 +1020,7 @@ function scrapeGSB($pdo) {
 function scrapePonhuay24($pdo) {
     global $SCRIPT_DIR, $PYTHON_PATH;
 
-    echo "🎯 Ponhuay24 Backup Scraper (ดึงหวยที่ Raakaadee ไม่มี)...\n";
+    echo "🎯 Ponhuay24 Backup Scraper (ดึงหวยที่ ExpHuay ยังไม่มี)...\n";
 
     // Smart pre-check: ถ้าผลวันนี้ครบแล้ว ข้าม
     $check = countMissingResults($pdo);
@@ -1079,16 +1075,13 @@ function scrapeExphuay($pdo) {
 }
 
 // =============================================
-// Smart Scraper: สลับ raakaadee ↔ exphuay ทุก 1 นาที
+// Smart Scraper: ดึง ExpHuay ก่อน แล้วค่อยเติมจาก Ponhuay24
 // =============================================
 function scrapeSmart($pdo) {
-    global $SCRIPT_DIR, $PYTHON_PATH;
+    $sourceFirst = 'exphuay';
+    $sourceSecond = 'ponhuay24';
 
-    $minute = (int)date('i');
-    $sourceFirst = ($minute % 2 === 1) ? 'raakaadee' : 'exphuay';
-    $sourceSecond = ($sourceFirst === 'raakaadee') ? 'exphuay' : 'raakaadee';
-
-    echo "🔄 Smart Scraper — นาทีที่ {$minute} → ลำดับ: {$sourceFirst} → {$sourceSecond}\n\n";
+    echo "🔄 Smart Scraper — ลำดับ: {$sourceFirst} → {$sourceSecond}\n\n";
 
     // ดึงหวยที่ยังไม่มีผลวันนี้
     $today = date('Y-m-d', time() - 4 * 3600);
@@ -1264,10 +1257,6 @@ function scrapeTargeted($pdo) {
     scrapePonhuay24($pdo);
     if (hasTargetResult($pdo)) return;
 
-    echo "\n---------------------------------------\n\n";
-    scrapeRaakaadee($pdo);
-    if (hasTargetResult($pdo)) return;
-
     $dayOfMonth = intval(date('d'));
     if ($dayOfMonth === 1 || $dayOfMonth === 16) {
         echo "\n---------------------------------------\n\n";
@@ -1287,10 +1276,14 @@ function runSmartSource($pdo, $source) {
     $output = [];
     $exitCode = 0;
 
-    if ($source === 'raakaadee') {
-        exec("{$PYTHON_PATH} \"{$SCRIPT_DIR}/scrape_raakaadee.py\" 2>{$stderrFile}", $output, $exitCode);
-    } else {
+    if ($source === 'exphuay') {
         exec("{$PYTHON_PATH} \"{$SCRIPT_DIR}/scrape_exphuay.py\" --date={$today} 2>{$stderrFile}", $output, $exitCode);
+    } elseif ($source === 'ponhuay24') {
+        exec("{$PYTHON_PATH} \"{$SCRIPT_DIR}/scrape_ponhuay24.py\" 2>{$stderrFile}", $output, $exitCode);
+    } else {
+        @unlink($stderrFile);
+        echo "❌ {$source}: unsupported smart source\n";
+        return ['success' => 0, 'conflict' => 0];
     }
     @unlink($stderrFile);
 
@@ -1387,9 +1380,6 @@ switch ($scraper) {
     case 'smart':
         scrapeSmart($pdo);
         break;
-    case 'raakaadee':
-        scrapeRaakaadee($pdo);
-        break;
     case 'ponhuay24':
         scrapePonhuay24($pdo);
         break;
@@ -1420,9 +1410,6 @@ switch ($scraper) {
         scrapeExphuay($pdo);
         echo "\n───────────────────────────────────────\n\n";
         scrapePonhuay24($pdo);
-        echo "\n───────────────────────────────────────\n\n";
-        // Raakaadee เป็นสำรอง (เก็บผลที่ ExpHuay ไม่มี)
-        scrapeRaakaadee($pdo);
         // หวยไทย/ออมสิน — รันเฉพาะวันที่ 1 และ 16 ของเดือน
         $dayOfMonth = intval(date('d'));
         if ($dayOfMonth === 1 || $dayOfMonth === 16) {
@@ -1435,7 +1422,7 @@ switch ($scraper) {
         break;
     default:
         echo "❌ Unknown scraper: {$scraper}\n";
-        echo "Usage: php cron_scrape.php [targeted|smart|raakaadee|ponhuay24|exphuay|all] [--lottery-id=ID] [--draw-date=YYYY-MM-DD]\n";
+        echo "Usage: php cron_scrape.php [targeted|smart|ponhuay24|exphuay|all] [--lottery-id=ID] [--draw-date=YYYY-MM-DD]\n";
         exit(1);
 }
 

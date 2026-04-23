@@ -100,6 +100,33 @@ $results = $pdo->prepare("
 $results->execute([$selectedDate]);
 $results = $results->fetchAll();
 
+$recentScrapeLogs = [];
+$latestLogByLottery = [];
+$scrapeLogError = null;
+
+if (function_exists('ensureScraperLogsTable') && ensureScraperLogsTable($pdo)) {
+    try {
+        $logStmt = $pdo->prepare("
+            SELECT id, lottery_name, source, status, message, draw_date, created_at
+            FROM scraper_logs
+            WHERE draw_date = ?
+            ORDER BY created_at DESC, id DESC
+            LIMIT 200
+        ");
+        $logStmt->execute([$selectedDate]);
+        $recentScrapeLogs = $logStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        foreach ($recentScrapeLogs as $log) {
+            $lotteryName = (string) ($log['lottery_name'] ?? '');
+            if ($lotteryName !== '' && !isset($latestLogByLottery[$lotteryName])) {
+                $latestLogByLottery[$lotteryName] = $log;
+            }
+        }
+    } catch (Throwable $e) {
+        $scrapeLogError = $e->getMessage();
+    }
+}
+
 require_once 'includes/header.php';
 ?>
 
@@ -183,14 +210,21 @@ require_once 'includes/header.php';
                     <th class="px-3 py-2 text-center text-xs text-gray-500">2 ตัวล่าง</th>
                     <th class="px-3 py-2 text-center text-xs text-gray-500">วิ่งบน</th>
                     <th class="px-3 py-2 text-center text-xs text-gray-500">วิ่งล่าง</th>
+                    <th class="px-3 py-2 text-left text-xs text-gray-500">แหล่งล่าสุด</th>
+                    <th class="px-3 py-2 text-center text-xs text-gray-500">เวลาดึงล่าสุด</th>
                     <th class="px-3 py-2 text-center text-xs text-gray-500">ลบ</th>
                 </tr>
             </thead>
             <tbody>
                 <?php if (empty($results)): ?>
-                <tr><td colspan="9" class="px-3 py-8 text-center text-gray-400"><i class="fas fa-inbox text-2xl mb-2 block"></i>ไม่พบผลรางวัล</td></tr>
+                <tr><td colspan="11" class="px-3 py-8 text-center text-gray-400"><i class="fas fa-inbox text-2xl mb-2 block"></i>ไม่พบผลรางวัล</td></tr>
                 <?php else: foreach ($results as $r):
                     $flagUrl = getFlagForCountry($r['flag_emoji']);
+                    $latestLog = $latestLogByLottery[$r['lottery_name']] ?? null;
+                    $latestStatus = (string) ($latestLog['status'] ?? '');
+                    $latestSource = (string) ($latestLog['source'] ?? '-');
+                    $latestTime = !empty($latestLog['created_at']) ? date('H:i:s', strtotime($latestLog['created_at'])) : '-';
+                    $latestMessage = trim((string) ($latestLog['message'] ?? ''));
                 ?>
                 <tr class="border-b hover:bg-gray-50">
                     <td class="px-3 py-2 flex items-center space-x-2">
@@ -204,6 +238,22 @@ require_once 'includes/header.php';
                     <td class="px-3 py-2 text-center font-bold text-red-600 font-mono"><?= $r['two_bot'] ?: '-' ?></td>
                     <td class="px-3 py-2 text-center font-mono"><?= $r['run_top'] ?: '-' ?></td>
                     <td class="px-3 py-2 text-center font-mono"><?= $r['run_bot'] ?: '-' ?></td>
+                    <td class="px-3 py-2 text-xs">
+                        <div class="font-medium text-gray-700"><?= htmlspecialchars($latestSource) ?></div>
+                        <?php if ($latestStatus !== ''): ?>
+                        <div class="mt-0.5">
+                            <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] <?= $latestStatus === 'success' ? 'bg-green-50 text-green-700' : ($latestStatus === 'conflict' ? 'bg-amber-50 text-amber-700' : 'bg-red-50 text-red-700') ?>">
+                                <?= htmlspecialchars($latestStatus) ?>
+                            </span>
+                        </div>
+                        <?php endif; ?>
+                        <?php if ($latestMessage !== ''): ?>
+                        <div class="mt-1 text-[11px] text-gray-500 max-w-[220px] truncate" title="<?= htmlspecialchars($latestMessage) ?>">
+                            <?= htmlspecialchars($latestMessage) ?>
+                        </div>
+                        <?php endif; ?>
+                    </td>
+                    <td class="px-3 py-2 text-center text-xs text-gray-500"><?= htmlspecialchars($latestTime) ?></td>
                     <td class="px-3 py-2 text-center whitespace-nowrap">
                         <button onclick="rescrapeResult(<?= $r['id'] ?>, '<?= htmlspecialchars($r['lottery_name']) ?>')" class="text-orange-400 hover:text-orange-600 mr-2" title="ลบแล้วดึงใหม่">
                             <i class="fas fa-sync-alt"></i>
@@ -219,6 +269,53 @@ require_once 'includes/header.php';
             </tbody>
         </table>
     </div>
+</div>
+
+<div class="bg-white rounded-xl shadow-sm border overflow-hidden mt-6">
+    <div class="px-4 py-3 border-b bg-slate-50 flex items-center justify-between">
+        <span class="font-bold text-slate-700 text-sm"><i class="fas fa-clock-rotate-left mr-1"></i>ประวัติการดึงผลวันที่ <?= formatDateDisplay($selectedDate) ?></span>
+        <span class="text-xs text-slate-500">ดูเวลาได้จากคอลัมน์นี้ว่าระบบดึงหรือ admin คีย์เมื่อไร</span>
+    </div>
+    <?php if ($scrapeLogError): ?>
+    <div class="px-4 py-4 text-sm text-red-600 bg-red-50 border-t border-red-100">
+        โหลดประวัติการดึงผลไม่สำเร็จ: <?= htmlspecialchars($scrapeLogError) ?>
+    </div>
+    <?php else: ?>
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead class="bg-gray-50 border-b">
+                <tr>
+                    <th class="px-3 py-2 text-center text-xs text-gray-500">เวลา</th>
+                    <th class="px-3 py-2 text-left text-xs text-gray-500">หวย</th>
+                    <th class="px-3 py-2 text-left text-xs text-gray-500">แหล่ง</th>
+                    <th class="px-3 py-2 text-center text-xs text-gray-500">สถานะ</th>
+                    <th class="px-3 py-2 text-left text-xs text-gray-500">ข้อความ</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php if (empty($recentScrapeLogs)): ?>
+                <tr>
+                    <td colspan="5" class="px-3 py-8 text-center text-gray-400">
+                        <i class="fas fa-history text-2xl mb-2 block"></i>ยังไม่มี log ของวันนี้
+                    </td>
+                </tr>
+                <?php else: foreach ($recentScrapeLogs as $log): ?>
+                <tr class="border-b hover:bg-gray-50 align-top">
+                    <td class="px-3 py-2 text-center text-xs text-gray-500 whitespace-nowrap"><?= htmlspecialchars(date('H:i:s', strtotime($log['created_at']))) ?></td>
+                    <td class="px-3 py-2 text-xs text-gray-700 whitespace-nowrap"><?= htmlspecialchars($log['lottery_name']) ?></td>
+                    <td class="px-3 py-2 text-xs text-gray-700 whitespace-nowrap"><?= htmlspecialchars($log['source']) ?></td>
+                    <td class="px-3 py-2 text-center text-xs">
+                        <span class="inline-flex items-center rounded-full px-2 py-0.5 <?= $log['status'] === 'success' ? 'bg-green-50 text-green-700' : ($log['status'] === 'conflict' ? 'bg-amber-50 text-amber-700' : 'bg-red-50 text-red-700') ?>">
+                            <?= htmlspecialchars($log['status']) ?>
+                        </span>
+                    </td>
+                    <td class="px-3 py-2 text-xs text-gray-500"><?= htmlspecialchars((string) ($log['message'] ?? '-')) ?></td>
+                </tr>
+                <?php endforeach; endif; ?>
+            </tbody>
+        </table>
+    </div>
+    <?php endif; ?>
 </div>
 
 <!-- Rescrape Modal -->

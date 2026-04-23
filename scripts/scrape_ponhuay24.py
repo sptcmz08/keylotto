@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 ponhuay24.com Backup Scraper
-ดึงผลหวยจาก ponhuay24.com สำหรับตัวที่ raakaadee ดึงไม่ได้
+ดึงผลหวยจาก ponhuay24.com สำหรับตัวที่ ExpHuay ยังไม่ครอบคลุมหรือมาช้า
 
 Usage:
   .venv/bin/python scripts/scrape_ponhuay24.py
@@ -103,7 +103,7 @@ NAME_MAPPINGS = {
     'หวยมาเลย์': 'malay',
 }
 
-# Slugs we really need from ponhuay24 (ones raakaadee can't get)
+# Slugs we really need from ponhuay24
 PRIORITY_SLUGS = {
     'lao-pattana', 'lao-tai', 'lao-pratuchai', 'lao-santiphap',
     'dowjones-star', 'hanoi-chinese-ny', 'rasi-12',
