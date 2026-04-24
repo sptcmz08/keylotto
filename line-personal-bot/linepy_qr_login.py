@@ -4,7 +4,6 @@ import traceback
 from typing import Any, Dict
 
 from config import Config
-from line_client_runtime import line_client
 
 
 def _chrline_kwargs() -> Dict[str, Any]:
@@ -26,6 +25,14 @@ def _chrline_kwargs() -> Dict[str, Any]:
 def _print_qr_steps(generator) -> None:
     for step in generator:
         print(step)
+
+
+def _save_auth_token(auth_token: str) -> Dict[str, Any]:
+    # Import after CHRLINE finishes login so its gevent SSL monkey patch runs
+    # before requests/urllib3 are loaded by the runtime client.
+    from line_client_runtime import line_client
+
+    return line_client.set_session(auth_token, save=True)
 
 
 def _login_with_chrline() -> int:
@@ -66,12 +73,13 @@ def _login_with_chrline() -> int:
         print("Login completed but no auth token was returned.")
         return 1
 
-    result = line_client.set_session(auth_token, save=True)
+    result = _save_auth_token(auth_token)
     if not result["success"]:
         print(f"Failed to save session: {result.get('error', 'unknown error')}")
         return 1
 
     print("Login successful.")
+    from line_client_runtime import line_client
     print(f"Session saved to: {line_client.session_file}")
     print(f"Auth token: {auth_token}")
     return 0
@@ -106,12 +114,13 @@ def _login_with_linepy() -> int:
         print("Login completed but no auth token was returned.")
         return 1
 
-    result = line_client.set_session(auth_token, save=True)
+    result = _save_auth_token(auth_token)
     if not result["success"]:
         print(f"Failed to save session: {result.get('error', 'unknown error')}")
         return 1
 
     print("Login successful.")
+    from line_client_runtime import line_client
     print(f"Session saved to: {line_client.session_file}")
     print(f"Auth token: {auth_token}")
     return 0
