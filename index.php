@@ -100,7 +100,7 @@ foreach ($allLotteries as &$l) {
     
     // === Current Round Date จาก draw_schedule + cross-midnight check ===
     $drawSchedule = $l['draw_schedule'] ?? 'daily';
-    $currentRoundDate = getCurrentDrawDate($drawSchedule);
+    $currentRoundDate = getCurrentDrawDateForLottery($drawSchedule, null, $l);
     
     // หวยข้ามเที่ยงคืน = close_time อยู่ช่วง 00:00-02:59
     // เช่น ดาวโจนส์ VIP close=00:10, STAR close=01:05
@@ -390,7 +390,7 @@ require_once 'includes/header.php';
                     $todayIsDrawDay = true;
                     $isNonDrawDay = false;
                     if ($ltSchedule !== 'daily' && $ltSchedule !== '') {
-                        $todayDrawCheck = getCurrentDrawDate($ltSchedule, date('Y-m-d'));
+                        $todayDrawCheck = getCurrentDrawDateForLottery($ltSchedule, date('Y-m-d'), $lt);
                         $todayIsDrawDay = ($todayDrawCheck === date('Y-m-d'));
                     }
                     
@@ -418,7 +418,7 @@ require_once 'includes/header.php';
                     }
                     
                     if ($showingNextRound) {
-                        $roundDate = getNextDrawDate($ltSchedule);
+                        $roundDate = getNextDrawDateForLottery($ltSchedule, null, $lt);
                         $hasResultForRound = false;
                     }
                     $displayDate = date('d-m-Y', strtotime($roundDate));
@@ -499,7 +499,7 @@ require_once 'includes/header.php';
                     // เช็คว่าวันนี้เป็นวันออกผลหรือไม่
                     $todayIsDrawDay = true;
                     if ($drawSchedule !== 'daily') {
-                        $todayDrawDate = getCurrentDrawDate($drawSchedule, $today);
+                        $todayDrawDate = getCurrentDrawDateForLottery($drawSchedule, $today, $lt);
                         $todayIsDrawDay = ($todayDrawDate === $today);
                     }
                     
@@ -507,7 +507,7 @@ require_once 'includes/header.php';
                     $prevDrawDate = null;
                     if ($resultDate && $drawSchedule !== 'daily') {
                         $prevDay = date('Y-m-d', strtotime($currentRoundDate . ' -1 day'));
-                        $prevDrawDate = getCurrentDrawDate($drawSchedule, $prevDay);
+                        $prevDrawDate = getCurrentDrawDateForLottery($drawSchedule, $prevDay, $lt);
                     }
                     
                     $isResultStale = false;

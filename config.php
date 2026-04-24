@@ -257,6 +257,53 @@ function normalizeSchedule($schedule) {
     return $schedule;
 }
 
+function isThaiGovernmentLotteryContext($lottery = null) {
+    if (!is_array($lottery)) {
+        return false;
+    }
+
+    $slug = strtolower(trim((string)($lottery['slug'] ?? '')));
+    if ($slug === 'thai') {
+        return true;
+    }
+
+    $name = trim((string)($lottery['name'] ?? $lottery['lottery_name'] ?? ''));
+    return $name !== '' && (
+        mb_stripos($name, 'รัฐบาลไทย', 0, 'UTF-8') !== false ||
+        mb_stripos($name, 'หวยรัฐบาลไทย', 0, 'UTF-8') !== false
+    );
+}
+
+function applyLotteryDrawDateOverride($drawDate, $lottery = null) {
+    if (!$drawDate || !isThaiGovernmentLotteryContext($lottery)) {
+        return $drawDate;
+    }
+
+    $ts = strtotime($drawDate);
+    if (!$ts) {
+        return $drawDate;
+    }
+
+    if (in_array(date('m-d', $ts), ['01-01', '05-01'], true)) {
+        return date('Y-m-d', strtotime('+1 day', $ts));
+    }
+
+    return $drawDate;
+}
+
+function getCurrentDrawDateForLottery($schedule, $refDate = null, $lottery = null) {
+    return applyLotteryDrawDateOverride(getCurrentDrawDate($schedule, $refDate), $lottery);
+}
+
+function getNextDrawDateForLottery($schedule, $refDate = null, $lottery = null) {
+    return applyLotteryDrawDateOverride(getNextDrawDate($schedule, $refDate), $lottery);
+}
+
+function isThaiGovernmentDrawDate($date = null) {
+    $ymd = $date ? date('Y-m-d', strtotime($date)) : date('Y-m-d');
+    return getCurrentDrawDateForLottery('1,16', $ymd, ['slug' => 'thai', 'name' => 'รัฐบาลไทย']) === $ymd;
+}
+
 /**
  * คำนวณวันที่งวดปัจจุบันหรือล่าสุด ตาม draw_schedule
  */
@@ -417,13 +464,13 @@ function resolveLotteryBetRound(array $lottery, $reference = null) {
     if (empty($schedule) || $schedule === 'daily') {
         $currentDrawDate = $today;
     } else {
-        $currentDrawDate = getCurrentDrawDate($schedule, $today);
+        $currentDrawDate = getCurrentDrawDateForLottery($schedule, $today, $lottery);
     }
 
     $candidateDrawDates = [$currentDrawDate];
     $lastDrawDate = $currentDrawDate;
     for ($i = 0; $i < 2; $i++) {
-        $nextDrawDate = getNextDrawDate($schedule, $lastDrawDate);
+        $nextDrawDate = getNextDrawDateForLottery($schedule, $lastDrawDate, $lottery);
         if ($nextDrawDate === $lastDrawDate) {
             break;
         }

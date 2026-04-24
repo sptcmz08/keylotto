@@ -269,10 +269,10 @@ function countMissingResults($pdo) {
     $totalActive = $pdo->query("SELECT COUNT(*) FROM lottery_types WHERE is_active = 1")->fetchColumn();
 
     $expectedCount = 0;
-    $expectedStmt = $pdo->query("SELECT draw_schedule FROM lottery_types WHERE is_active = 1");
+    $expectedStmt = $pdo->query("SELECT id, name, draw_schedule FROM lottery_types WHERE is_active = 1");
     foreach ($expectedStmt->fetchAll(PDO::FETCH_ASSOC) as $lottery) {
         $schedule = $lottery['draw_schedule'] ?? 'daily';
-        if (getCurrentDrawDate($schedule, $today) === $today) {
+        if (getCurrentDrawDateForLottery($schedule, $today, $lottery) === $today) {
             $expectedCount++;
         }
     }
@@ -643,11 +643,11 @@ function processResults($pdo, $results, $source) {
             continue;
         }
 
-        $scheduleStmt = $pdo->prepare("SELECT draw_schedule FROM lottery_types WHERE id = ?");
+        $scheduleStmt = $pdo->prepare("SELECT name, draw_schedule FROM lottery_types WHERE id = ?");
         $scheduleStmt->execute([$lotteryTypeId]);
         $scheduleInfo = $scheduleStmt->fetch();
         if ($scheduleInfo && !empty($scheduleInfo['draw_schedule'])) {
-            $expectedDrawDate = getCurrentDrawDate($scheduleInfo['draw_schedule'], $drawDate);
+            $expectedDrawDate = getCurrentDrawDateForLottery($scheduleInfo['draw_schedule'], $drawDate, $scheduleInfo);
             if ($expectedDrawDate !== $drawDate) {
                 echo "📅 {$keyLotteryName}: วันที่ {$drawDate} ไม่ตรงงวด (ควรเป็น {$expectedDrawDate}) → ข้าม\n";
                 $skippedCount++;
@@ -1268,14 +1268,21 @@ function scrapeTargeted($pdo) {
     scrapeRaakaadee($pdo);
     if (hasTargetResult($pdo)) return;
 
+    $todayYmd = date('Y-m-d');
     $dayOfMonth = intval(date('d'));
-    if ($dayOfMonth === 1 || $dayOfMonth === 16) {
+    $shouldRunThai = isThaiGovernmentDrawDate($todayYmd);
+    $shouldRunGSB = ($dayOfMonth === 1 || $dayOfMonth === 16);
+    if ($shouldRunThai || $shouldRunGSB) {
         echo "\n---------------------------------------\n\n";
-        scrapeThaiRayriffy($pdo);
-        if (hasTargetResult($pdo)) return;
+        if ($shouldRunThai) {
+            scrapeThaiRayriffy($pdo);
+            if (hasTargetResult($pdo)) return;
+        }
 
-        echo "\n---------------------------------------\n\n";
-        scrapeGSB($pdo);
+        if ($shouldRunGSB) {
+            echo "\n---------------------------------------\n\n";
+            scrapeGSB($pdo);
+        }
     }
 }
 
@@ -1424,13 +1431,20 @@ switch ($scraper) {
         // Raakaadee เป็นสำรอง (เก็บผลที่ ExpHuay ไม่มี)
         scrapeRaakaadee($pdo);
         // หวยไทย/ออมสิน — รันเฉพาะวันที่ 1 และ 16 ของเดือน
+        $todayYmd = date('Y-m-d');
         $dayOfMonth = intval(date('d'));
-        if ($dayOfMonth === 1 || $dayOfMonth === 16) {
+        $shouldRunThai = isThaiGovernmentDrawDate($todayYmd);
+        $shouldRunGSB = ($dayOfMonth === 1 || $dayOfMonth === 16);
+        if ($shouldRunThai || $shouldRunGSB) {
             echo "\n───────────────────────────────────────\n\n";
             echo "📅 วันที่ {$dayOfMonth} → รันหวยไทย/ออมสิน\n";
-            scrapeThaiRayriffy($pdo);
+            if ($shouldRunThai) {
+                scrapeThaiRayriffy($pdo);
+            }
             echo "\n───────────────────────────────────────\n\n";
-            scrapeGSB($pdo);
+            if ($shouldRunGSB) {
+                scrapeGSB($pdo);
+            }
         }
         break;
     default:

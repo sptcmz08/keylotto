@@ -559,8 +559,12 @@ function lineDescribeWeekdayRange(string $startDay, string $endDay): string
     return lineWeekdayLabel($startDay) . ' - ' . lineWeekdayLabel($endDay);
 }
 
-function lineLotteryScheduleMatchesDate(string $drawSchedule, DateTimeImmutable $date): bool
+function lineLotteryScheduleMatchesDate(string $drawSchedule, DateTimeImmutable $date, array $lottery = []): bool
 {
+    if (function_exists('getCurrentDrawDateForLottery')) {
+        return getCurrentDrawDateForLottery($drawSchedule, $date->format('Y-m-d'), $lottery) === $date->format('Y-m-d');
+    }
+
     $raw = trim(mb_strtolower($drawSchedule, 'UTF-8'));
     if ($raw === '' || in_array($raw, ['daily', 'everyday', 'ทุกวัน'], true)) {
         return true;
@@ -1176,7 +1180,7 @@ function lineDiagnoseBetCloseNotifications(PDO $pdo, ?DateTimeImmutable $now = n
         $reason = 'ready';
         if ($closeMinutes === null) {
             $reason = 'time_empty';
-        } elseif (!lineLotteryScheduleMatchesDate($schedule, $now)) {
+        } elseif (!lineLotteryScheduleMatchesDate($schedule, $now, $lotteryRow)) {
             $reason = 'schedule_mismatch';
         } elseif ($closeMinutes > $currentMinutes) {
             $reason = 'not_due_yet';
@@ -1248,7 +1252,7 @@ function lineSendDueBetCloseNotifications(PDO $pdo, ?DateTimeImmutable $now = nu
         $closeMinutes = lineTimeToMinutes($closeTime);
         $schedule = trim((string) ($lotteryRow['draw_schedule'] ?? 'daily'));
 
-        if ($lotteryId <= 0 || $closeMinutes === null || !lineLotteryScheduleMatchesDate($schedule, $now)) {
+        if ($lotteryId <= 0 || $closeMinutes === null || !lineLotteryScheduleMatchesDate($schedule, $now, $lotteryRow)) {
             continue;
         }
         if ($closeMinutes > $currentMinutes || ($currentMinutes - $closeMinutes) > $graceMinutes) {

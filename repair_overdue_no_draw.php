@@ -90,7 +90,7 @@ echo "════════════════════════�
 foreach ($lotteries as $lt) {
     $scanned++;
 
-    $expectedDate = getCurrentDrawDate($lt['draw_schedule'] ?? 'daily', $referenceDate);
+    $expectedDate = getCurrentDrawDateForLottery($lt['draw_schedule'] ?? 'daily', $referenceDate, $lt);
     if (!empty($options['draw-date'])) {
         $expectedDate = $referenceDate;
     }
