@@ -71,7 +71,7 @@ try {
                         case '3top': $isWinner = ($result['three_top'] === $num); break;
                         case '3tod':
                             if ($result['three_top'] && strlen($num) === 3) {
-                                $isWinner = ($sortStr($num) === $sortStr($result['three_top'])) && ($num !== $result['three_top']);
+                                $isWinner = ($sortStr($num) === $sortStr($result['three_top']));
                             }
                             break;
                         case '2top': $isWinner = ($result['two_top'] === $num); break;

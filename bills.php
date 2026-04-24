@@ -59,7 +59,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'detail' && isset($_GET['bet_id'])
                 case '3top': if ($result['three_top'] === $num) { $item['is_winner'] = true; $item['win_amount'] = $item['net_amount'] * $item['pay_multiplier']; } break;
                 case '3tod': 
                     $tods = array_filter(array_map('trim', explode(',', $result['three_tod'] ?? '')));
-                    if (in_array($num, $tods) || ($result['three_top'] && $num !== $result['three_top'] && sorted_str($num) === sorted_str($result['three_top']))) {
+                    if (in_array($num, $tods) || ($result['three_top'] && sorted_str($num) === sorted_str($result['three_top']))) {
                         $item['is_winner'] = true; $item['win_amount'] = $item['net_amount'] * $item['pay_multiplier'];
                     }
                     break;

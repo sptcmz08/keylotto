@@ -473,9 +473,9 @@ function processBetPayouts($pdo, $lotteryTypeId, $drawDate) {
                     $isWinner = ($result['three_top'] === $num);
                     break;
                 case '3tod':
-                    // 3tod wins if digits are same permutation but NOT exact match (3top)
+                    // 3tod includes every permutation of 3top, including the exact number when tod was bought.
                     if ($result['three_top'] && strlen($num) === 3) {
-                        $isWinner = ($sortStr($num) === $sortStr($result['three_top'])) && ($num !== $result['three_top']);
+                        $isWinner = ($sortStr($num) === $sortStr($result['three_top']));
                     }
                     break;
                 case '2top':
