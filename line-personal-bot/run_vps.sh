@@ -114,9 +114,7 @@ if [ "$LINE_SEND_MODE_CONFIG" = "automation" ]; then
     exit 0
 fi
 
-if [ "$LINE_SEND_MODE_CONFIG" = "chrline" ] || \
-   [ "$LINE_SEND_MODE_CONFIG" = "linepy" ] || \
-   [ "$LINE_SEND_MODE_CONFIG" = "mock" ] || \
+if [ "$LINE_SEND_MODE_CONFIG" = "mock" ] || \
    [ "$LINE_SEND_MODE_CONFIG" = "disabled" ]; then
     echo "=========================================="
     echo "3. ตรวจพบ LINE_SEND_MODE=$LINE_SEND_MODE_CONFIG"
@@ -166,12 +164,11 @@ if ! id -u linebot > /dev/null 2>&1; then
 fi
 
 # ตั้งค่าสิทธิ์ให้ linebot เข้าถึงโฟลเดอร์รันได้
-mkdir -p "$SCRIPT_DIR/chromium_data" "$SCRIPT_DIR/automation" "$SCRIPT_DIR/chrline" "$SCRIPT_DIR/logs"
+mkdir -p "$SCRIPT_DIR/chromium_data" "$SCRIPT_DIR/automation" "$SCRIPT_DIR/logs"
 touch "$SCRIPT_DIR/worker.log"
 $SUDO chown -R linebot:linebot \
     "$SCRIPT_DIR/chromium_data" \
     "$SCRIPT_DIR/automation" \
-    "$SCRIPT_DIR/chrline" \
     "$SCRIPT_DIR/logs" \
     "$SCRIPT_DIR/worker.log" >/dev/null 2>&1 || true
 # อนุญาตให้ทะลุโฟลเดอร์ Plesk

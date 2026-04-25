@@ -1,200 +1,124 @@
 # LINE Personal Bot API
 
-API สำหรับส่งข้อความผ่าน LINE Personal Account (ไม่ใช่ Official Account)
-สำหรับใช้งานร่วมกับระบบ key_lotto (imzshop97.com)
+This service sends messages from a LINE personal account by delegating work to a
+machine where LINE Desktop is already logged in.
 
-## ความต้องการของระบบ
+There is no supported personal-account Messaging API. CHRLINE and linepy have
+been removed from this project because current LINE QR/private API login flows
+are unreliable and can be rejected by LINE. Production use should rely on
+`LINE_SEND_MODE=automation`.
 
-- Python 3.8+
-- Ubuntu 20.04+ หรือ Debian 10+
-- Port 5000 ว่าง
+## Architecture
 
-## การติดตั้ง
+`PHP / cron` -> `api.py on VPS` -> `Windows worker` -> `LINE Desktop`
+
+The LINE login stays in LINE Desktop on the Windows worker machine. The VPS does
+not store a LINE auth token.
+
+## VPS Setup
 
 ```bash
-# 1. เข้าไปยังโฟลเดอร์โปรเจค
-cd /var/www/vhosts/imzshop97.com/line-personal-bot
-
-# 2. สร้าง virtual environment
+cd /var/www/vhosts/imzshop97.com/httpdocs/line-personal-bot
 python3 -m venv venv
 source venv/bin/activate
-
-# 3. ติดตั้ง dependencies
 pip install -r requirements.txt
-
-# 4. สร้างไฟล์ config
 cp .env.example .env
-# แก้ไข .env ตามต้องการ
-
-# 5. สร้าง log directory
-mkdir -p /var/log/line-bot
-touch /var/log/line-bot/app.log
-chown -R www-data:www-data /var/log/line-bot
 ```
 
-## การใช้งาน
+Configure `.env`:
 
-หมายเหตุสำคัญ:
-- ค่าปริยายของ `LINE_SEND_MODE` คือ `disabled` เพื่อไม่ให้ระบบตอบว่าส่งสำเร็จทั้งที่ยังไม่มี transport จริง
-- ถ้าต้องการทดสอบ integration กับ PHP โดยยังไม่ส่งจริง ให้ตั้ง `LINE_SEND_MODE=mock`
-- สามารถบันทึก session token ชั่วคราวผ่าน endpoint `POST /login/session`
-- ถ้าต้องการส่งจริงผ่าน LINE Personal แนะนำให้ใช้ `CHRLINE`, ตั้ง `LINE_SEND_MODE=chrline`, แล้ว login ด้วย `python chrline_qr_login.py`
-- ไฟล์ `python linepy_qr_login.py` ยังใช้ได้อยู่ แต่จะเลือก CHRLINE ให้อัตโนมัติถ้าไม่ได้ตั้ง `LINE_SEND_MODE=linepy`
-- ถ้า QR/token login ถูก LINE ปฏิเสธแล้ว ให้ใช้โหมด `LINE_SEND_MODE=automation` และดูขั้นตอนใน `AUTOMATION_WORKER.md`
+```env
+LINE_PERSONAL_ENABLED=true
+LINE_SEND_MODE=automation
+AUTOMATION_WORKER_URL=http://127.0.0.1:5001
+AUTOMATION_WORKER_TOKEN=change-me
+AUTOMATION_WORKER_TIMEOUT=60
+AUTOMATION_VERIFY_SSL=false
+```
 
-### รันโดยตรง (สำหรับทดสอบ)
+Run directly for testing:
+
 ```bash
 source venv/bin/activate
 python api.py
 ```
 
-### รันด้วย Supervisor (แนะนำสำหรับ production)
-```bash
-# ติดตั้ง supervisor
-sudo apt install supervisor
+Production should run `api.py` with supervisor or systemd.
 
-# สร้าง config file
-sudo nano /etc/supervisor/conf.d/line-personal-bot.conf
+## Windows Worker
+
+Use a Windows machine with LINE Desktop open and already logged in.
+
+```powershell
+cd D:\key_lotto\line-personal-bot
+py -3.10 -m venv venv-worker
+.\venv-worker\Scripts\Activate.ps1
+pip install -U pip setuptools wheel
+pip install -r .\requirements-worker.txt
+copy .env.worker.example .env
 ```
 
-ใส่เนื้อหาต่อไปนี้:
-```ini
-[program:line-personal-bot]
-command=/var/www/vhosts/imzshop97.com/line-personal-bot/venv/bin/python /var/www/vhosts/imzshop97.com/line-personal-bot/api.py
-directory=/var/www/vhosts/imzshop97.com/line-personal-bot
-user=www-data
-autostart=true
-autorestart=true
-stderr_logfile=/var/log/line-bot/supervisor.err.log
-stdout_logfile=/var/log/line-bot/supervisor.out.log
-environment=PATH="/var/www/vhosts/imzshop97.com/line-personal-bot/venv/bin"
-EOF
+Set a shared token in the Windows `.env`:
 
-# อัพเดท supervisor
-sudo supervisorctl reread
-sudo supervisorctl update
-sudo supervisorctl start line-personal-bot
-
-# ตรวจสอบสถานะ
-sudo supervisorctl status line-personal-bot
-```
-
-## API Endpoints
-
-| Endpoint | Method | คำอธิบาย |
-|----------|--------|---------|
-| `/` | GET | สถานะ API |
-| `/status` | GET | สถานะ login และ groups |
-| `/send` | POST | ส่งข้อความธรรมดา |
-| `/send/lotto` | POST | ส่งผลหวย (มี format พิเศษ) |
-| `/send/multiple` | POST | ส่งหลายกลุ่มพร้อมกัน |
-| `/groups` | GET | ดูรายการกลุ่ม |
-| `/groups/add` | POST | เพิ่มกลุ่ม |
-| `/groups/remove` | DELETE | ลบกลุ่ม |
-| `/settings` | GET/POST | ดู/แก้ไขการตั้งค่า |
-| `/login/session` | POST | บันทึก session token สำหรับ dev/external login flow |
-| `/login/qr` | POST | เริ่ม login ด้วย QR |
-| `/logout` | POST | ออกจากระบบ |
-| `/health` | GET | Health check |
-
-## การส่งจริงด้วย CHRLINE
-
-1. ติดตั้ง dependencies
-```bash
-pip install -r requirements.txt
-```
-
-2. ตั้งค่า `.env`
 ```env
-LINE_PERSONAL_ENABLED=true
-LINE_SEND_MODE=chrline
-CHRLINE_DEVICE=DESKTOPWIN
-CHRLINE_QR_MODE=auto
+WORKER_API_TOKEN=change-me
 ```
 
-3. Login ด้วย QR แล้วบันทึก auth token/session
+Calibrate LINE Desktop coordinates:
+
+```powershell
+python .\line_automation_calibrate.py
+```
+
+Copy the reported coordinate values into the Windows `.env`, then start the
+worker:
+
+```powershell
+python .\windows_line_worker.py
+```
+
+Check worker readiness:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:5001/status -Headers @{ "X-Worker-Token" = "change-me" }
+```
+
+## Tunnel
+
+If the VPS cannot reach the Windows machine directly, keep a reverse SSH tunnel
+open from Windows to the VPS:
+
+```powershell
+.\start_worker_tunnel.ps1 -ServerHost YOUR_VPS_IP -ServerUser root
+```
+
+With the tunnel running, the VPS can call the worker at:
+
+```env
+AUTOMATION_WORKER_URL=http://127.0.0.1:5001
+```
+
+## Status
+
 ```bash
-python chrline_qr_login.py
+curl http://127.0.0.1:5000/status
 ```
 
-4. ตรวจสอบสถานะ
-```bash
-curl http://localhost:5000/status
-```
+Ready state should show:
 
-ถ้า `logged_in=true` และ `send_mode=chrline` ระบบจะพร้อมส่งข้อความจริงผ่าน LINE Personal
-
-## การเชื่อมต่อกับ PHP
-
-แก้ไขไฟล์ `key_lotto/line/common.php` เพื่อเพิ่มการส่งผ่าน Python API:
-
-```php
-// เพิ่มฟังก์ชันนี้ใน common.php
-function linePushViaPython($groupId, $message) {
-    $apiUrl = 'http://localhost:5000/send';
-    
-    $data = json_encode([
-        'group_id' => $groupId,
-        'message' => $message
-    ]);
-    
-    $ch = curl_init($apiUrl);
-    curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    
-    $response = curl_exec($ch);
-    curl_close($ch);
-    
-    return json_decode($response, true);
+```json
+{
+  "send_mode": "automation",
+  "transport_ready": true,
+  "logged_in": true
 }
 ```
 
-## การตั้งค่า
+## Important Notes
 
-แก้ไขไฟล์ `.env`:
-
-```env
-# API
-API_HOST=0.0.0.0
-API_PORT=5000
-
-# LINE Personal
-LINE_PERSONAL_ENABLED=true
-LINE_SEND_MODE=chrline
-CHRLINE_DEVICE=DESKTOPWIN
-CHRLINE_QR_MODE=auto
-
-# CORS - ใส่ domain ของคุณ
-ALLOWED_ORIGINS=https://imzshop97.com,http://imzshop97.com
-```
-
-## คำเตือน
-
-⚠️ **LINE Personal Bot ผิด Terms of Service ของ LINE**
-- บัญชีอาจโดนแบนถาวร
-- ใช้บัญชีสำรอง/บัญชีที่ไม่สำคัญ
-- แนะนำให้ใช้ Proxy/VPN หากส่งข้อความบ่อย
-
-## การแก้ปัญหา
-
-### 1. ตรวจสอบว่า API รันอยู่
-```bash
-curl http://localhost:5000/health
-```
-
-### 2. ดู logs
-```bash
-tail -f /var/log/line-bot/app.log
-tail -f /var/log/line-bot/supervisor.err.log
-```
-
-### 3. รีสตาร์ท service
-```bash
-sudo supervisorctl restart line-personal-bot
-```
-
-## License
-
-Private use only
+- The target LINE group must have a `group_name` because automation searches
+  LINE Desktop by room name.
+- Keep the Windows machine unlocked and LINE Desktop visible enough for UI
+  automation.
+- If LINE Desktop UI changes, run calibration again.
+- Use `LINE_SEND_MODE=mock` only for integration testing without sending.

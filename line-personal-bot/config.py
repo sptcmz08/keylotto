@@ -28,14 +28,6 @@ class Config:
     # LINE Settings
     LINE_PERSONAL_ENABLED = os.getenv("LINE_PERSONAL_ENABLED", "true").lower() == "true"
     LINE_SEND_MODE = os.getenv("LINE_SEND_MODE", "disabled").strip().lower()
-    LINEPY_APP_NAME = os.getenv("LINEPY_APP_NAME", "").strip() or None
-    LINEPY_SYSTEM_NAME = os.getenv("LINEPY_SYSTEM_NAME", "KEYLOTTO").strip()
-    CHRLINE_DEVICE = os.getenv("CHRLINE_DEVICE", "DESKTOPWIN").strip() or "DESKTOPWIN"
-    CHRLINE_VERSION = os.getenv("CHRLINE_VERSION", "").strip() or None
-    CHRLINE_OS_NAME = os.getenv("CHRLINE_OS_NAME", "").strip() or None
-    CHRLINE_OS_VERSION = os.getenv("CHRLINE_OS_VERSION", "").strip() or None
-    CHRLINE_QR_MODE = os.getenv("CHRLINE_QR_MODE", "auto").strip().lower() or "auto"
-    CHRLINE_DEBUG = os.getenv("CHRLINE_DEBUG", "false").lower() == "true"
     AUTOMATION_WORKER_URL = os.getenv("AUTOMATION_WORKER_URL", "").strip().rstrip("/")
     AUTOMATION_WORKER_TOKEN = os.getenv("AUTOMATION_WORKER_TOKEN", "").strip()
     AUTOMATION_WORKER_TIMEOUT = int(os.getenv("AUTOMATION_WORKER_TIMEOUT", "60"))
@@ -45,7 +37,6 @@ class Config:
     SESSION_FILE = Path(os.getenv("SESSION_FILE", str(DATA_DIR / "line_session.pkl"))).expanduser()
     SETTINGS_FILE = Path(os.getenv("SETTINGS_FILE", str(BASE_DIR / "settings.json"))).expanduser()
     LOG_FILE = Path(os.getenv("LOG_FILE", str(DATA_DIR / "logs" / "app.log"))).expanduser()
-    CHRLINE_SAVE_PATH = Path(os.getenv("CHRLINE_SAVE_PATH", str(DATA_DIR / "chrline"))).expanduser()
     AUTOMATION_TEMP_DIR = Path(os.getenv("AUTOMATION_TEMP_DIR", str(DATA_DIR / "automation"))).expanduser()
     CHROMIUM_USER_DATA_DIR = Path(os.getenv("CHROMIUM_USER_DATA_DIR", str(DATA_DIR / "chromium_data"))).expanduser()
     CHROMIUM_EXTENSION_DIR = Path(os.getenv("CHROMIUM_EXTENSION_DIR", str(BASE_DIR / "line_extension"))).expanduser()
@@ -86,7 +77,6 @@ class Config:
             cls.SESSION_FILE.parent,
             cls.SETTINGS_FILE.parent,
             cls.LOG_FILE.parent,
-            cls.CHRLINE_SAVE_PATH,
             cls.AUTOMATION_TEMP_DIR,
         ):
             path.mkdir(parents=True, exist_ok=True)

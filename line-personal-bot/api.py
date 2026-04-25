@@ -72,11 +72,6 @@ class SettingsUpdate(BaseModel):
     auto_send: Optional[bool] = None
 
 
-class SessionLoginRequest(BaseModel):
-    auth_token: str
-    save: bool = True
-
-
 def ensure_personal_ready() -> None:
     if not Config.LINE_PERSONAL_ENABLED:
         raise HTTPException(status_code=503, detail="LINE Personal Bot is disabled")
@@ -231,31 +226,20 @@ def update_settings(request: SettingsUpdate) -> Dict[str, Any]:
 
 
 @app.post("/login/session")
-def login_session(request: SessionLoginRequest) -> Dict[str, Any]:
-    result = line_client.set_session(request.auth_token, save=request.save)
-    if not result["success"]:
-        raise HTTPException(status_code=400, detail=result.get("error", "Failed to save session"))
-
-    settings = Config.load_settings()
-    settings["last_login"] = result["last_login_at"]
-    Config.save_settings(settings)
-    return result
+def login_session() -> Dict[str, Any]:
+    raise HTTPException(
+        status_code=410,
+        detail="Token login is disabled. Keep LINE Desktop logged in on the automation worker machine.",
+    )
 
 
 @app.post("/login/qr")
 def login_qr() -> Dict[str, Any]:
-    if Config.LINE_SEND_MODE == "automation":
-        return {
-            "success": False,
-            "message": "Automation mode does not use QR login. Run the Windows worker and configure AUTOMATION_WORKER_URL instead.",
-            "send_mode": Config.LINE_SEND_MODE,
-            "session_file": str(Config.SESSION_FILE),
-        }
     return {
         "success": False,
-        "message": "Run `python chrline_qr_login.py` on the host to log in with QR and save the auth token. `python linepy_qr_login.py` still works and chooses CHRLINE unless LINE_SEND_MODE=linepy.",
+        "message": "QR/token login is disabled. Use LINE_SEND_MODE=automation and keep LINE Desktop logged in on the worker machine.",
         "send_mode": Config.LINE_SEND_MODE,
-        "session_file": str(Config.SESSION_FILE),
+        "automation_worker_url": Config.AUTOMATION_WORKER_URL,
     }
 
 
