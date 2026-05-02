@@ -37,7 +37,7 @@ if (!$lotteryId) {
 
     // Fetch all active lottery types with open/close times
     $stmt = $pdo->query("
-        SELECT lt.id, lt.name, lt.flag_emoji, lt.open_time, lt.close_time, lt.draw_date, lt.bet_closed
+        SELECT lt.id, lt.name, lt.flag_emoji, lt.open_time, lt.close_time, lt.draw_date, lt.draw_schedule, lt.bet_closed
         FROM lottery_types lt
         WHERE lt.is_active = 1
     ");
@@ -130,6 +130,12 @@ if (!$lotteryId) {
             $closeISO = '';
             $openDisplay = '';
         }
+
+        $betRound = resolveLotteryBetRound($lt);
+        $drawDate = $betRound['draw_date'] ?? $drawDate;
+        $openISO = !empty($betRound['open_time']) ? date('Y-m-d\TH:i:s+07:00', strtotime($betRound['open_time'])) : $openISO;
+        $closeISO = !empty($betRound['close_time']) ? date('Y-m-d\TH:i:s+07:00', strtotime($betRound['close_time'])) : $closeISO;
+        $openDisplay = !empty($betRound['open_time']) ? date('d/m/y H:i:s', strtotime($betRound['open_time'])) : $openDisplay;
         
         $allCards[] = [
             'lt' => $lt,

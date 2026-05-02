@@ -422,7 +422,7 @@ function getNextDrawDate($schedule, $refDate = null) {
 /**
  * สร้างช่วงเวลาเปิดรับแทงของงวดที่กำหนด
  */
-function buildLotteryBetWindow($drawDate, $openTime, $closeTime) {
+function buildLotteryBetWindow($drawDate, $openTime, $closeTime, $openDateOverride = null) {
     $drawDate = date('Y-m-d', strtotime($drawDate));
     $openTime = $openTime ?: '06:00:00';
 
@@ -436,9 +436,11 @@ function buildLotteryBetWindow($drawDate, $openTime, $closeTime) {
     }
 
     $isCrossMidnight = strcmp($closeTime, $openTime) <= 0;
-    $openDate = $isCrossMidnight
+    $openDate = $openDateOverride
+        ? date('Y-m-d', strtotime($openDateOverride))
+        : ($isCrossMidnight
         ? date('Y-m-d', strtotime($drawDate . ' -1 day'))
-        : $drawDate;
+        : $drawDate);
 
     return [
         'draw_date' => $drawDate,
@@ -482,7 +484,13 @@ function resolveLotteryBetRound(array $lottery, $reference = null) {
     $selectedState = 'closed';
 
     foreach ($candidateDrawDates as $drawDate) {
-        $window = buildLotteryBetWindow($drawDate, $openTime, $closeTime);
+        $openDateOverride = null;
+        // Non-daily rounds can be opened before the draw date; close still stays on the draw date.
+        if (!empty($schedule) && $schedule !== 'daily' && $drawDate > $today && $currentDrawDate < $today) {
+            $openDateOverride = $today;
+        }
+
+        $window = buildLotteryBetWindow($drawDate, $openTime, $closeTime, $openDateOverride);
         $openDT = $window['open_dt'];
         $closeDT = $window['close_dt'];
 
@@ -493,6 +501,9 @@ function resolveLotteryBetRound(array $lottery, $reference = null) {
         }
 
         if ($now < $openDT) {
+            if (!empty($schedule) && $schedule !== 'daily' && $currentDrawDate === $today && $selectedWindow && $selectedState === 'closed') {
+                break;
+            }
             $selectedWindow = $window;
             $selectedState = 'waiting';
             break;

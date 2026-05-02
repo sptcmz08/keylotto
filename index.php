@@ -101,6 +101,11 @@ foreach ($allLotteries as &$l) {
     // === Current Round Date จาก draw_schedule + cross-midnight check ===
     $drawSchedule = $l['draw_schedule'] ?? 'daily';
     $currentRoundDate = getCurrentDrawDateForLottery($drawSchedule, null, $l);
+    $betRound = resolveLotteryBetRound($l);
+    if (!empty($betRound['draw_date'])) {
+        $currentRoundDate = $betRound['draw_date'];
+        $isPastOpenTime = empty($betRound['is_waiting']);
+    }
     
     // หวยข้ามเที่ยงคืน = close_time อยู่ช่วง 00:00-02:59
     // เช่น ดาวโจนส์ VIP close=00:10, STAR close=01:05
@@ -157,6 +162,7 @@ foreach ($allLotteries as &$l) {
     $l['current_round_date'] = $currentRoundDate;
     $l['has_result_current_round'] = $hasResultForCurrentRound;
     $l['is_past_open_time'] = $isPastOpenTime;
+    $l['bet_round'] = $betRound ?? null;
     
     $lotteryMap[$l['name']] = $l;
 }
