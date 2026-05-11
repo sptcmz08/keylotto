@@ -236,26 +236,8 @@ function findUsableResultForDates($pdo, $lotteryTypeId, array $drawDates) {
 }
 
 function cancelBetsBecauseNoResult($pdo, $lotteryTypeId, array $drawDates, $approvedBy = 'auto_timeout') {
-    $drawDates = array_values(array_unique(array_filter($drawDates)));
-    if (empty($drawDates)) {
-        return 0;
-    }
-
-    $placeholders = implode(',', array_fill(0, count($drawDates), '?'));
-    $sql = "
-        UPDATE bets
-        SET status = 'cancelled',
-            win_amount = 0,
-            cancel_approved_by = ?,
-            cancel_approved_at = NOW()
-        WHERE lottery_type_id = ?
-          AND draw_date IN ({$placeholders})
-          AND status IN ('pending', 'lost')
-    ";
-
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute(array_merge([$approvedBy, $lotteryTypeId], $drawDates));
-    return $stmt->rowCount();
+    // No result should keep the bill pending; payouts are processed after a usable result is saved.
+    return 0;
 }
 
 // =============================================
@@ -1180,60 +1162,7 @@ function scrapeSmart($pdo) {
         echo "💰 Catch-all: คำนวณผลรวม {$catchAllTotal} โพย\n";
     }
 
-    // =============================================
-    // Auto-cancel: หวยที่เลย result_time > 2 ชม. ยังไม่มีผล → ยกเลิกโพย pending
-    // =============================================
-    $now = time();
-    $overdueStmt = $pdo->prepare("
-        SELECT lt.id, lt.name, lt.result_time, lt.close_time, lt.open_time, lt.draw_schedule
-        FROM lottery_types lt
-        WHERE lt.is_active = 1
-        AND lt.result_time IS NOT NULL
-        AND EXISTS (
-            SELECT 1 FROM bets b 
-            WHERE b.lottery_type_id = lt.id 
-            AND (b.draw_date = ? OR b.draw_date = ?)
-            AND b.status IN ('pending', 'lost')
-        )
-    ");
-    $overdueStmt->execute([$today, $todayReal]);
-    $overdueLotteries = $overdueStmt->fetchAll(PDO::FETCH_ASSOC);
-
-    $autoCancelCount = 0;
-    foreach ($overdueLotteries as $ol) {
-        $drawDates = array_values(array_unique([$today, $todayReal]));
-        if (findUsableResultForDates($pdo, $ol['id'], $drawDates)) {
-            continue;
-        }
-
-        // คำนวณ result_time สำหรับวันนี้
-        $resultTimeStr = $todayReal . ' ' . $ol['result_time'];
-        $resultTimestamp = strtotime($resultTimeStr);
-        
-        // หวยข้ามเที่ยงคืน: result_time < open_time → result เป็นของวันถัดไป
-        $openHour = intval(substr($ol['open_time'] ?? '06:00:00', 0, 2));
-        $resultHour = intval(substr($ol['result_time'], 0, 2));
-        if ($resultHour < $openHour && $resultHour < 6) {
-            // result_time หลังเที่ยงคืน → ใช้วันที่ของ draw_date + 1
-            $resultTimeStr = date('Y-m-d', strtotime($today . ' +1 day')) . ' ' . $ol['result_time'];
-            $resultTimestamp = strtotime($resultTimeStr);
-        }
-        
-        $hoursPast = ($now - $resultTimestamp) / 3600;
-        
-        if ($hoursPast > 2) {
-            // เลย 2 ชม.แล้วและยังไม่มีผลจริง → ปรับโพยค้าง/ที่เคยตัดผิดเป็นยกเลิก
-            $cancelled = cancelBetsBecauseNoResult($pdo, $ol['id'], $drawDates, 'auto_timeout');
-            if ($cancelled > 0) {
-                echo "🚫 Auto-cancel: {$ol['name']} — ปรับ {$cancelled} โพยเป็นยกเลิก (เลย result_time > 2 ชม.)\n";
-                logScrape($pdo, $ol['name'], 'auto_cancel', 'success', "Cancelled {$cancelled} bets (overdue > 2hrs)", $today);
-                $autoCancelCount += $cancelled;
-            }
-        }
-    }
-    if ($autoCancelCount > 0) {
-        echo "🚫 Auto-cancel รวม: {$autoCancelCount} โพย\n";
-    }
+    echo "\nAuto-cancel disabled: bets without results will remain pending until a usable result is saved.\n";
 }
 
 function scrapeTargeted($pdo) {

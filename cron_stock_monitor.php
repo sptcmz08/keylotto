@@ -11,7 +11,6 @@ require_once __DIR__ . '/cron_scrape.php';
 
 date_default_timezone_set('Asia/Bangkok');
 
-$TIMEOUT_MINUTES = 120;
 $now = time();
 $today = date('Y-m-d', $now - 4 * 3600);
 $todayReal = date('Y-m-d');
@@ -105,7 +104,6 @@ $stmt = $pdo->query("
 ");
 
 $dueLotteries = [];
-$timedOutLotteries = [];
 
 foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $lt) {
     $expectedDate = getMonitorExpectedDrawDate($lt, $now, $todayReal);
@@ -139,41 +137,7 @@ foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $lt) {
 
     $elapsedMin = round(($now - $resultTs) / 60);
     $withMeta = array_merge($lt, ['elapsed' => $elapsedMin, 'draw_date' => $drawDate]);
-
-    if ($elapsedMin > $TIMEOUT_MINUTES) {
-        $timedOutLotteries[] = $withMeta;
-    } else {
-        $dueLotteries[] = $withMeta;
-    }
-}
-
-foreach ($timedOutLotteries as $lt) {
-    $drawDates = buildMonitorResultDates($lt['draw_date'], $today, $todayReal);
-
-    $logCheck = $pdo->prepare("
-        SELECT COUNT(*)
-        FROM scraper_logs
-        WHERE lottery_name = ? AND status = 'no_draw' AND draw_date = ?
-    ");
-    $logCheck->execute([$lt['name'], $lt['draw_date']]);
-
-    if ((int) $logCheck->fetchColumn() === 0) {
-        logScrape(
-            $pdo,
-            $lt['name'],
-            'monitor',
-            'no_draw',
-            "เกิน {$TIMEOUT_MINUTES} นาที ({$lt['elapsed']} min) → งดออกผล",
-            $lt['draw_date']
-        );
-    }
-
-    $cancelled = cancelBetsBecauseNoResult($pdo, $lt['id'], $drawDates, 'auto_timeout');
-    if ($cancelled > 0) {
-        echo "[Monitor] ⏰ {$lt['name']}: งดออกผล (รอ {$lt['elapsed']} นาที) — ปรับ {$cancelled} โพยเป็นยกเลิก\n";
-    } else {
-        echo "[Monitor] ⏰ {$lt['name']}: งดออกผล (รอ {$lt['elapsed']} นาที)\n";
-    }
+    $dueLotteries[] = $withMeta;
 }
 
 if (empty($dueLotteries)) {
