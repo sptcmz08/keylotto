@@ -629,7 +629,7 @@ function processResults($pdo, $results, $source) {
         $scheduleStmt = $pdo->prepare("SELECT name, draw_schedule FROM lottery_types WHERE id = ?");
         $scheduleStmt->execute([$lotteryTypeId]);
         $scheduleInfo = $scheduleStmt->fetch();
-        if ($scheduleInfo && !empty($scheduleInfo['draw_schedule'])) {
+        if ($scheduleInfo && !empty($scheduleInfo['draw_schedule']) && !lotteryUsesActualResultDate(['slug' => $slug, 'name' => $keyLotteryName])) {
             $expectedDrawDate = getCurrentDrawDateForLottery($scheduleInfo['draw_schedule'], $drawDate, $scheduleInfo);
             if ($expectedDrawDate !== $drawDate) {
                 echo "📅 {$keyLotteryName}: วันที่ {$drawDate} ไม่ตรงงวด (ควรเป็น {$expectedDrawDate}) → ข้าม\n";

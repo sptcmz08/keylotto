@@ -81,6 +81,10 @@ function getMonitorExpectedDrawDate(array $lottery, int $nowTs, string $todayRea
         $referenceDate = date('Y-m-d', strtotime($todayReal . ' -1 day'));
     }
 
+    if (lotteryUsesActualResultDate($lottery)) {
+        return $todayReal;
+    }
+
     return getCurrentDrawDateForLottery($schedule, $referenceDate, $lottery);
 }
 
