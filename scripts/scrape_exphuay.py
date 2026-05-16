@@ -697,14 +697,17 @@ def fetch_all123th_dowjones_results(target_date, debug=False):
 
 
 def enrich_dowjones_four_top_with_all123th(results, target_date, debug=False):
-    """Use all123th only to fill missing 4-top after ExpHuay already has matching 3/2."""
+    """Use all123th to fill Dow Jones gaps when ExpHuay's live board omits them."""
     fallback_by_slug = fetch_all123th_dowjones_results(target_date, debug)
     if not fallback_by_slug:
         return results
 
     enriched = []
+    seen_slugs = set()
     for result in results:
         key_slug = result.get('slug')
+        if key_slug:
+            seen_slugs.add(key_slug)
         fallback = fallback_by_slug.get(key_slug)
         if not fallback:
             enriched.append(result)
@@ -746,6 +749,18 @@ def enrich_dowjones_four_top_with_all123th(results, target_date, debug=False):
                 print(f'[Fallback] ✅ {key_slug}: enriched 4top={merged["four_top"]}', file=sys.stderr)
 
         enriched.append(merged)
+
+    for key_slug in ('dowjones-vip', 'dowjones-star', 'dowjones'):
+        fallback = fallback_by_slug.get(key_slug)
+        if not fallback or key_slug in seen_slugs:
+            continue
+        if fallback.get('draw_date') != target_date:
+            if debug:
+                print(f'[Fallback] ⏭️ {key_slug}: awards_date={fallback.get("draw_date")} ไม่ตรง target={target_date}', file=sys.stderr)
+            continue
+        if debug:
+            print(f'[Fallback] ✅ {key_slug}: added missing Dow Jones result from all123th', file=sys.stderr)
+        enriched.append(fallback)
 
     return enriched
 
