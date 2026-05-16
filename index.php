@@ -114,7 +114,8 @@ foreach ($allLotteries as &$l) {
     $lCloseTime = $l['close_time'] ?? '';
     $lCloseHour = intval(substr($lCloseTime, 0, 2));
     $nowHour = intval(date('H'));
-    $isCrossMidnightLottery = ($lCloseHour < 3 && !empty($lCloseTime));
+    $usesActualResultDate = lotteryUsesActualResultDate($l);
+    $isCrossMidnightLottery = !$usesActualResultDate && ($lCloseHour < 3 && !empty($lCloseTime));
     
     if ($isCrossMidnightLottery && $nowHour < 6) {
         $currentRoundDate = $yesterday;
@@ -460,7 +461,7 @@ require_once 'includes/header.php';
                     if (!empty($lt['close_time'])) {
                         $lCloseH = intval(substr($lt['close_time'], 0, 2));
                         
-                        if ($lCloseH < 3) {
+                        if ($lCloseH < 3 && !lotteryUsesActualResultDate($lt)) {
                             // หวยข้ามเที่ยงคืน: close_time อยู่วันถัดจาก roundDate
                             $nextDay = date('Y-m-d', strtotime($roundDate . ' +1 day'));
                             $closeTime = strtotime($nextDay . ' ' . $lt['close_time']);
@@ -471,7 +472,7 @@ require_once 'includes/header.php';
                             $openTimeStr = $roundDate . ' ' . ($lt['open_time'] ?? '06:00:00');
                             $openTimeForRound = strtotime($openTimeStr);
                             
-                            if ($closeTime < $openTimeForRound) {
+                            if ($closeTime < $openTimeForRound && !lotteryUsesActualResultDate($lt)) {
                                 $closeTime += 86400;
                             }
                         }
@@ -484,7 +485,7 @@ require_once 'includes/header.php';
                     if (!empty($lt['result_time'])) {
                         $rtH = intval(substr($lt['result_time'], 0, 2));
                         $lCloseH2 = intval(substr($lt['close_time'] ?? '00', 0, 2));
-                        if ($lCloseH2 < 3) {
+                        if ($lCloseH2 < 3 && !lotteryUsesActualResultDate($lt)) {
                             $nextDay2 = date('Y-m-d', strtotime($roundDate . ' +1 day'));
                             $resultTime = strtotime($nextDay2 . ' ' . $lt['result_time']);
                         } else {

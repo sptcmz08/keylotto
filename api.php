@@ -536,7 +536,7 @@ try {
             
             // เช็คว่าหวยยังเปิดรับอยู่ไหม — ปิดแล้วต้องยกเลิกผ่านหลังบ้านเท่านั้น
             $betCheck = $pdo->prepare("
-                SELECT b.draw_date, lt.close_time, lt.open_time
+                SELECT b.draw_date, lt.name AS lottery_name, lt.close_time, lt.open_time
                 FROM bets b JOIN lottery_types lt ON b.lottery_type_id = lt.id
                 WHERE b.id = ?
             ");
@@ -544,12 +544,14 @@ try {
             $betInfo = $betCheck->fetch();
             
             if ($betInfo && $betInfo['close_time']) {
-                $closeDT = new DateTime($betInfo['draw_date'] . ' ' . $betInfo['close_time']);
-                $openH = intval(substr($betInfo['open_time'] ?? '06:00', 0, 2));
-                $closeH = intval(substr($betInfo['close_time'], 0, 2));
-                if ($closeH < $openH) $closeDT->modify('+1 day');
+                $window = buildLotteryBetWindow(
+                    $betInfo['draw_date'],
+                    $betInfo['open_time'] ?? '06:00:00',
+                    $betInfo['close_time']
+                );
+                $closeDT = $window['close_dt'] ?? null;
                 
-                if (new DateTime() > $closeDT) {
+                if ($closeDT && new DateTimeImmutable('now') > $closeDT) {
                     echo json_encode(['error' => 'หวยปิดรับแล้ว ยกเลิกได้เฉพาะแอดมินหลังบ้านเท่านั้น']);
                     break;
                 }

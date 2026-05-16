@@ -86,7 +86,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'cancel_request' && isset($_GET['b
     
     // Check if lottery is still open for betting (before close_time)
     $stmt = $pdo->prepare("
-        SELECT b.lottery_type_id, b.draw_date, lt.close_time, lt.bet_closed
+        SELECT b.lottery_type_id, b.draw_date, lt.name AS lottery_name, lt.open_time, lt.close_time, lt.bet_closed
         FROM bets b
         JOIN lottery_types lt ON b.lottery_type_id = lt.id
         WHERE b.id = ?
@@ -96,9 +96,13 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'cancel_request' && isset($_GET['b
     
     $canInstantCancel = false;
     if ($betInfo && !$betInfo['bet_closed']) {
-        $closeDateTime = $betInfo['draw_date'] . ' ' . ($betInfo['close_time'] ?? '23:59:59');
-        $closeTs = strtotime($closeDateTime);
-        if (time() < $closeTs) {
+        $window = buildLotteryBetWindow(
+            $betInfo['draw_date'],
+            $betInfo['open_time'] ?? '06:00:00',
+            $betInfo['close_time'] ?? '23:59:59'
+        );
+        $closeDT = $window['close_dt'] ?? null;
+        if ($closeDT && new DateTimeImmutable('now') < $closeDT) {
             $canInstantCancel = true; // หวยยังเปิดรับอยู่ → ยกเลิกได้ทันที
         }
     }

@@ -422,6 +422,26 @@ function getNextDrawDate($schedule, $refDate = null) {
 /**
  * สร้างช่วงเวลาเปิดรับแทงของงวดที่กำหนด
  */
+function lotteryUsesActualResultDate($lotteryOrSlug, $lotteryName = '') {
+    if (is_array($lotteryOrSlug)) {
+        $slug = $lotteryOrSlug['slug'] ?? '';
+        $lotteryName = $lotteryOrSlug['name'] ?? $lotteryName;
+    } else {
+        $slug = $lotteryOrSlug;
+    }
+
+    $normalizedSlug = strtolower(trim((string) $slug));
+    if (in_array($normalizedSlug, [
+        'dowjones',
+        'dowjones-vip',
+        'dowjones-star',
+    ], true)) {
+        return true;
+    }
+
+    return preg_match('/ดาวโจนส์|dowjones/i', (string) $lotteryName) === 1;
+}
+
 function buildLotteryBetWindow($drawDate, $openTime, $closeTime, $openDateOverride = null) {
     $drawDate = date('Y-m-d', strtotime($drawDate));
     $openTime = $openTime ?: '06:00:00';

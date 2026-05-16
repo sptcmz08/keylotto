@@ -245,7 +245,7 @@ function cancelBetsBecauseNoResult($pdo, $lotteryTypeId, array $drawDates, $appr
 // ถ้าครบแล้ว → ข้าม scraping (ประหยัด CPU/RAM)
 // =============================================
 function countMissingResults($pdo) {
-    $today = date('Y-m-d', time() - 4 * 3600);
+    $today = date('Y-m-d');
     
     // นับหวยที่ active ทั้งหมด
     $totalActive = $pdo->query("SELECT COUNT(*) FROM lottery_types WHERE is_active = 1")->fetchColumn();
@@ -510,7 +510,7 @@ function processResults($pdo, $results, $source) {
     $successCount = 0;
     $skippedCount = 0;
     $failedCount = 0;
-    $today = date('Y-m-d', time() - 4 * 3600);
+    $today = date('Y-m-d');
     $todayReal = date('Y-m-d'); // วันที่จริง (ไม่ shift)
 
     // หวยข้ามเที่ยงคืน (close < open) → ใช้วันที่จริงไม่ shift
@@ -572,9 +572,10 @@ function processResults($pdo, $results, $source) {
             continue;
         }
 
-        // หวยข้ามเที่ยงคืน (เช่น ดาวโจนส์ VIP ปิด 00:10, STAR ปิด 01:05)
-        // draw_date ของหวยพวกนี้เป็นของ "เมื่อวาน" เสมอ (เช่น ดาวโจนส์วันที่ 25 ออกผลหลัง 00:00 วันที่ 26)
-        $isCrossMidnight = isset($crossMidnightIds[$lotteryTypeId]);
+        // Some schedules close after midnight and keep the draw as the previous sales day.
+        // Dow Jones is excluded here: save it on the actual result date, like dwagheng.
+        $isCrossMidnight = isset($crossMidnightIds[$lotteryTypeId])
+            && !lotteryUsesActualResultDate(['slug' => $slug, 'name' => $keyLotteryName]);
         if ($isCrossMidnight) {
             // ถ้า scraper ส่ง draw_date มาตรงกับเมื่อวาน (shift -4h) → ใช้ตามนั้น (ถูกแล้ว)
             // ถ้าไม่ → ใช้เมื่อวาน (วันซื้อขาย/ออกผลจริง)
@@ -1036,7 +1037,7 @@ function scrapeExphuay($pdo) {
 
     echo "📈 ExpHuay Scraper (ทุกหวย — HTTP เร็ว)...\n";
 
-    $today = date('Y-m-d', time() - 4 * 3600);
+    $today = date('Y-m-d');
 
     $stderrFile = tempnam(sys_get_temp_dir(), 'exphuay_');
     $output = [];
@@ -1063,6 +1064,38 @@ function scrapeExphuay($pdo) {
 // =============================================
 // Smart Scraper: สลับ raakaadee ↔ exphuay ทุก 1 นาที
 // =============================================
+function runPendingPayoutCatchAll($pdo) {
+    echo "\n--- Catch-all: check pending bets that already have results ---\n";
+    $catchAllStmt = $pdo->query("
+        SELECT DISTINCT b.lottery_type_id, b.draw_date
+        FROM bets b
+        JOIN results r ON r.lottery_type_id = b.lottery_type_id AND r.draw_date = b.draw_date
+        WHERE (
+            b.status = 'pending'
+            OR (b.status = 'won' AND COALESCE(b.win_amount, 0) = 0)
+        )
+        AND " . usefulResultSqlCondition('r') . "
+    ");
+    $catchAllPairs = $catchAllStmt->fetchAll();
+    $catchAllTotal = 0;
+    foreach ($catchAllPairs as $pair) {
+        $count = processBetPayouts($pdo, $pair['lottery_type_id'], $pair['draw_date']);
+        if ($count > 0) {
+            $ltName = $pdo->prepare("SELECT name FROM lottery_types WHERE id = ?");
+            $ltName->execute([$pair['lottery_type_id']]);
+            $name = $ltName->fetchColumn() ?: $pair['lottery_type_id'];
+            echo "Catch-all: {$name} ({$pair['draw_date']}): settled {$count} bets\n";
+            $catchAllTotal += $count;
+        }
+    }
+
+    if ($catchAllTotal === 0) {
+        echo "No pending bets need settlement.\n";
+    } else {
+        echo "Catch-all total: settled {$catchAllTotal} bets\n";
+    }
+}
+
 function scrapeSmart($pdo) {
     global $SCRIPT_DIR, $PYTHON_PATH;
 
@@ -1073,7 +1106,7 @@ function scrapeSmart($pdo) {
     echo "🔄 Smart Scraper — นาทีที่ {$minute} → ลำดับ: {$sourceFirst} → {$sourceSecond}\n\n";
 
     // ดึงหวยที่ยังไม่มีผลวันนี้
-    $today = date('Y-m-d', time() - 4 * 3600);
+    $today = date('Y-m-d');
     $todayReal = date('Y-m-d');
     
     $missingStmt = $pdo->prepare("
@@ -1093,6 +1126,7 @@ function scrapeSmart($pdo) {
     $missingCount = count($missingLotteries);
     if ($missingCount === 0) {
         echo "✅ ผลวันนี้ครบแล้ว → ไม่ต้องดึงเพิ่ม\n";
+        runPendingPayoutCatchAll($pdo);
         return;
     }
 
@@ -1112,6 +1146,7 @@ function scrapeSmart($pdo) {
 
     if ($stillMissing === 0) {
         echo "\n✅ ผลครบแล้วหลังดึงจาก {$sourceFirst}\n";
+        runPendingPayoutCatchAll($pdo);
         return;
     }
 
@@ -1142,7 +1177,7 @@ function scrapeSmart($pdo) {
             b.status = 'pending'
             OR (b.status = 'won' AND COALESCE(b.win_amount, 0) = 0)
         )
-        AND r.three_top IS NOT NULL AND r.three_top != ''
+        AND " . usefulResultSqlCondition('r') . "
     ");
     $catchAllPairs = $catchAllStmt->fetchAll();
     $catchAllTotal = 0;
@@ -1218,7 +1253,7 @@ function scrapeTargeted($pdo) {
 function runSmartSource($pdo, $source) {
     global $SCRIPT_DIR, $PYTHON_PATH;
     
-    $today = date('Y-m-d', time() - 4 * 3600);
+    $today = date('Y-m-d');
     $stderrFile = tempnam(sys_get_temp_dir(), "smart_{$source}_");
     $output = [];
     $exitCode = 0;
@@ -1267,6 +1302,32 @@ $scraper = $argvList[1] ?? 'all';
 $cliOptions = parseCliOptions(array_slice($argvList, 2));
 setScrapeFilters($cliOptions);
 $startTime = microtime(true);
+$lockNameParts = [$scraper];
+if (!empty($cliOptions['lottery_type_id'])) {
+    $lockNameParts[] = 'lottery_' . (int) $cliOptions['lottery_type_id'];
+}
+if (!empty($cliOptions['draw_date'])) {
+    $lockNameParts[] = 'date_' . preg_replace('/[^0-9-]/', '', (string) $cliOptions['draw_date']);
+}
+$lockName = preg_replace('/[^a-z0-9_-]+/i', '_', implode('_', $lockNameParts)) ?: 'default';
+$dbLockName = 'key_lotto_cron_scrape_' . $lockName;
+$lockWaitSeconds = getenv('CRON_SCRAPE_LOCK_WAIT');
+$lockWaitSeconds = ($lockWaitSeconds !== false && $lockWaitSeconds !== '') ? max(0, (int) $lockWaitSeconds) : 0;
+$lockStmt = $pdo->prepare('SELECT GET_LOCK(?, ?)');
+$lockStmt->execute([$dbLockName, $lockWaitSeconds]);
+$lockAcquired = (int) $lockStmt->fetchColumn() === 1;
+if (!$lockAcquired) {
+    echo "cron_scrape {$scraper} is already running; skip this round.\n";
+    exit(0);
+}
+register_shutdown_function(static function () use ($pdo, $dbLockName): void {
+    try {
+        $stmt = $pdo->prepare('SELECT RELEASE_LOCK(?)');
+        $stmt->execute([$dbLockName]);
+    } catch (Throwable $e) {
+        // Ignore shutdown lock-release errors.
+    }
+});
 
 echo "═══════════════════════════════════════\n";
 echo "🎰 Lottery Scraper — " . date('Y-m-d H:i:s') . "\n";
@@ -1331,6 +1392,7 @@ switch ($scraper) {
         break;
     case 'exphuay':
         scrapeExphuay($pdo);
+        runPendingPayoutCatchAll($pdo);
         break;
     case 'stockvip':
         scrapeStockVip($pdo);
@@ -1375,6 +1437,7 @@ switch ($scraper) {
                 scrapeGSB($pdo);
             }
         }
+        runPendingPayoutCatchAll($pdo);
         break;
     default:
         echo "❌ Unknown scraper: {$scraper}\n";

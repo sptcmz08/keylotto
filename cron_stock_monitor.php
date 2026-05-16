@@ -74,7 +74,7 @@ function getMonitorExpectedDrawDate(array $lottery, int $nowTs, string $todayRea
 
     $openHour = intval(substr($openTime, 0, 2));
     $resultHour = intval(substr($resultTime, 0, 2));
-    $isCrossMidnight = $resultHour < $openHour && $resultHour < 6;
+    $isCrossMidnight = !lotteryUsesActualResultDate($lottery) && $resultHour < $openHour && $resultHour < 6;
 
     $referenceDate = $todayReal;
     if ($isCrossMidnight && date('H:i:s', $nowTs) < $openTime) {
@@ -112,7 +112,7 @@ foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $lt) {
         $resultTime = $lt['result_time'] ?? '00:00:00';
         $openHour = intval(substr($openTime, 0, 2));
         $resultHour = intval(substr($resultTime, 0, 2));
-        $isCrossMidnight = $resultHour < $openHour && $resultHour < 6;
+        $isCrossMidnight = !lotteryUsesActualResultDate($lt) && $resultHour < $openHour && $resultHour < 6;
         if (!$isCrossMidnight) {
             continue;
         }
@@ -127,7 +127,7 @@ foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $lt) {
 
     $openHour = intval(substr($lt['open_time'] ?? '06:00:00', 0, 2));
     $resultHour = intval(substr($lt['result_time'], 0, 2));
-    if ($resultHour < $openHour && $resultHour < 6) {
+    if (!lotteryUsesActualResultDate($lt) && $resultHour < $openHour && $resultHour < 6) {
         $resultTs = strtotime(date('Y-m-d', strtotime($drawDate . ' +1 day')) . ' ' . $lt['result_time']);
     }
 
@@ -153,7 +153,7 @@ echo "\n[Monitor] 🌐 ดึง ExpHuay /result page...\n";
 $stderrFile = tempnam(sys_get_temp_dir(), 'monitor_');
 $output = [];
 $exitCode = 0;
-exec("{$PYTHON_PATH} \"{$SCRIPT_DIR}/scrape_exphuay.py\" --date={$today} 2>{$stderrFile}", $output, $exitCode);
+exec("{$PYTHON_PATH} \"{$SCRIPT_DIR}/scrape_exphuay.py\" --date={$todayReal} 2>{$stderrFile}", $output, $exitCode);
 @unlink($stderrFile);
 
 $json = implode("\n", $output);
