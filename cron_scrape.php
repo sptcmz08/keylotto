@@ -103,14 +103,24 @@ function parseCliOptions(array $args) {
         $key = $m[1];
         $value = $m[2];
 
-        if ($key === 'lottery-id') {
+        if ($key === 'lottery-id' || $key === 'lottery_type_id') {
             $options['lottery_type_id'] = intval($value);
-        } elseif ($key === 'draw-date') {
+        } elseif ($key === 'draw-date' || $key === 'draw_date') {
             $options['draw_date'] = $value;
         }
     }
 
     return $options;
+}
+
+function getScrapeTargetDate($defaultDate = null) {
+    global $SCRAPE_FILTERS;
+
+    if (!empty($SCRAPE_FILTERS['draw_date'])) {
+        return $SCRAPE_FILTERS['draw_date'];
+    }
+
+    return $defaultDate ?: date('Y-m-d');
 }
 
 // =============================================
@@ -1037,7 +1047,7 @@ function scrapeExphuay($pdo) {
 
     echo "📈 ExpHuay Scraper (ทุกหวย — HTTP เร็ว)...\n";
 
-    $today = date('Y-m-d');
+    $today = getScrapeTargetDate();
 
     $stderrFile = tempnam(sys_get_temp_dir(), 'exphuay_');
     $output = [];
@@ -1253,7 +1263,7 @@ function scrapeTargeted($pdo) {
 function runSmartSource($pdo, $source) {
     global $SCRIPT_DIR, $PYTHON_PATH;
     
-    $today = date('Y-m-d');
+    $today = getScrapeTargetDate();
     $stderrFile = tempnam(sys_get_temp_dir(), "smart_{$source}_");
     $output = [];
     $exitCode = 0;
